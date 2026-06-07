@@ -1,9 +1,12 @@
 import React from 'react'
 import { ChatMessage } from '../../types/chat'
 
-interface Props { message: ChatMessage }
+interface Props {
+  message: ChatMessage
+  onActionSelect?: (message: ChatMessage, actionId: string) => void
+}
 
-const MessageBubble: React.FC<Props> = ({ message }) => {
+const MessageBubble: React.FC<Props> = ({ message, onActionSelect }) => {
   const isUser = message.role === 'user'
   const isSystem = message.role === 'system'
 
@@ -23,7 +26,43 @@ const MessageBubble: React.FC<Props> = ({ message }) => {
     backdropFilter: 'blur(4px)',
   }
 
-  return <div style={style}>{message.content}</div>
+  const actionsWrap: React.CSSProperties = {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '6px',
+    marginTop: '10px',
+  }
+
+  const actionButton: React.CSSProperties = {
+    border: '1px solid rgba(138, 191, 230, 0.26)',
+    background: 'rgba(255, 255, 255, 0.12)',
+    color: isSystem ? '#f3dffb' : '#edf6ff',
+    borderRadius: '999px',
+    padding: '5px 10px',
+    fontSize: '11px',
+    cursor: 'pointer',
+    backdropFilter: 'blur(4px)',
+  }
+
+  return (
+    <div style={style}>
+      <div>{message.content}</div>
+      {message.actions && message.actions.length > 0 && (
+        <div style={actionsWrap}>
+          {message.actions.map((action) => (
+            <button
+              key={action.id}
+              type="button"
+              style={actionButton}
+              onClick={() => onActionSelect?.(message, action.id)}
+            >
+              {action.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default MessageBubble

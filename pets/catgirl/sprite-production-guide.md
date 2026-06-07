@@ -4,7 +4,7 @@
 
 Turn Mochi into a product-grade floppy-ear mascot companion based on the user-provided pastel pixel reference.
 
-This is no longer a catgirl direction. The target is a soft long-eared white mascot with calm handheld-game charm.
+This compatibility package is no longer a humanoid prototype direction. The target is a soft long-eared white mascot with calm handheld-game charm.
 
 ## Reference Read
 
@@ -109,7 +109,7 @@ Avoid dark moody palettes, sharp contrast overload, and busy costume additions.
 
 ## Runtime Migration Plan
 
-1. Keep exporting `sprite-atlas.png` to `public/pets/catgirl/`.
+1. Keep exporting `sprite-atlas.png` to `public/pets/catgirl/` only while legacy compatibility paths still exist.
 2. Refine the placeholder export until it captures the reference spirit better.
 3. Replace placeholder frames with polished hand-authored sprite art in the same atlas layout.
 4. Keep current FSM and fallback playback behavior unchanged during visual refinement.

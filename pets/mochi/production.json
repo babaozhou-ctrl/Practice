@@ -1,10 +1,15 @@
 {
-  "version": "0.5.0",
+  "version": "0.5.1",
   "sourceOfTruth": "reference-user-board-v3.png and reference-user-hero-crop-v3.png, with v2 crops kept for traceability and reference-concept-v2.png used only as a secondary interpretation pass",
   "visualIntent": {
-    "style": "soft pastel floppy-ear pixel mascot",
-    "scaleReadability": "Must read instantly as a tiny white floppy-ear companion with a broad crown, tiny face, short torso, and blue outline at desktop pet size.",
+    "style": "soft pastel handheld-era healing pixel bunny companion",
+    "scaleReadability": "Must read instantly as a white floppy-ear bunny companion with balanced proportions, centered features, short natural legs, and blue outline at desktop pet size.",
     "emotionPriority": ["ears", "eyes", "mouth", "body_bounce", "vertical_resting_height"]
+  },
+  "appearanceLock": {
+    "status": "locked",
+    "lockedOn": "2026-06-08",
+    "note": "Do not revise Mochi's core appearance without an explicit new user art-direction request."
   },
   "atlas": {
     "file": "sprite-atlas.png",
@@ -126,8 +131,8 @@
   "deliveryChecklist": [
     "Atlas follows 192x208 cell size with stable mascot baseline.",
     "Face stays readable and cute in every state at tiny desktop scale.",
-    "Ear silhouette remains the primary emotional anchor.",
-    "Head stays wider and flatter than the current bridge export.",
+    "Ear silhouette remains a gentle emotional anchor without overpowering the body.",
+    "Head and body stay balanced instead of drifting into giant-head chibi exaggeration.",
     "Transition clips ease between moods instead of snapping between unrelated loops.",
     "No illustration-style glow, floor shadow, or detached effects.",
     "All emotional states preserve the same floppy-ear mascot identity and pastel palette.",

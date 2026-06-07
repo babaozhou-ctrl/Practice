@@ -1,5 +1,3 @@
-﻿import { ChatMessage } from '../types/chat'
-
 export interface FileAnalysisResult {
   content: string
   localSummary: string

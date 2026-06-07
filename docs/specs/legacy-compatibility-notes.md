@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The current project has largely moved from historical `catgirl` prototype naming to the canonical built-in companion `Mochi`.
+The current project has largely moved from historical humanoid prototype naming to the canonical built-in companion `Mochi`.
 
 Some legacy file names still exist to avoid breaking older experiments and prototype import paths. These legacy modules should be treated as shims only.
 

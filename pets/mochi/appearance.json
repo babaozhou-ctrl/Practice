@@ -1,21 +1,21 @@
 {
-  "id": "mochi.appearance.v2",
+  "id": "mochi.appearance.v3-locked",
   "displayName": "Mochi",
   "archetype": "floppy_ear_companion",
-  "summary": "A soft white floppy-eared pixel companion with a broad crown, tiny face, baby-blue outlines, rosy cheeks, and a warm retro virtual-pet presence.",
+  "summary": "A soft white floppy-eared bunny pixel companion with balanced proportions, slender gentle ears, centered features, pastel blue outlines, rosy cheeks, and a calm handheld-era healing-game presence.",
   "silhouette": {
-    "bodyType": "compact_mascot",
+    "bodyType": "balanced_companion",
     "poseBias": "front_facing_grounded",
     "mustKeep": [
-      "long_floppy_ears",
-      "broad_flat_crown",
-      "wide_head_narrow_body_ratio",
-      "tiny_body",
-      "retro_floppy_ear_mascot_readability",
+      "slender_floppy_ears",
+      "soft_rounded_head",
+      "balanced_head_body_ratio",
+      "visible_body_mass",
+      "handheld_pixel_pet_readability",
       "soft_blue_outline",
-      "tiny_low_set_face",
+      "tiny_centered_face",
       "soft_top_cap_accent_shape",
-      "stubby_feet_and_tucked_paws",
+      "short_natural_legs_and_complete_limbs",
       "tiny_mouth_cluster"
     ],
     "avoid": [
@@ -23,12 +23,14 @@
       "busy_costume_detail",
       "large_props",
       "aggressive_pose_language",
-      "catgirl_humanoid_proportions",
+      "humanoid_character_proportions",
       "maid_outfit",
       "human_hair_volume",
       "illustration_crop_feel",
       "upright_bunny_body_language",
-      "tall_torso"
+      "giant_head_tiny_body_ratio",
+      "oversized_ears",
+      "sticker_emote_feel"
     ]
   },
   "face": {
@@ -46,7 +48,7 @@
   "ears": {
     "outerColor": "#fbfdff",
     "innerColor": "#ffd5e3",
-    "shape": "long_floppy_heavy_tip"
+    "shape": "slender_floppy_soft_tip"
   },
   "outfit": {
     "top": "none",
@@ -67,7 +69,7 @@
   },
   "renderRules": {
     "style": "pastel_pixel_mascot",
-    "readability": "must_read_as_a_soft retro floppy-ear companion at small desktop scale",
+    "readability": "must_read_as_a_soft healing-style handheld pixel bunny companion at small desktop scale",
     "avoid": [
       "realistic_shading",
       "dark_gritty_palette",
@@ -80,7 +82,9 @@
       "anime_maid_character",
       "poster_or_sticker_sheet_layout_in_final_atlas",
       "overly_tall_body",
-      "generic_rabbit_mascot_feel"
+      "giant_head_chibi_ratio",
+      "cheap_mobile_pet_feel",
+      "reaction_sticker_feel"
     ]
   }
 }

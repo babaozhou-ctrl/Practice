@@ -1,35 +1,34 @@
 # Deep Pet
 
-Deep Pet is a desktop companion project built around presence, motion quality, and calm interaction.
+Deep Pet 是一个面向长期驻留桌面的陪伴宠物项目。
 
-The goal is not to ship a novelty desktop toy or a floating chat widget. The goal is to build a character that can stay on the desktop for hours, feel alive in small ways, react to context, and remain pleasant to live with.
+它的目标不是做一个会动的小玩具，也不是把聊天框挂在透明窗口里，而是做出一个真正像“生活在桌面里”的陪伴角色。它应该安静、柔和、有情绪，会根据你的状态做出反应，也能在合适的时候主动陪你一下。
 
-The current built-in companion is **Mochi**, a soft floppy-ear pixel mascot designed for a warm, low-noise desktop presence.
+当前内置宠物是 **Mochi**，一个软乎、垂耳、低打扰的像素陪伴形象。
 
-## Why This Exists
+## 项目方向
 
-Most desktop pets are either visually thin, interaction-heavy, or too close to a browser app in a transparent window.
+这个项目优先关注这些事情：
 
-Deep Pet takes a different route:
+- 动画和驻留体验要足够自然
+- 宠物即使不说话，也要有“在场感”
+- 上下文感知比频繁打断更重要
+- UI 是辅助陪伴角色，不是替代它
+- 宠物、人格、模型能力都应该可替换、可扩展
 
-- motion quality comes first
-- the pet should feel present even when it is silent
-- context matters more than constant interruption
-- the interface should support the companion, not replace it
-- pets, personalities, and providers should stay replaceable
+## 当前已经具备
 
-## What Is Working Today
+- 透明无边框桌宠窗口
+- 基于 PixiJS 的独立渲染循环
+- 平滑拖拽与瞬时反应状态
+- 带情绪和上下文稳定层的有限状态行为系统
+- 低打扰的桌面气泡表达规则
+- 聊天和文件分析的陪伴式摘要
+- 模块化宠物包加载
+- 支持 TXT、代码文件、PDF、DOCX 的文件分析
+- 主动提醒与工作模式提醒接入聊天面板动作
 
-- transparent borderless desktop pet window
-- PixiJS rendering with an independent runtime loop
-- smooth drag interaction and transient reaction states
-- finite-state companion behavior with mood and context stabilization
-- soft desktop bubble presentation with low-noise delivery rules
-- companion-side summaries for chat and file analysis
-- modular pet package loading
-- file analysis for text, source files, PDF, and DOCX
-
-## Stack
+## 技术栈
 
 - Electron
 - PixiJS
@@ -37,7 +36,7 @@ Deep Pet takes a different route:
 - TypeScript
 - Zustand
 
-## Project Layout
+## 目录结构
 
 ```text
 src/
@@ -62,56 +61,56 @@ docs/specs/
 media/
 ```
 
-## Development
+## 开发命令
 
-Install dependencies:
+安装依赖：
 
 ```bash
 npm install
 ```
 
-Run the desktop app in development:
+启动桌面开发环境：
 
 ```bash
 npm run desktop:dev
 ```
 
-Build the app:
+构建应用：
 
 ```bash
 npm run build
 ```
 
-Create a packaged distribution:
+打包发布版本：
 
 ```bash
 npm run dist
 ```
 
-Run type checking:
+运行类型检查：
 
 ```bash
 npm run typecheck
 ```
 
-Regenerate Mochi QA artifacts:
+重新生成 Mochi 的 QA 预览资源：
 
 ```bash
 npm run qa:mochi
 ```
 
-## Notes For Contributors
+## 开发约定
 
-- Keep the pet runtime lean. Rendering smoothness is a product feature.
-- Prefer calm interaction over frequent interruption.
-- Preserve the product direction: cozy, soft, minimal, immersive.
-- Treat Mochi as the current canonical built-in companion.
+- 桌宠运行时必须保持轻量，渲染流畅本身就是产品能力。
+- 优先做“轻陪伴”，不要把它做成高频打扰型助手。
+- 保持整体气质：cozy、soft、minimal、immersive。
+- 现阶段以 Mochi 作为默认内置宠物持续打磨。
 
-Contribution guidelines: [CONTRIBUTING.md](./CONTRIBUTING.md)
+协作说明见：[CONTRIBUTING.md](./CONTRIBUTING.md)
 
-## Specs
+## 设计与规格
 
-Architecture and roadmap notes live in:
+项目的架构和路线文档在这里：
 
 - [docs/specs/product-architecture.md](./docs/specs/product-architecture.md)
 - [docs/specs/runtime-modules.md](./docs/specs/runtime-modules.md)
@@ -120,16 +119,16 @@ Architecture and roadmap notes live in:
 - [docs/specs/github-publishing-checklist.md](./docs/specs/github-publishing-checklist.md)
 - [docs/specs/media-prep.md](./docs/specs/media-prep.md)
 
-## Current Limitations
+## 当前阶段说明
 
-- the project is still being hardened for long-running desktop use
-- public screenshots, motion captures, and release notes are not prepared yet
-- plugin and community package flows are still incomplete
+- 这个项目还在继续朝“可长时间使用的桌面陪伴产品”完善
+- 对外展示用的截图、动图和发布说明还没有完全准备好
+- 插件系统、社区宠物包和更完整的扩展生态仍在后续阶段
 
-## Media
+## 媒体资源
 
-Planned repository media lives in [media/README.md](./media/README.md).
+仓库展示素材规划见：[media/README.md](./media/README.md)
 
-## License
+## 开源协议
 
 [MIT](./LICENSE)

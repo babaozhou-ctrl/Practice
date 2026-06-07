@@ -9,13 +9,12 @@ interface ChatStore {
 
   addMessage: (msg: ChatMessage) => void
   appendToLastMessage: (content: string) => void
+  updateMessageActions: (messageId: string, actions: ChatMessage['actions']) => void
   clearMessages: () => void
   setConfig: (config: Partial<AIConfig>) => void
   setStreaming: (v: boolean) => void
   setConnected: (v: boolean) => void
 }
-
-let msgId = 0
 
 export const useChatStore = create<ChatStore>((set) => ({
   messages: [],
@@ -40,6 +39,17 @@ export const useChatStore = create<ChatStore>((set) => ({
       }
       return { messages: msgs }
     }),
+  updateMessageActions: (messageId, actions) =>
+    set((s) => ({
+      messages: s.messages.map((message) =>
+        message.id === messageId
+          ? {
+              ...message,
+              actions,
+            }
+          : message,
+      ),
+    })),
   clearMessages: () => set({ messages: [] }),
   setConfig: (partial) => set((s) => ({ config: { ...s.config, ...partial } })),
   setStreaming: (v) => set({ isStreaming: v }),

@@ -1,6 +1,6 @@
 ﻿{
   "id": "catgirl",
-  "displayName": "Catgirl",
-  "description": "A pixel catgirl desktop companion with color skins. Loves coding, games, and movies.",
+  "displayName": "Legacy Mascot",
+  "description": "A legacy pixel mascot package kept only for prototype compatibility during the Mochi-first migration.",
   "spritesheetPath": "spritesheet.png"
 }

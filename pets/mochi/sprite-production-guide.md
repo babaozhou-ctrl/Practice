@@ -4,7 +4,7 @@
 
 Turn Mochi into a product-grade floppy-ear mascot companion based on the user-provided pastel pixel reference.
 
-This is no longer a catgirl direction. The target is a soft long-eared white mascot with calm handheld-game charm.
+This is no longer a humanoid prototype direction. The target is a soft long-eared white mascot with calm handheld-game charm.
 
 Primary source files for the current direction:
 

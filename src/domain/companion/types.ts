@@ -32,6 +32,13 @@ export interface SpeechIntent {
   duration: number
 }
 
+export interface ProactiveIntent {
+  category: string
+  contextKey: string
+  message: string
+  duration: number
+}
+
 export interface CompanionRuntimeSignals {
   interruptionBudget: number
   productiveSessionMs: number

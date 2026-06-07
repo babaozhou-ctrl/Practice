@@ -1,68 +1,156 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { useChatStore } from '../../store/chatStore'
-import { useContextStore } from '../../store/contextStore'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ChatClient } from '../../ai/ChatClient'
+import { subscribeCompanionAction } from '../../ai/CompanionActionBridge'
+import { buildCompanionChatContext } from '../../ai/CompanionContextAdapter'
 import { buildChatReplyUtterance, buildFileAnalysisUtterance } from '../../ai/CompanionDesktopSummary'
 import { emitCompanionUtterance } from '../../ai/CompanionUtteranceBridge'
-import { buildCompanionChatContext } from '../../ai/CompanionContextAdapter'
 import { resolveAIChatProvider, resolveFileAnalysisProvider } from '../../plugins/PluginCapabilityRegistry'
 import { usePluginProviderStore } from '../../plugins/PluginProviderStore'
+import { useContextStore } from '../../store/contextStore'
 import { useSelectedPetCapabilityStore } from '../../store/selectedPetCapabilityStore'
+import { useChatStore } from '../../store/chatStore'
+import type { ChatMessage, ChatMessageAction } from '../../types/chat'
+import type { ActivityType } from '../../types/context'
 import MessageBubble from './MessageBubble'
 
-interface Props { onClose: () => void }
+interface Props {
+  onClose: () => void
+}
+
+const FILE_ACCEPT =
+  '.txt,.md,.json,.xml,.yaml,.yml,.toml,.csv,.pdf,.docx,.js,.ts,.jsx,.tsx,.py,.rs,.go,.java,.cpp,.c,.cs,.sql'
+
+const MAX_COMPANION_ACTION_HISTORY = 24
 
 const ChatPanel: React.FC<Props> = ({ onClose }) => {
-  const { messages, config, addMessage, appendToLastMessage, setStreaming, isStreaming } = useChatStore()
+  const {
+    messages,
+    config,
+    addMessage,
+    appendToLastMessage,
+    setStreaming,
+    isStreaming,
+  } = useChatStore()
   const activity = useContextStore((state) => state.activity)
   const windowTitle = useContextStore((state) => state.activeWindow.title)
   const windowProcess = useContextStore((state) => state.activeWindow.process)
   const canAnalyzeFiles = useSelectedPetCapabilityStore((state) => state.fileAnalysis)
   const aiChatProviderId = usePluginProviderStore((state) => state.aiChatProviderId)
   const fileAnalysisProviderId = usePluginProviderStore((state) => state.fileAnalysisProviderId)
+
   const [input, setInput] = useState('')
+  const [visible, setVisible] = useState(false)
+  const [isFileDragActive, setIsFileDragActive] = useState(false)
+  const [dragDepth, setDragDepth] = useState(0)
   const [client] = useState(() => new ChatClient(config, aiChatProviderId))
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [visible, setVisible] = useState(false)
+  const recentCompanionActionIdsRef = useRef<string[]>([])
 
-  useEffect(() => { client.updateConfig(config) }, [config, client])
-  useEffect(() => { client.updateProvider(aiChatProviderId) }, [aiChatProviderId, client])
-  useEffect(() => { client.syncTranscript(messages) }, [messages, client])
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
-  useEffect(() => { setVisible(true) }, [])
+  useEffect(() => {
+    client.updateConfig(config)
+  }, [config, client])
+
+  useEffect(() => {
+    client.updateProvider(aiChatProviderId)
+  }, [aiChatProviderId, client])
+
+  useEffect(() => {
+    client.syncTranscript(messages)
+  }, [messages, client])
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  useEffect(() => {
+    setVisible(true)
+  }, [])
+
+  useEffect(() => {
+    return subscribeCompanionAction((payload) => {
+      if (recentCompanionActionIdsRef.current.includes(payload.id)) {
+        return
+      }
+
+      recentCompanionActionIdsRef.current = [
+        payload.id,
+        ...recentCompanionActionIdsRef.current,
+      ].slice(0, MAX_COMPANION_ACTION_HISTORY)
+
+      addMessage({
+        id: `companion-action-${payload.id}`,
+        role: 'system',
+        content: payload.message,
+        timestamp: Date.now(),
+        actions: payload.actions,
+      })
+    })
+  }, [addMessage])
+
+  const isFileDragPayload = useCallback((dataTransfer?: DataTransfer | null) => {
+    if (!dataTransfer) return false
+    return Array.from(dataTransfer.types).includes('Files')
+  }, [])
+
+  const sendPrompt = useCallback(
+    async (content: string) => {
+      const trimmed = content.trim()
+      if (!trimmed || isStreaming) return
+
+      setInput('')
+      addMessage({
+        id: Date.now().toString(),
+        role: 'user',
+        content: trimmed,
+        timestamp: Date.now(),
+      })
+      setStreaming(true)
+
+      const context = buildCompanionChatContext(activity, windowTitle, windowProcess)
+      addMessage({
+        id: `resp-${Date.now()}`,
+        role: 'assistant',
+        content: '',
+        timestamp: Date.now(),
+      })
+
+      await client.sendMessage(
+        trimmed,
+        context,
+        (chunk) => appendToLastMessage(chunk),
+        (fullReply) => {
+          if (fullReply.trim()) {
+            emitCompanionUtterance({
+              source: 'chat',
+              message: buildChatReplyUtterance(fullReply),
+              duration: 2600,
+            })
+          }
+          setStreaming(false)
+        },
+        (err) => {
+          appendToLastMessage(`[Error: ${err.message}]`)
+          setStreaming(false)
+        },
+      )
+    },
+    [
+      activity,
+      addMessage,
+      appendToLastMessage,
+      client,
+      isStreaming,
+      setStreaming,
+      windowProcess,
+      windowTitle,
+    ],
+  )
 
   const sendMessage = useCallback(async () => {
-    if (!input.trim() || isStreaming) return
-
-    const content = input.trim()
-    setInput('')
-    addMessage({ id: Date.now().toString(), role: 'user', content, timestamp: Date.now() })
-    setStreaming(true)
-
-    const context = buildCompanionChatContext(activity, windowTitle, windowProcess)
-    addMessage({ id: `resp-${Date.now()}`, role: 'assistant', content: '', timestamp: Date.now() })
-
-    await client.sendMessage(
-      content,
-      context,
-      (chunk) => appendToLastMessage(chunk),
-      (fullReply) => {
-        if (fullReply.trim()) {
-          emitCompanionUtterance({
-            source: 'chat',
-            message: buildChatReplyUtterance(fullReply),
-            duration: 2600,
-          })
-        }
-        setStreaming(false)
-      },
-      (err) => {
-        appendToLastMessage(`[Error: ${err.message}]`)
-        setStreaming(false)
-      },
-    )
-  }, [input, isStreaming, activity, windowTitle, windowProcess, client, addMessage, appendToLastMessage, setStreaming])
+    await sendPrompt(input)
+  }, [input, sendPrompt])
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -71,58 +159,378 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
     }
   }
 
-  const analyzeFiles = useCallback(async (files: FileList | null) => {
-    if (!files || files.length === 0 || !canAnalyzeFiles || isStreaming) return
+  const buildAnalysisPrompt = useCallback((fileName: string, summary: string) => {
+    return [
+      `请陪我一起看看这个文件《${fileName}》`,
+      '',
+      '先用陪伴式的语气帮我讲重点，不要像生硬的工具汇报。',
+      '',
+      '已提取摘要：',
+      summary,
+      '',
+      '如果你觉得有必要，也可以提醒我下一步最值得继续看的部分。',
+    ].join('\n')
+  }, [])
 
-    const file = files[0]
-    const aiChatProvider = resolveAIChatProvider(aiChatProviderId)
-    const fileAnalysisProvider = resolveFileAnalysisProvider(fileAnalysisProviderId)
-    addMessage({
-      id: `file-${Date.now()}`,
-      role: 'system',
-      content: `正在分析文件：${file.name}`,
-      timestamp: Date.now(),
-    })
-
-    try {
-      const content = await fileAnalysisProvider.readFile(file)
-      const localSummary = fileAnalysisProvider.summarize(content)
-      let summary = localSummary
-
-      if (config.enabled && config.apiKey) {
-        try {
-          summary = await aiChatProvider.summarizeDocument({
-            config,
-            fileName: file.name,
-            content,
-          })
-        } catch (error: any) {
-          addMessage({
-            id: `file-ai-fallback-${Date.now()}`,
-            role: 'system',
-            content: `AI 总结暂时不可用，先给你本地预览版摘要：${error.message}`,
-            timestamp: Date.now(),
-          })
-        }
+  const buildFollowUpActions = useCallback(
+    (
+      fileName: string,
+      summary: string,
+      currentActivity: ActivityType,
+    ): ChatMessageAction[] => {
+      const baseFillAction: ChatMessageAction = {
+        id: 'fill-input',
+        label: '先放到输入框',
+        prompt: buildAnalysisPrompt(fileName, summary),
+        fillOnly: true,
       }
 
-      emitCompanionUtterance({
-        source: 'file-analysis',
-        message: buildFileAnalysisUtterance(file.name, summary),
-        duration: 3200,
-      })
+      if (currentActivity === 'CODING') {
+        return [
+          {
+            id: 'extract-actionable',
+            label: '只讲要点',
+            prompt: [
+              `我现在还在写代码，我们继续看《${fileName}》。`,
+              '',
+              '请你用很克制的方式，只告诉我最关键的结论、风险或可执行信息，尽量少打断我的专注。',
+              '',
+              '摘要：',
+              summary,
+            ].join('\n'),
+          },
+          {
+            id: 'connect-to-work',
+            label: '结合当前工作',
+            prompt: [
+              `我现在在处理工作或代码，请结合这个状态陪我看《${fileName}》。`,
+              '',
+              '帮我判断这份内容和我当前手头事情最可能相关的地方，并告诉我先看哪一段最省时间。',
+              '',
+              '摘要：',
+              summary,
+            ].join('\n'),
+          },
+          {
+            id: 'turn-into-checklist',
+            label: '整理执行顺序',
+            prompt: [
+              `请继续陪我处理《${fileName}》。`,
+              '',
+              '把我接下来可以做的动作整理成一个轻量顺序，语气温和一点，但别太啰嗦。',
+              '',
+              '摘要：',
+              summary,
+            ].join('\n'),
+          },
+          baseFillAction,
+        ]
+      }
 
-      const prompt = `请陪我一起理解这个文件。\n\n文件：${file.name}\n\n摘要：\n${summary}\n\n如果你觉得有必要，也可以提醒我最值得继续看的部分。`
-      setInput(prompt)
-    } catch (error: any) {
+      if (currentActivity === 'WATCHING') {
+        return [
+          {
+            id: 'co-watch',
+            label: '一起聊亮点',
+            prompt: [
+              `我们像一起看内容一样继续聊《${fileName}》。`,
+              '',
+              '请用轻一点、像在一起讨论的语气，告诉我这里面最有意思或最值得注意的地方。',
+              '',
+              '摘要：',
+              summary,
+            ].join('\n'),
+          },
+          {
+            id: 'spot-controversy',
+            label: '看看哪里最有料',
+            prompt: [
+              `请继续陪我看《${fileName}》。`,
+              '',
+              '帮我找出最值得吐槽、讨论或者进一步确认的部分，但不要太吵。',
+              '',
+              '摘要：',
+              summary,
+            ].join('\n'),
+          },
+          {
+            id: 'gentle-recap',
+            label: '温柔复述',
+            prompt: [
+              `请你陪我把《${fileName}》顺一遍。`,
+              '',
+              '用更自然一点、像坐在旁边轻声解释的方式，帮我复述重点。',
+              '',
+              '摘要：',
+              summary,
+            ].join('\n'),
+          },
+          baseFillAction,
+        ]
+      }
+
+      if (currentActivity === 'CHATTING') {
+        return [
+          {
+            id: 'social-summary',
+            label: '帮我讲给别人听',
+            prompt: [
+              `请陪我一起看《${fileName}》。`,
+              '',
+              '把它整理成适合讲给别人听的版本，要自然、暖一点，不要像机器总结。',
+              '',
+              '摘要：',
+              summary,
+            ].join('\n'),
+          },
+          {
+            id: 'soft-highlight',
+            label: '先挑最值得说的',
+            prompt: [
+              `请继续陪我看《${fileName}》。`,
+              '',
+              '帮我挑出最值得马上提起的重点，像你在旁边轻轻提醒我一样。',
+              '',
+              '摘要：',
+              summary,
+            ].join('\n'),
+          },
+          {
+            id: 'prepare-response',
+            label: '整理一句回应',
+            prompt: [
+              `我现在可能会把《${fileName}》里的内容继续聊下去。`,
+              '',
+              '请根据摘要帮我整理一个自然一点的回应或说法，不要太正式。',
+              '',
+              '摘要：',
+              summary,
+            ].join('\n'),
+          },
+          baseFillAction,
+        ]
+      }
+
+      if (currentActivity === 'GAMING') {
+        return [
+          {
+            id: 'quickest-need',
+            label: '只说最重要的',
+            prompt: [
+              `我现在不太想被打断，请非常简短地帮我看《${fileName}》。`,
+              '',
+              '只告诉我最关键的一件事，或者值不值得我稍后再回来细看。',
+              '',
+              '摘要：',
+              summary,
+            ].join('\n'),
+          },
+          {
+            id: 'save-for-later',
+            label: '留个稍后回看点',
+            prompt: [
+              `我现在先玩着，请帮我给《${fileName}》留一个稍后继续看的切入口。`,
+              '',
+              '告诉我晚点回来时最该从哪里接着看，尽量短。',
+              '',
+              '摘要：',
+              summary,
+            ].join('\n'),
+          },
+          baseFillAction,
+        ]
+      }
+
+      return [
+        {
+          id: 'explain-gently',
+          label: '先讲重点',
+          prompt: [
+            `我们继续看《${fileName}》。`,
+            '',
+            '请你像陪我一起读一样，用温和一点的语气告诉我最重要的三件事。',
+            '',
+            '摘要：',
+            summary,
+          ].join('\n'),
+        },
+        {
+          id: 'find-worth-reading',
+          label: '标出必看部分',
+          prompt: [
+            `请继续陪我看《${fileName}》。`,
+            '',
+            '帮我从这个摘要里挑出最值得继续细看的部分，并告诉我为什么。',
+            '',
+            '摘要：',
+            summary,
+          ].join('\n'),
+        },
+        {
+          id: 'turn-into-plan',
+          label: '整理下一步',
+          prompt: [
+            `我们拿《${fileName}》继续往下走。`,
+            '',
+            '请把我接下来可以做的事情整理成一个很轻的阅读或处理顺序，不要太工具化。',
+            '',
+            '摘要：',
+            summary,
+          ].join('\n'),
+        },
+        baseFillAction,
+      ]
+    },
+    [buildAnalysisPrompt],
+  )
+
+  const handleMessageActionSelect = useCallback(
+    async (message: ChatMessage, actionId: string) => {
+      const action = message.actions?.find((entry) => entry.id === actionId)
+      if (!action) return
+
+      if (action.fillOnly) {
+        setInput(action.prompt)
+        return
+      }
+
+      await sendPrompt(action.prompt)
+    },
+    [sendPrompt],
+  )
+
+  const analyzeFile = useCallback(
+    async (file: File | null | undefined) => {
+      if (!file || !canAnalyzeFiles || isStreaming) return
+
+      const aiChatProvider = resolveAIChatProvider(aiChatProviderId)
+      const fileAnalysisProvider = resolveFileAnalysisProvider(fileAnalysisProviderId)
+
       addMessage({
-        id: `file-error-${Date.now()}`,
+        id: `file-${Date.now()}`,
         role: 'system',
-        content: `文件分析失败：${error.message}`,
+        content: `正在整理文件《${file.name}》……`,
         timestamp: Date.now(),
       })
-    }
-  }, [addMessage, aiChatProviderId, canAnalyzeFiles, config, fileAnalysisProviderId, isStreaming])
+
+      try {
+        const content = await fileAnalysisProvider.readFile(file)
+        const localSummary = fileAnalysisProvider.summarize(content)
+        let summary = localSummary
+
+        if (config.enabled && config.apiKey) {
+          try {
+            summary = await aiChatProvider.summarizeDocument({
+              config,
+              fileName: file.name,
+              content,
+            })
+          } catch (error: any) {
+            addMessage({
+              id: `file-ai-fallback-${Date.now()}`,
+              role: 'system',
+              content: `云端总结暂时不可用，先给你本地摘要。${error.message}`,
+              timestamp: Date.now(),
+            })
+          }
+        }
+
+        addMessage({
+          id: `file-summary-${Date.now()}`,
+          role: 'system',
+          content: `我先帮你把《${file.name}》理了一遍。你可以直接点下面的方式，我们一起继续往下看。\n\n${summary}`,
+          timestamp: Date.now(),
+          actions: buildFollowUpActions(file.name, summary, activity),
+        })
+
+        emitCompanionUtterance({
+          source: 'file-analysis',
+          message: buildFileAnalysisUtterance(file.name, summary),
+          duration: 3200,
+        })
+
+        setInput(buildAnalysisPrompt(file.name, summary))
+      } catch (error: any) {
+        addMessage({
+          id: `file-error-${Date.now()}`,
+          role: 'system',
+          content: `文件分析失败：${error.message}`,
+          timestamp: Date.now(),
+        })
+      }
+    },
+    [
+      addMessage,
+      aiChatProviderId,
+      buildAnalysisPrompt,
+      buildFollowUpActions,
+      canAnalyzeFiles,
+      config,
+      fileAnalysisProviderId,
+      isStreaming,
+      activity,
+    ],
+  )
+
+  const analyzeFiles = useCallback(
+    async (files: FileList | null) => {
+      if (!files || files.length === 0) return
+      await analyzeFile(files[0])
+    },
+    [analyzeFile],
+  )
+
+  const handleDragEnter = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      if (!canAnalyzeFiles || isStreaming || !isFileDragPayload(event.dataTransfer)) return
+      event.preventDefault()
+      event.stopPropagation()
+      setDragDepth((value) => value + 1)
+      setIsFileDragActive(true)
+    },
+    [canAnalyzeFiles, isFileDragPayload, isStreaming],
+  )
+
+  const handleDragOver = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      if (!canAnalyzeFiles || isStreaming || !isFileDragPayload(event.dataTransfer)) return
+      event.preventDefault()
+      event.stopPropagation()
+      event.dataTransfer.dropEffect = 'copy'
+      if (!isFileDragActive) {
+        setIsFileDragActive(true)
+      }
+    },
+    [canAnalyzeFiles, isFileDragActive, isFileDragPayload, isStreaming],
+  )
+
+  const handleDragLeave = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      if (!isFileDragPayload(event.dataTransfer)) return
+      event.preventDefault()
+      event.stopPropagation()
+      setDragDepth((value) => {
+        const nextValue = Math.max(0, value - 1)
+        if (nextValue === 0) {
+          setIsFileDragActive(false)
+        }
+        return nextValue
+      })
+    },
+    [isFileDragPayload],
+  )
+
+  const handleDrop = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      if (!canAnalyzeFiles || isStreaming || !isFileDragPayload(event.dataTransfer)) return
+      event.preventDefault()
+      event.stopPropagation()
+      setDragDepth(0)
+      setIsFileDragActive(false)
+      void analyzeFiles(event.dataTransfer.files)
+    },
+    [analyzeFiles, canAnalyzeFiles, isFileDragPayload, isStreaming],
+  )
 
   const styles: Record<string, React.CSSProperties> = {
     panel: {
@@ -144,6 +552,8 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
       opacity: visible ? 1 : 0,
       transform: visible ? 'translateY(0)' : 'translateY(12px)',
       transition: 'opacity 0.35s ease, transform 0.35s ease',
+      outline: isFileDragActive ? '2px solid rgba(132, 196, 255, 0.78)' : 'none',
+      outlineOffset: isFileDragActive ? '-2px' : 0,
     },
     header: {
       padding: '14px 18px 10px',
@@ -177,6 +587,7 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
       fontSize: '12px',
       textAlign: 'center',
       padding: '24px',
+      lineHeight: 1.6,
     },
     inputRow: {
       padding: '10px 14px 14px',
@@ -218,10 +629,55 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
       fontSize: '12px',
       cursor: 'pointer',
     },
+    dropOverlay: {
+      position: 'absolute',
+      inset: '10px',
+      borderRadius: '14px',
+      border: '1.5px dashed rgba(123, 189, 240, 0.85)',
+      background: 'linear-gradient(180deg, rgba(244, 251, 255, 0.92), rgba(255, 246, 250, 0.9))',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'column',
+      gap: '8px',
+      color: '#54738d',
+      fontSize: '13px',
+      textAlign: 'center',
+      pointerEvents: 'none',
+      zIndex: 2,
+      boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.6)',
+      padding: '18px',
+    },
+    dropHint: {
+      fontSize: '11px',
+      color: 'rgba(84, 115, 141, 0.72)',
+      maxWidth: '220px',
+      lineHeight: 1.5,
+    },
+    capabilityHint: {
+      padding: '0 14px 10px',
+      fontSize: '11px',
+      lineHeight: 1.4,
+      color: 'rgba(92, 118, 143, 0.78)',
+    },
   }
 
   return (
-    <div style={styles.panel}>
+    <div
+      style={styles.panel}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {isFileDragActive && dragDepth > 0 && (
+        <div style={styles.dropOverlay}>
+          <strong>把文件拖到这里</strong>
+          <div style={styles.dropHint}>
+            支持 PDF、DOCX、TXT、Markdown 和常见代码文件。Mochi 会先整理摘要，再陪你一起往下看。
+          </div>
+        </div>
+      )}
       <div style={styles.header}>
         <span>Mochi</span>
         <button onClick={onClose} style={styles.closeBtn}>
@@ -229,10 +685,23 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
         </button>
       </div>
       <div style={styles.msgs}>
-        {messages.length === 0 && <div style={styles.empty}>Mochi 在等你先开口。</div>}
-        {messages.map((message) => <MessageBubble key={message.id} message={message} />)}
+        {messages.length === 0 && <div style={styles.empty}>Mochi 在等你开口，也可以直接拖一个文件进来。</div>}
+        {messages.map((message) => (
+          <MessageBubble
+            key={message.id}
+            message={message}
+            onActionSelect={(targetMessage, actionId) => {
+              void handleMessageActionSelect(targetMessage, actionId)
+            }}
+          />
+        ))}
         <div ref={messagesEndRef} />
       </div>
+      {canAnalyzeFiles && (
+        <div style={styles.capabilityHint}>
+          可以点 <strong>File</strong>，也可以把文件直接拖进这个面板。
+        </div>
+      )}
       <div style={styles.inputRow}>
         {canAnalyzeFiles && (
           <>
@@ -240,7 +709,7 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
               ref={fileInputRef}
               type="file"
               style={{ display: 'none' }}
-              accept=".txt,.md,.json,.xml,.yaml,.yml,.toml,.csv,.pdf,.docx,.js,.ts,.jsx,.tsx,.py,.rs,.go,.java,.cpp,.c,.cs,.sql"
+              accept={FILE_ACCEPT}
               onChange={(event) => {
                 void analyzeFiles(event.target.files)
                 event.currentTarget.value = ''
@@ -260,7 +729,7 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="想和 Mochi 说点什么…"
+          placeholder="想和 Mochi 说点什么？"
           rows={1}
           style={styles.input}
         />

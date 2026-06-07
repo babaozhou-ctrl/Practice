@@ -18,7 +18,7 @@ function clipSentence(value: string, maxChars = 34): string {
   }
 
   for (let index = maxChars; index >= Math.max(10, Math.floor(maxChars * 0.6)); index -= 1) {
-    if ('，。、；：,.!?！？ '.includes(normalized[index] ?? '')) {
+    if ('，。；、,.!?！？ '.includes(normalized[index] ?? '')) {
       return `${normalized.slice(0, index).trim()}…`
     }
   }
@@ -41,11 +41,10 @@ export function summarizeForCompanionSpeech(text: string, fallback: string, maxC
 }
 
 export function buildFileAnalysisUtterance(fileName: string, summary: string): string {
-  const lead = summarizeForCompanionSpeech(summary, `我先看了看 ${fileName}。`, 30)
-  return `我先帮你看了一下 ${fileName}。${lead}`
+  const lead = summarizeForCompanionSpeech(summary, `我先看了看《${fileName}》`, 30)
+  return `我先帮你看了一遍《${fileName}》。${lead}`
 }
 
 export function buildChatReplyUtterance(reply: string): string {
-  const compact = summarizeForCompanionSpeech(reply, '我想好了，要轻轻和你说。', 30)
-  return compact
+  return summarizeForCompanionSpeech(reply, '我想好了，轻轻和你说。', 30)
 }

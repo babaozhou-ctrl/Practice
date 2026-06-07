@@ -288,70 +288,70 @@ def draw_mascot(pose: dict) -> Image.Image:
     hide_charm = bool(pose.get("hide_charm", loaf_mode))
 
     cx = 24 + x_shift
-    head_top = 10 + y_shift + float_bob
-    head_left = cx - 17 - head_widen + head_tilt
-    head_right = cx + 17 + head_widen + head_tilt
-    head_bottom = head_top + 11 - head_flatten
+    head_top = 8 + y_shift + float_bob
+    head_left = cx - 13 - head_widen + head_tilt
+    head_right = cx + 13 + head_widen + head_tilt
+    head_bottom = head_top + 14 - head_flatten
 
-    body_top = head_bottom - 1
-    body_left = cx - 4 - body_width + body_shift
-    body_right = cx + 4 + body_width + body_shift
-    body_bottom = body_top + 7 + body_height
+    body_top = head_bottom
+    body_left = cx - 7 - body_width + body_shift
+    body_right = cx + 7 + body_width + body_shift
+    body_bottom = body_top + 10 + body_height
 
     left_ear = [
-        (head_left + 7, head_top + 4),
-        (head_left + 2 - left_ear_out, head_top + 5),
-        (head_left - 4 - left_ear_out, head_top + 9 + left_ear_drop),
-        (head_left - 8 - left_ear_out, head_top + 18 + left_ear_drop),
-        (head_left - 6 - left_ear_out, head_top + 26 + left_ear_drop),
-        (head_left - 1 - left_ear_out, head_top + 29 + left_ear_drop),
-        (head_left + 4, head_top + 26 + left_ear_drop),
-        (head_left + 8, head_top + 12),
+        (head_left + 5, head_top + 6),
+        (head_left + 2 - left_ear_out, head_top + 7),
+        (head_left - 2 - left_ear_out, head_top + 11 + left_ear_drop),
+        (head_left - 4 - left_ear_out, head_top + 16 + left_ear_drop),
+        (head_left - 3 - left_ear_out, head_top + 20 + left_ear_drop),
+        (head_left + 0 - left_ear_out, head_top + 22 + left_ear_drop),
+        (head_left + 3, head_top + 20 + left_ear_drop),
+        (head_left + 6, head_top + 13),
     ]
     right_ear = [
-        (head_right - 7, head_top + 4),
-        (head_right - 2 + right_ear_out, head_top + 5),
-        (head_right + 4 + right_ear_out, head_top + 9 + right_ear_drop),
-        (head_right + 8 + right_ear_out, head_top + 18 + right_ear_drop),
-        (head_right + 6 + right_ear_out, head_top + 26 + right_ear_drop),
-        (head_right + 1 + right_ear_out, head_top + 29 + right_ear_drop),
-        (head_right - 4, head_top + 26 + right_ear_drop),
-        (head_right - 8, head_top + 12),
+        (head_right - 5, head_top + 6),
+        (head_right - 2 + right_ear_out, head_top + 7),
+        (head_right + 2 + right_ear_out, head_top + 11 + right_ear_drop),
+        (head_right + 4 + right_ear_out, head_top + 16 + right_ear_drop),
+        (head_right + 3 + right_ear_out, head_top + 20 + right_ear_drop),
+        (head_right + 0 + right_ear_out, head_top + 22 + right_ear_drop),
+        (head_right - 3, head_top + 20 + right_ear_drop),
+        (head_right - 6, head_top + 13),
     ]
     polygon(draw, left_ear, PALETTE["fur"], PALETTE["outline"])
     polygon(draw, right_ear, PALETTE["fur"], PALETTE["outline"])
     polygon(
         draw,
         [
-            (head_left + 4, head_top + 8),
-            (head_left + 1 - left_ear_out, head_top + 9),
-            (head_left - 2 - left_ear_out, head_top + 13 + left_ear_drop),
-            (head_left - 3 - left_ear_out, head_top + 21 + left_ear_drop),
-            (head_left - 1 - left_ear_out, head_top + 24 + left_ear_drop),
-            (head_left + 3, head_top + 12),
+            (head_left + 3, head_top + 10),
+            (head_left + 1 - left_ear_out, head_top + 10),
+            (head_left - 1 - left_ear_out, head_top + 13 + left_ear_drop),
+            (head_left - 1 - left_ear_out, head_top + 17 + left_ear_drop),
+            (head_left + 0 - left_ear_out, head_top + 19 + left_ear_drop),
+            (head_left + 2, head_top + 13),
         ],
         PALETTE["ear_inner"],
     )
-    px(draw, head_left - 2 - left_ear_out, head_top + 18 + left_ear_drop, PALETTE["ear_glow"])
-    px(draw, head_left - 1 - left_ear_out, head_top + 22 + left_ear_drop, PALETTE["ear_glow"])
+    px(draw, head_left - 1 - left_ear_out, head_top + 16 + left_ear_drop, PALETTE["ear_glow"])
+    px(draw, head_left + 0 - left_ear_out, head_top + 18 + left_ear_drop, PALETTE["ear_glow"])
     polygon(
         draw,
         [
-            (head_right - 4, head_top + 8),
-            (head_right - 1 + right_ear_out, head_top + 9),
-            (head_right + 2 + right_ear_out, head_top + 13 + right_ear_drop),
-            (head_right + 3 + right_ear_out, head_top + 21 + right_ear_drop),
-            (head_right + 1 + right_ear_out, head_top + 24 + right_ear_drop),
-            (head_right - 3, head_top + 12),
+            (head_right - 3, head_top + 10),
+            (head_right - 1 + right_ear_out, head_top + 10),
+            (head_right + 1 + right_ear_out, head_top + 13 + right_ear_drop),
+            (head_right + 1 + right_ear_out, head_top + 17 + right_ear_drop),
+            (head_right + 0 + right_ear_out, head_top + 19 + right_ear_drop),
+            (head_right - 2, head_top + 13),
         ],
         PALETTE["ear_inner"],
     )
-    px(draw, head_right + 2 + right_ear_out, head_top + 18 + right_ear_drop, PALETTE["ear_glow"])
-    px(draw, head_right + 1 + right_ear_out, head_top + 22 + right_ear_drop, PALETTE["ear_glow"])
-    px(draw, head_left - 4 - left_ear_out, head_top + 19 + left_ear_drop, PALETTE["ear_shadow"])
-    px(draw, head_right + 4 + right_ear_out, head_top + 19 + right_ear_drop, PALETTE["ear_shadow"])
+    px(draw, head_right + 1 + right_ear_out, head_top + 16 + right_ear_drop, PALETTE["ear_glow"])
+    px(draw, head_right + 0 + right_ear_out, head_top + 18 + right_ear_drop, PALETTE["ear_glow"])
+    px(draw, head_left - 2 - left_ear_out, head_top + 17 + left_ear_drop, PALETTE["ear_shadow"])
+    px(draw, head_right + 2 + right_ear_out, head_top + 17 + right_ear_drop, PALETTE["ear_shadow"])
 
-    rounded(draw, head_left, head_top, head_right, head_bottom, PALETTE["fur"], PALETTE["outline"], radius=6)
+    rounded(draw, head_left, head_top, head_right, head_bottom, PALETTE["fur"], PALETTE["outline"], radius=8)
     rect(draw, head_left + 3, head_top + 3, head_left + 6, head_top + 4, PALETTE["cap_trim"])
     rect(draw, head_right - 6, head_top + 3, head_right - 3, head_top + 4, PALETTE["cap_trim"])
     draw_caplet(draw, cx, head_top, head_tilt)
@@ -360,18 +360,18 @@ def draw_mascot(pose: dict) -> Image.Image:
 
     if loaf_mode:
         loaf_top = body_top + 2 + loaf_drop
-        loaf_left = cx - 13 - loaf_width + body_shift
-        loaf_right = cx + 13 + loaf_width + body_shift
-        loaf_bottom = loaf_top + 7 + loaf_height
-        rounded(draw, loaf_left, loaf_top, loaf_right, loaf_bottom, PALETTE["fur"], PALETTE["outline"], radius=4)
-        rounded(draw, loaf_left + 2, loaf_top + 3, loaf_right - 2, loaf_bottom - 1, PALETTE["fur_shadow"], radius=4)
-        rounded(draw, loaf_left + 5, loaf_top + 4, loaf_right - 5, loaf_bottom - 1, PALETTE["fur_lowlight"], radius=4)
+        loaf_left = cx - 12 - loaf_width + body_shift
+        loaf_right = cx + 12 + loaf_width + body_shift
+        loaf_bottom = loaf_top + 8 + loaf_height
+        rounded(draw, loaf_left, loaf_top, loaf_right, loaf_bottom, PALETTE["fur"], PALETTE["outline"], radius=5)
+        rounded(draw, loaf_left + 2, loaf_top + 3, loaf_right - 2, loaf_bottom - 1, PALETTE["fur_shadow"], radius=5)
+        rounded(draw, loaf_left + 4, loaf_top + 4, loaf_right - 4, loaf_bottom - 1, PALETTE["fur_lowlight"], radius=5)
         draw_small_paw(draw, loaf_left + 7, loaf_top + 3 - min(1, left_paw_up))
         draw_small_paw(draw, loaf_right - 7, loaf_top + 3 - min(1, right_paw_up))
     else:
-        rounded(draw, body_left, body_top, body_right, body_bottom, PALETTE["fur"], PALETTE["outline"], radius=4)
-        rounded(draw, cx - 2 + body_shift, body_top + 3, cx + 2 + body_shift, body_bottom - 1, PALETTE["fur_shadow"], radius=3)
-        rounded(draw, cx - 1 + body_shift, body_top + 4, cx + 1 + body_shift, body_bottom - 1, PALETTE["fur_lowlight"], radius=2)
+        rounded(draw, body_left, body_top, body_right, body_bottom, PALETTE["fur"], PALETTE["outline"], radius=5)
+        rounded(draw, cx - 3 + body_shift, body_top + 3, cx + 3 + body_shift, body_bottom - 1, PALETTE["fur_shadow"], radius=4)
+        rounded(draw, cx - 2 + body_shift, body_top + 4, cx + 2 + body_shift, body_bottom - 1, PALETTE["fur_lowlight"], radius=3)
 
         left_paw_x = body_left
         right_paw_x = body_right
@@ -388,7 +388,7 @@ def draw_mascot(pose: dict) -> Image.Image:
         if not hide_charm:
             draw_ribbon_charm(draw, cx + body_shift, body_top + 1)
 
-    eye_y = head_top + 10 + face_drop + eye_y_shift
+    eye_y = head_top + 8 + face_drop + eye_y_shift
     left_eye_x = cx - 4 + head_tilt + int(pose.get("eye_shift_left", 0))
     right_eye_x = cx + 4 + head_tilt + int(pose.get("eye_shift_right", 0))
     if blink or sleepy or eye_style == "closed":
@@ -404,12 +404,12 @@ def draw_mascot(pose: dict) -> Image.Image:
         draw_eye_open(draw, left_eye_x, eye_y)
         draw_eye_open(draw, right_eye_x, eye_y)
 
-    draw_cheek(draw, cx - 10 + head_tilt, head_top + 13 + face_drop)
-    draw_cheek(draw, cx + 9 + head_tilt, head_top + 13 + face_drop)
+    draw_cheek(draw, cx - 9 + head_tilt, head_top + 11 + face_drop)
+    draw_cheek(draw, cx + 8 + head_tilt, head_top + 11 + face_drop)
     if cheek_boost:
-        px(draw, cx - 9 + head_tilt, head_top + 14 + face_drop, PALETTE["blush"])
-        px(draw, cx + 10 + head_tilt, head_top + 14 + face_drop, PALETTE["blush"])
-    draw_nose(draw, cx + head_tilt, head_top + 11 + face_drop, nose_style)
+        px(draw, cx - 8 + head_tilt, head_top + 12 + face_drop, PALETTE["blush"])
+        px(draw, cx + 9 + head_tilt, head_top + 12 + face_drop, PALETTE["blush"])
+    draw_nose(draw, cx + head_tilt, head_top + 10 + face_drop, nose_style)
     draw_mouth(draw, cx + head_tilt, head_top + 12 + face_drop, mouth)
 
     if pose.get("star"):
@@ -430,12 +430,12 @@ def draw_mascot(pose: dict) -> Image.Image:
 
 def idle_frames() -> list[dict]:
     return [
-        {"left_ear_drop": 4, "right_ear_drop": 5, "mouth": "w", "head_widen": 1, "face_drop": 1, "body_width": -1},
-        {"float_bob": 1, "x_shift": -1, "left_ear_drop": 5, "right_ear_drop": 4, "body_shift": -1, "mouth": "w", "eye_y_shift": 1, "head_widen": 1, "face_drop": 1, "body_width": -1},
-        {"left_ear_drop": 6, "right_ear_drop": 5, "half_lidded": True, "mouth": "flat", "eye_style": "half", "head_widen": 1, "face_drop": 1, "body_width": -1},
-        {"blink": True, "left_ear_drop": 5, "right_ear_drop": 5, "mouth": "w", "head_widen": 1, "face_drop": 1, "body_width": -1},
-        {"float_bob": -1, "x_shift": 1, "left_ear_drop": 4, "right_ear_drop": 6, "body_shift": 1, "mouth": "w", "eye_y_shift": -1, "head_widen": 1, "face_drop": 1, "body_width": -1},
-        {"left_ear_drop": 4, "right_ear_drop": 5, "mouth": "flat", "eye_style": "half", "head_widen": 1, "face_drop": 1, "body_width": -1},
+        {"left_ear_drop": 3, "right_ear_drop": 4, "mouth": "w", "face_drop": 1},
+        {"float_bob": 1, "x_shift": -1, "left_ear_drop": 4, "right_ear_drop": 3, "body_shift": -1, "mouth": "w", "eye_y_shift": 1, "face_drop": 1},
+        {"left_ear_drop": 5, "right_ear_drop": 4, "half_lidded": True, "mouth": "flat", "eye_style": "half", "face_drop": 1},
+        {"blink": True, "left_ear_drop": 4, "right_ear_drop": 4, "mouth": "w", "face_drop": 1},
+        {"float_bob": -1, "x_shift": 1, "left_ear_drop": 3, "right_ear_drop": 5, "body_shift": 1, "mouth": "w", "eye_y_shift": -1, "face_drop": 1},
+        {"left_ear_drop": 3, "right_ear_drop": 4, "mouth": "flat", "eye_style": "half", "face_drop": 1},
     ]
 
 
@@ -459,10 +459,10 @@ def coding_frames() -> list[dict]:
 
 def watching_frames() -> list[dict]:
     return [
-        {"head_tilt": -2, "left_ear_drop": 7, "right_ear_drop": 4, "eye_shift_left": 1, "eye_shift_right": 1, "mouth": "w", "cheek_boost": True, "body_shift": -1, "head_widen": 2, "face_drop": 1, "body_width": -1, "loaf_mode": True, "loaf_drop": 1, "loaf_width": 1},
-        {"head_tilt": -1, "left_paw_up": 1, "left_ear_drop": 8, "right_ear_drop": 5, "eye_shift_left": 1, "eye_shift_right": 1, "mouth": "chat", "cheek_boost": True, "head_widen": 2, "face_drop": 1, "body_width": -1, "loaf_mode": True, "loaf_drop": 2, "loaf_width": 1},
-        {"head_tilt": 0, "blink": True, "left_ear_drop": 8, "right_ear_drop": 8, "music": True, "mouth": "flat", "float_bob": 0, "loaf_mode": True, "loaf_drop": 2, "loaf_width": 2, "head_widen": 2, "face_drop": 2},
-        {"head_tilt": 2, "left_ear_drop": 5, "right_ear_drop": 8, "eye_shift_left": -1, "eye_shift_right": -1, "mouth": "w", "cheek_boost": True, "body_shift": 1, "head_widen": 2, "face_drop": 1, "body_width": -1, "loaf_mode": True, "loaf_drop": 1, "loaf_width": 1},
+        {"head_tilt": -2, "left_ear_drop": 5, "right_ear_drop": 3, "eye_shift_left": 1, "eye_shift_right": 1, "mouth": "w", "cheek_boost": True, "body_shift": -1, "head_widen": 1, "face_drop": 1, "loaf_mode": True, "loaf_drop": 1},
+        {"head_tilt": -1, "left_paw_up": 1, "left_ear_drop": 6, "right_ear_drop": 4, "eye_shift_left": 1, "eye_shift_right": 1, "mouth": "chat", "cheek_boost": True, "head_widen": 1, "face_drop": 1, "loaf_mode": True, "loaf_drop": 2},
+        {"head_tilt": 0, "blink": True, "left_ear_drop": 6, "right_ear_drop": 6, "music": True, "mouth": "flat", "float_bob": 0, "loaf_mode": True, "loaf_drop": 2, "loaf_width": 1, "head_widen": 1, "face_drop": 2},
+        {"head_tilt": 2, "left_ear_drop": 4, "right_ear_drop": 6, "eye_shift_left": -1, "eye_shift_right": -1, "mouth": "w", "cheek_boost": True, "body_shift": 1, "head_widen": 1, "face_drop": 1, "loaf_mode": True, "loaf_drop": 1},
     ]
 
 
@@ -486,10 +486,10 @@ def gaming_frames() -> list[dict]:
 
 def sleep_frames() -> list[dict]:
     return [
-        {"sleepy": True, "y_shift": 4, "left_ear_drop": 12, "right_ear_drop": 13, "left_ear_out": 1, "right_ear_out": 1, "sleep_mark": True, "mouth": "flat", "loaf_mode": True, "loaf_drop": 3, "loaf_width": 3, "loaf_height": 1, "head_widen": 2, "face_drop": 2, "hide_charm": True},
-        {"sleepy": True, "y_shift": 5, "head_tilt": -1, "left_ear_drop": 13, "right_ear_drop": 12, "left_ear_out": 2, "sleep_mark": True, "mouth": "flat", "loaf_mode": True, "loaf_drop": 4, "loaf_width": 3, "loaf_height": 1, "head_widen": 2, "face_drop": 2, "hide_charm": True},
-        {"sleepy": True, "y_shift": 5, "head_tilt": 1, "left_ear_drop": 12, "right_ear_drop": 13, "right_ear_out": 2, "sleep_mark": True, "mouth": "flat", "loaf_mode": True, "loaf_drop": 4, "loaf_width": 3, "loaf_height": 1, "head_widen": 2, "face_drop": 2, "hide_charm": True},
-        {"sleepy": True, "y_shift": 6, "left_ear_drop": 13, "right_ear_drop": 13, "left_ear_out": 2, "right_ear_out": 2, "sleep_mark": True, "mouth": "flat", "loaf_mode": True, "loaf_drop": 5, "loaf_width": 4, "loaf_height": 1, "head_widen": 2, "face_drop": 2, "hide_charm": True},
+        {"sleepy": True, "y_shift": 4, "left_ear_drop": 9, "right_ear_drop": 10, "left_ear_out": 1, "right_ear_out": 1, "sleep_mark": True, "mouth": "flat", "loaf_mode": True, "loaf_drop": 3, "loaf_width": 2, "loaf_height": 1, "head_widen": 1, "face_drop": 2, "hide_charm": True},
+        {"sleepy": True, "y_shift": 5, "head_tilt": -1, "left_ear_drop": 10, "right_ear_drop": 9, "left_ear_out": 1, "sleep_mark": True, "mouth": "flat", "loaf_mode": True, "loaf_drop": 4, "loaf_width": 2, "loaf_height": 1, "head_widen": 1, "face_drop": 2, "hide_charm": True},
+        {"sleepy": True, "y_shift": 5, "head_tilt": 1, "left_ear_drop": 9, "right_ear_drop": 10, "right_ear_out": 1, "sleep_mark": True, "mouth": "flat", "loaf_mode": True, "loaf_drop": 4, "loaf_width": 2, "loaf_height": 1, "head_widen": 1, "face_drop": 2, "hide_charm": True},
+        {"sleepy": True, "y_shift": 6, "left_ear_drop": 10, "right_ear_drop": 10, "left_ear_out": 1, "right_ear_out": 1, "sleep_mark": True, "mouth": "flat", "loaf_mode": True, "loaf_drop": 5, "loaf_width": 3, "loaf_height": 1, "head_widen": 1, "face_drop": 2, "hide_charm": True},
     ]
 
 
@@ -513,10 +513,10 @@ def excited_frames() -> list[dict]:
 
 def drag_frames() -> list[dict]:
     return [
-        {"x_shift": -3, "body_shift": -2, "head_tilt": -2, "left_ear_drop": 5, "right_ear_drop": 10, "right_ear_out": 3, "feet_spread": 1, "mouth": "flat", "eye_style": "half", "left_paw_up": 1, "right_paw_up": 2, "head_widen": 1, "face_drop": 1, "body_width": -1, "body_height": -1, "hide_feet": True},
-        {"x_shift": -1, "body_shift": -1, "head_tilt": -1, "left_ear_drop": 5, "right_ear_drop": 8, "right_ear_out": 2, "feet_spread": 1, "mouth": "flat", "left_paw_up": 1, "right_paw_up": 2, "head_widen": 1, "face_drop": 1, "body_width": -1, "body_height": -1, "hide_feet": True},
-        {"x_shift": 1, "body_shift": 1, "head_tilt": 1, "left_ear_drop": 8, "right_ear_drop": 5, "left_ear_out": 2, "feet_spread": 1, "mouth": "w", "left_paw_up": 2, "right_paw_up": 1, "head_widen": 1, "face_drop": 1, "body_width": -1, "body_height": -1, "hide_feet": True},
-        {"x_shift": 3, "body_shift": 2, "head_tilt": 2, "left_ear_drop": 10, "right_ear_drop": 5, "left_ear_out": 3, "feet_spread": 1, "mouth": "w", "eye_style": "half", "left_paw_up": 2, "right_paw_up": 1, "head_widen": 1, "face_drop": 1, "body_width": -1, "body_height": -1, "hide_feet": True},
+        {"x_shift": -3, "body_shift": -2, "head_tilt": -2, "left_ear_drop": 4, "right_ear_drop": 8, "right_ear_out": 2, "feet_spread": 1, "mouth": "flat", "eye_style": "half", "left_paw_up": 1, "right_paw_up": 2, "face_drop": 1, "body_height": -1, "hide_feet": True},
+        {"x_shift": -1, "body_shift": -1, "head_tilt": -1, "left_ear_drop": 4, "right_ear_drop": 6, "right_ear_out": 1, "feet_spread": 1, "mouth": "flat", "left_paw_up": 1, "right_paw_up": 2, "face_drop": 1, "body_height": -1, "hide_feet": True},
+        {"x_shift": 1, "body_shift": 1, "head_tilt": 1, "left_ear_drop": 6, "right_ear_drop": 4, "left_ear_out": 1, "feet_spread": 1, "mouth": "w", "left_paw_up": 2, "right_paw_up": 1, "face_drop": 1, "body_height": -1, "hide_feet": True},
+        {"x_shift": 3, "body_shift": 2, "head_tilt": 2, "left_ear_drop": 8, "right_ear_drop": 4, "left_ear_out": 2, "feet_spread": 1, "mouth": "w", "eye_style": "half", "left_paw_up": 2, "right_paw_up": 1, "face_drop": 1, "body_height": -1, "hide_feet": True},
     ]
 
 

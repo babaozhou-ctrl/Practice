@@ -1,10 +1,18 @@
 export type MessageRole = 'user' | 'assistant' | 'system'
 
+export interface ChatMessageAction {
+  id: string
+  label: string
+  prompt: string
+  fillOnly?: boolean
+}
+
 export interface ChatMessage {
   id: string
   role: MessageRole
   content: string
   timestamp: number
+  actions?: ChatMessageAction[]
 }
 
 export interface AIConfig {

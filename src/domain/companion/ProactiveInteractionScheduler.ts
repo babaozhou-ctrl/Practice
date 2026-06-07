@@ -8,6 +8,12 @@ interface SchedulerState {
   lastPromptContextKey: string | null
 }
 
+interface PromptCandidate {
+  category: string
+  contextKey: string
+  intent: SpeechIntent
+}
+
 export class ProactiveInteractionScheduler {
   private state: SchedulerState = {
     lastPromptAt: 0,
@@ -39,7 +45,7 @@ export class ProactiveInteractionScheduler {
     workMode: WorkModeSignals,
     lowDistractionMode: boolean,
     now: number,
-  ): { category: string; contextKey: string; intent: SpeechIntent } | null {
+  ): PromptCandidate | null {
     if (!isEligibleForPrompt(snapshot, signals, workMode, lowDistractionMode, now, this.state.lastPromptAt)) {
       return null
     }
@@ -47,9 +53,10 @@ export class ProactiveInteractionScheduler {
     const lateNight = isLateNight(now)
     const memory = snapshot.memory
     const name = memory?.preferredName?.trim() || null
-    const ritual = memory?.rituals[0]
-    const recentTopic = memory?.recentTopics[0]
-    const activeTitle = snapshot.activeWindow?.title?.trim()
+    const ritual = memory?.rituals[0]?.trim() || null
+    const recentTopic = memory?.recentTopics[0]?.trim() || null
+    const activeTitle = snapshot.activeWindow?.title?.trim() || null
+
     const baseContextKey = [
       snapshot.activity,
       snapshot.emotion,
@@ -94,8 +101,8 @@ export class ProactiveInteractionScheduler {
         contextKey: `overwork-firm|${baseContextKey}`,
         intent: {
           message: name
-            ? `${name}，你今天已经撑了很久了。这次我更想认真提醒你，先停一下也没关系。`
-            : '你今天已经撑了很久了。这次我更想认真提醒你，先停一下也没关系。',
+            ? `${name}，你今天已经撑很久了。这次我想认真提醒你，先停一下也没关系。`
+            : '你今天已经撑很久了。这次我想认真提醒你，先停一下也没关系。',
           duration: 4600,
         },
       }
@@ -305,5 +312,5 @@ function trimForSpeech(value: string, maxLength: number): string {
   if (normalized.length <= maxLength) {
     return normalized
   }
-  return `${normalized.slice(0, maxLength)}…`
+  return `${normalized.slice(0, maxLength).trim()}…`
 }

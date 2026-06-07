@@ -1,5 +1,14 @@
 # Mochi Reference Baseline
 
+## Freeze Status
+
+The current Mochi sprite shipped in `public/pets/mochi/sprite-atlas.png` is now the approved appearance lock.
+
+- Status: locked
+- Locked on: 2026-06-08
+- Change policy: do not change Mochi's core silhouette, proportions, or face design unless the user explicitly requests a new art direction in the future
+- This file now describes the locked production direction, not an open exploration target
+
 ## Canonical Visual Sources
 
 Mochi now follows this priority order:
@@ -18,52 +27,49 @@ The concept art is not the authority anymore. The user board is the authority. I
 
 Mochi must read as:
 
-- a tiny white floppy-ear mascot companion
-- a broad head with a soft flat crown instead of a tall round dome
-- extra-long ears with thick roots and softly weighted ends
-- tiny separated blue eyes with a small amount of white shine
-- tiny blue dot-like nose and `w`-leaning mouth cluster
-- pink cheek marks that sit low and outward, never anime-style blush bands
-- a very short torso with tucked paws and tiny feet
-- a calm, collectible, retro virtual-pet emotional read
+- a high-quality Japanese healing-style pixel desk companion
+- a white floppy-ear bunny with a soft, balanced head-to-body ratio
+- slender soft ears that read as gentle and relaxed, but not oversized
+- centered tiny blue eyes with a small amount of white shine
+- a tiny blue dot-like nose and soft `w`-leaning mouth cluster
+- pink cheek marks that stay subtle, clean, and calm
+- a visible torso with complete small limbs and short natural legs
+- a quiet, warm, game-sprite presence rather than a sticker, emoji, or novelty mascot
 
 ## Must Keep
 
-- broad low-noise front silhouette
+- balanced, low-noise front silhouette
 - white body with pastel blue contour lines
 - soft top accent band or short forehead stripe language
-- face placed slightly low on the head, not centered too high
-- ultra-compact body mass beneath a much larger head
-- ears as the first silhouette read in every state
-- toy-like proportions that stay readable at tiny desktop scale
+- face placed close to center with a calm, readable expression
+- body large enough to feel like a full companion character, not a tiny charm beneath a giant head
+- ears readable in every state without dominating the entire silhouette
+- GBA-era readability at tiny desktop scale
+- clean pixel clusters with minimal shading and no dirty pixels
 
 ## Must Avoid
 
 - catgirl or humanoid anatomy
-- bunny mascot tropes with tall upright posture or springy rabbit legs
-- maid outfit, costume layers, or anime fashion detailing
+- giant head / tiny body exaggeration
+- huge floppy ears that overpower the body
+- sticker, emoji, reaction-face, or cheap mobile-pet styling
 - sharp ears, spiky hair, or aggressive gesture language
 - poster-layout decoration, sticker-sheet framing, or UI chrome in final runtime art
 - painterly illustration rendering that stops reading like a game sprite asset
-- exact cloning of the user reference mascot without interpretation or adaptation for runtime animation
+- exploration changes that drift away from the approved locked sprite without explicit user direction
 
 ## Atlas Translation Notes
 
 When converting this reference into sprite frames:
 
-- preserve the wide head-to-body ratio across all states
-- keep the ears thick near the head and heavy at the tips
-- keep the face tiny; emotion should come from ear angle, eye openness, and body height before mouth exaggeration
+- preserve the current balanced head-to-body ratio across all states
+- keep the ears soft and slim, with only mild emotional sway
+- keep the face simple and centered; emotion should come from eye openness, ear angle, and body height before mouth exaggeration
 - favor small, readable state shifts over noisy props or floating effects
-- use loaf, curl, and tiny bounce poses inspired by retro mascot icons rather than full humanoid acting
+- use quiet sit, rest, and tiny bounce poses inspired by handheld-era pet sprites rather than sticker-sheet acting
 - preserve a stable body baseline so the companion feels calm on desktop
 
-## Current Production Gap
+## Approval Note
 
-The shipped `sprite-atlas.png` is still a bridge-quality export. It should continue moving toward this baseline with:
-
-- flatter and wider head construction
-- stronger similarity to the user board face spacing
-- denser ear acting and more believable ear weight
-- more convincing loaf and rest poses
-- cleaner state separation without leaving the mascot style family
+This appearance is approved by the user as the project's locked companion identity.
+Future work should focus on animation quality, behavior quality, text quality, packaging, and system polish instead of redesigning the character.
