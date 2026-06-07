@@ -1,0 +1,86 @@
+{
+  "id": "mochi.appearance.v2",
+  "displayName": "Mochi",
+  "archetype": "floppy_ear_companion",
+  "summary": "A soft white floppy-eared pixel companion with a broad crown, tiny face, baby-blue outlines, rosy cheeks, and a warm retro virtual-pet presence.",
+  "silhouette": {
+    "bodyType": "compact_mascot",
+    "poseBias": "front_facing_grounded",
+    "mustKeep": [
+      "long_floppy_ears",
+      "broad_flat_crown",
+      "wide_head_narrow_body_ratio",
+      "tiny_body",
+      "retro_floppy_ear_mascot_readability",
+      "soft_blue_outline",
+      "tiny_low_set_face",
+      "soft_top_cap_accent_shape",
+      "stubby_feet_and_tucked_paws",
+      "tiny_mouth_cluster"
+    ],
+    "avoid": [
+      "sharp_anime_hair",
+      "busy_costume_detail",
+      "large_props",
+      "aggressive_pose_language",
+      "catgirl_humanoid_proportions",
+      "maid_outfit",
+      "human_hair_volume",
+      "illustration_crop_feel",
+      "upright_bunny_body_language",
+      "tall_torso"
+    ]
+  },
+  "face": {
+    "eyes": "powder_blue",
+    "expressionBias": "gentle_collectible_sweet",
+    "mouth": "tiny_w_or_micro_dot_cluster",
+    "blush": "rosy_visible"
+  },
+  "hair": {
+    "baseColor": "#c6e6fb",
+    "shadowColor": "#a8d4f2",
+    "highlightColor": "#fbfdff",
+    "style": "soft_top_cap_accent_only_with_optional_micro_forehead_stripes"
+  },
+  "ears": {
+    "outerColor": "#fbfdff",
+    "innerColor": "#ffd5e3",
+    "shape": "long_floppy_heavy_tip"
+  },
+  "outfit": {
+    "top": "none",
+    "innerLayer": "soft_belly_patch",
+    "lower": "none",
+    "legwear": "none"
+  },
+  "palette": {
+    "fur": "#fbfdff",
+    "furShadow": "#e7f3ff",
+    "outline": "#8abfe6",
+    "outlineDark": "#6fa8d6",
+    "eyes": "#7fb4e5",
+    "accent": "#c6e6fb",
+    "earInnerBlush": "#ffd5e3",
+    "blush": "#f6b9cb",
+    "sleepAccent": "#f3d173"
+  },
+  "renderRules": {
+    "style": "pastel_pixel_mascot",
+    "readability": "must_read_as_a_soft retro floppy-ear companion at small desktop scale",
+    "avoid": [
+      "realistic_shading",
+      "dark_gritty_palette",
+      "text",
+      "ui_elements",
+      "floor_shadows",
+      "hyper_detailed_costume",
+      "cat_ears",
+      "human_waistline",
+      "anime_maid_character",
+      "poster_or_sticker_sheet_layout_in_final_atlas",
+      "overly_tall_body",
+      "generic_rabbit_mascot_feel"
+    ]
+  }
+}

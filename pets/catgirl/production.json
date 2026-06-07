@@ -1,0 +1,131 @@
+{
+  "version": "0.4.0",
+  "sourceOfTruth": "User-provided floppy-ear reference board plus iterative runtime atlas export",
+  "visualIntent": {
+    "style": "soft pastel floppy-ear pixel mascot",
+    "scaleReadability": "Must read instantly as a tiny white floppy-ear companion with blue outline at desktop pet size.",
+    "emotionPriority": ["ears", "eyes", "mouth", "body_bounce", "vertical_resting_height"]
+  },
+  "atlas": {
+    "file": "sprite-atlas.png",
+    "cellWidth": 192,
+    "cellHeight": 208,
+    "columns": 8,
+    "rows": 14,
+    "safePadding": 14,
+    "rowOrder": [
+      "idle_loop",
+      "thinking_loop",
+      "coding_loop",
+      "watching_loop",
+      "chatting_loop",
+      "gaming_loop",
+      "sleep_loop",
+      "happy_react",
+      "excited_loop",
+      "drag",
+      "idle_to_thinking",
+      "thinking_to_idle",
+      "thinking_to_sleep",
+      "idle_to_happy"
+    ],
+    "clipFrameCounts": {
+      "idle_loop": 6,
+      "thinking_loop": 4,
+      "coding_loop": 4,
+      "watching_loop": 4,
+      "chatting_loop": 4,
+      "gaming_loop": 4,
+      "sleep_loop": 4,
+      "happy_react": 4,
+      "excited_loop": 4,
+      "drag": 4,
+      "idle_to_thinking": 4,
+      "thinking_to_idle": 4,
+      "thinking_to_sleep": 4,
+      "idle_to_happy": 4
+    }
+  },
+  "anchors": {
+    "speechBubble": { "x": 0.5, "y": 0.1 },
+    "dragHandle": { "x": 0.5, "y": 0.2 },
+    "interactionFocus": { "x": 0.5, "y": 0.3 },
+    "tailPivot": { "x": 0.5, "y": 0.82 },
+    "earLeft": { "x": 0.24, "y": 0.18 },
+    "earRight": { "x": 0.76, "y": 0.18 }
+  },
+  "expressionLanguage": {
+    "idle": {
+      "eyes": "small calm blue eyes",
+      "mouth": "tiny soft line",
+      "ears": "long and relaxed with tiny sway",
+      "tail": "not emphasized",
+      "body": "gentle float with toy-like stillness"
+    },
+    "sleepy": {
+      "eyes": "closed or nearly closed",
+      "mouth": "small resting line",
+      "ears": "hang lower and heavier",
+      "tail": "not emphasized",
+      "body": "lower resting height with sleepy droop"
+    },
+    "happy": {
+      "eyes": "brighter and more open",
+      "mouth": "tiny happy v shape",
+      "ears": "lift slightly while staying floppy",
+      "tail": "not emphasized",
+      "body": "cute vertical bounce"
+    },
+    "thinking": {
+      "eyes": "curious focused look",
+      "mouth": "small neutral line",
+      "ears": "asymmetric angle",
+      "tail": "not emphasized",
+      "body": "slight lean or paw raise"
+    },
+    "coding": {
+      "eyes": "attentive and steady",
+      "mouth": "calm supportive line",
+      "ears": "quiet and still",
+      "tail": "not emphasized",
+      "body": "focused low-noise posture"
+    },
+    "gaming": {
+      "eyes": "more alert",
+      "mouth": "small intent shape",
+      "ears": "reactive sway",
+      "tail": "not emphasized",
+      "body": "contained readiness"
+    },
+    "watching_video": {
+      "eyes": "curious and reactive",
+      "mouth": "small amused line",
+      "ears": "mild shifts",
+      "tail": "not emphasized",
+      "body": "watching-together lean"
+    },
+    "chatting": {
+      "eyes": "warmer social focus",
+      "mouth": "slightly brighter cheerful shape",
+      "ears": "more open posture",
+      "tail": "not emphasized",
+      "body": "mild forward friendliness"
+    },
+    "excited": {
+      "eyes": "wide and bright",
+      "mouth": "happy v shape",
+      "ears": "lifted and lively",
+      "tail": "not emphasized",
+      "body": "strongest bounce in the set"
+    }
+  },
+  "deliveryChecklist": [
+    "Atlas follows 192x208 cell size with stable mascot baseline.",
+    "Face stays readable and cute in every state at tiny desktop scale.",
+    "Ear silhouette remains the primary emotional anchor.",
+    "Transition clips ease between moods instead of snapping between unrelated loops.",
+    "No illustration-style glow, floor shadow, or detached effects.",
+    "All emotional states preserve the same floppy-ear mascot identity and pastel palette.",
+    "Happy and excited clips resolve cleanly back to an idle-compatible fallback."
+  ]
+}

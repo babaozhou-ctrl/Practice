@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Test</title>
+<style>
+*{margin:0;padding:0}html,body{width:100vw;height:100vh;overflow:hidden;background:transparent}
+canvas{display:block;position:absolute;left:0;top:0}
+#s{position:fixed;top:5px;left:5px;color:#0ff;font:13px monospace;z-index:999;background:rgba(0,0,0,0.7);padding:4px 8px;border-radius:4px}
+</style>
+</head>
+<body><div id="s">loading...</div><canvas id="c"></canvas>
+<script>
+var c=document.getElementById("c"),st=document.getElementById("s")
+c.width=350;c.height=520
+function add(m){st.textContent+="\n"+m}
+// 1. 2D
+var ctx=c.getContext("2d")
+ctx.fillStyle="#333"
+ctx.fillRect(0,0,350,520)
+ctx.fillStyle="#0ff"
+ctx.font="18px sans-serif"
+ctx.fillText("Canvas 2D: OK",20,40)
+add("Canvas 2D: OK")
+// 2. WebGL
+var gl=c.getContext("webgl")||c.getContext("experimental-webgl")
+if(gl){
+  add("WebGL: OK: "+gl.getParameter(gl.RENDERER))
+  gl.clearColor(0.3,0.2,0.8,1.0)
+  gl.clear(gl.COLOR_BUFFER_BIT)
+}else{
+  add("WebGL: FAIL")
+}
+</script></body></html>

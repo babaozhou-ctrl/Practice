@@ -1,0 +1,25 @@
+{
+  "id": "mascot.mochi",
+  "name": "Mochi",
+  "version": "0.1.0",
+  "schemaVersion": "1.0.0",
+  "renderer": "pixi-atlas",
+  "description": "Built-in soft floppy-ear pixel companion.",
+  "assets": {
+    "atlas": "sprite-atlas.png",
+    "animations": "animations.json",
+    "states": "states.json",
+    "personality": "personality.json",
+    "appearance": "appearance.json",
+    "artPrompts": "art-prompts.md",
+    "productionProfile": "production.json",
+    "assetStatus": "asset-status.json",
+    "spriteGuide": "sprite-production-guide.md"
+  },
+  "tags": ["cozy", "pixel-art", "companion"],
+  "capabilities": {
+    "speechBubbleAnchor": true,
+    "emoteOverlay": true,
+    "ambientMicroMotion": true
+  }
+}

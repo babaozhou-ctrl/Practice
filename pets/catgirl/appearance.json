@@ -1,0 +1,69 @@
+{
+  "id": "mochi.appearance.v2",
+  "displayName": "Mochi",
+  "archetype": "floppy_ear_companion",
+  "summary": "A soft floppy-eared pixel companion with white fur, baby-blue outlines, rosy cheeks, and a warm toy-like desktop presence.",
+  "silhouette": {
+    "bodyType": "compact_mascot",
+    "poseBias": "front_facing_grounded",
+    "mustKeep": [
+      "long_floppy_ears",
+      "rounded_head",
+      "tiny_body",
+      "soft_blue_outline",
+      "simple_readable_face"
+    ],
+    "avoid": [
+      "sharp_anime_hair",
+      "busy_costume_detail",
+      "large_props",
+      "aggressive_pose_language"
+    ]
+  },
+  "face": {
+    "eyes": "powder_blue",
+    "expressionBias": "gentle_shy_sweet",
+    "mouth": "tiny_v_or_soft_line",
+    "blush": "rosy_visible"
+  },
+  "hair": {
+    "baseColor": "#c6e6fb",
+    "shadowColor": "#a8d4f2",
+    "highlightColor": "#fbfdff",
+    "style": "top_cap_accent_only"
+  },
+  "ears": {
+    "outerColor": "#fbfdff",
+    "innerColor": "#ffd5e3",
+    "shape": "long_floppy"
+  },
+  "outfit": {
+    "top": "none",
+    "innerLayer": "soft_belly_patch",
+    "lower": "none",
+    "legwear": "none"
+  },
+  "palette": {
+    "fur": "#fbfdff",
+    "furShadow": "#e7f3ff",
+    "outline": "#8abfe6",
+    "outlineDark": "#6fa8d6",
+    "eyes": "#7fb4e5",
+    "accent": "#c6e6fb",
+    "earInnerBlush": "#ffd5e3",
+    "blush": "#f6b9cb",
+    "sleepAccent": "#f3d173"
+  },
+  "renderRules": {
+    "style": "pastel_pixel_mascot",
+    "readability": "must_read_as_a_soft_floppy_ear_companion_at_small_desktop_scale",
+    "avoid": [
+      "realistic_shading",
+      "dark_gritty_palette",
+      "text",
+      "ui_elements",
+      "floor_shadows",
+      "hyper_detailed_costume"
+    ]
+  }
+}

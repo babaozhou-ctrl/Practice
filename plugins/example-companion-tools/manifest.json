@@ -1,0 +1,9 @@
+{
+  "id": "example-companion-tools",
+  "name": "Example Companion Tools",
+  "version": "0.1.0",
+  "entry": "index.js",
+  "capabilities": ["work-mode", "document-analysis"],
+  "permissions": ["fs.read.user-selected", "ai.provider.invoke"],
+  "apiVersion": "1.0.0"
+}

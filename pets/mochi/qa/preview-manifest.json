@@ -1,0 +1,230 @@
+{
+  "previews": [
+    {
+      "row": 1,
+      "clipName": "idle_loop",
+      "frameCount": 6,
+      "fps": 8,
+      "frameDurationsMs": [
+        170,
+        120,
+        150,
+        85,
+        125,
+        170
+      ],
+      "loop": true,
+      "output": "pets/mochi/qa/previews/01-idle_loop.gif"
+    },
+    {
+      "row": 2,
+      "clipName": "thinking_loop",
+      "frameCount": 4,
+      "fps": 8,
+      "frameDurationsMs": [
+        165,
+        120,
+        95,
+        160
+      ],
+      "loop": true,
+      "output": "pets/mochi/qa/previews/02-thinking_loop.gif"
+    },
+    {
+      "row": 3,
+      "clipName": "coding_loop",
+      "frameCount": 4,
+      "fps": 7,
+      "frameDurationsMs": [
+        180,
+        130,
+        90,
+        170
+      ],
+      "loop": true,
+      "output": "pets/mochi/qa/previews/03-coding_loop.gif"
+    },
+    {
+      "row": 4,
+      "clipName": "watching_loop",
+      "frameCount": 4,
+      "fps": 7,
+      "frameDurationsMs": [
+        190,
+        130,
+        95,
+        180
+      ],
+      "loop": true,
+      "output": "pets/mochi/qa/previews/04-watching_loop.gif"
+    },
+    {
+      "row": 5,
+      "clipName": "chatting_loop",
+      "frameCount": 4,
+      "fps": 9,
+      "frameDurationsMs": [
+        111,
+        111,
+        111,
+        111
+      ],
+      "loop": true,
+      "output": "pets/mochi/qa/previews/05-chatting_loop.gif"
+    },
+    {
+      "row": 6,
+      "clipName": "gaming_loop",
+      "frameCount": 4,
+      "fps": 10,
+      "frameDurationsMs": [
+        100,
+        100,
+        100,
+        100
+      ],
+      "loop": true,
+      "output": "pets/mochi/qa/previews/06-gaming_loop.gif"
+    },
+    {
+      "row": 7,
+      "clipName": "sleep_loop",
+      "frameCount": 4,
+      "fps": 6,
+      "frameDurationsMs": [
+        167,
+        167,
+        167,
+        167
+      ],
+      "loop": true,
+      "output": "pets/mochi/qa/previews/07-sleep_loop.gif"
+    },
+    {
+      "row": 8,
+      "clipName": "happy_react",
+      "frameCount": 4,
+      "fps": 12,
+      "frameDurationsMs": [
+        90,
+        75,
+        95,
+        150
+      ],
+      "loop": false,
+      "output": "pets/mochi/qa/previews/08-happy_react.gif"
+    },
+    {
+      "row": 9,
+      "clipName": "excited_loop",
+      "frameCount": 4,
+      "fps": 12,
+      "frameDurationsMs": [
+        80,
+        70,
+        80,
+        135
+      ],
+      "loop": false,
+      "output": "pets/mochi/qa/previews/09-excited_loop.gif"
+    },
+    {
+      "row": 10,
+      "clipName": "drag",
+      "frameCount": 4,
+      "fps": 10,
+      "frameDurationsMs": [
+        85,
+        100,
+        95,
+        120
+      ],
+      "loop": true,
+      "output": "pets/mochi/qa/previews/10-drag.gif"
+    },
+    {
+      "row": 11,
+      "clipName": "idle_to_thinking",
+      "frameCount": 4,
+      "fps": 12,
+      "frameDurationsMs": [
+        83,
+        83,
+        83,
+        83
+      ],
+      "loop": false,
+      "output": "pets/mochi/qa/previews/11-idle_to_thinking.gif"
+    },
+    {
+      "row": 12,
+      "clipName": "thinking_to_idle",
+      "frameCount": 4,
+      "fps": 12,
+      "frameDurationsMs": [
+        83,
+        83,
+        83,
+        83
+      ],
+      "loop": false,
+      "output": "pets/mochi/qa/previews/12-thinking_to_idle.gif"
+    },
+    {
+      "row": 13,
+      "clipName": "thinking_to_sleep",
+      "frameCount": 4,
+      "fps": 10,
+      "frameDurationsMs": [
+        100,
+        100,
+        100,
+        100
+      ],
+      "loop": false,
+      "output": "pets/mochi/qa/previews/13-thinking_to_sleep.gif"
+    },
+    {
+      "row": 14,
+      "clipName": "idle_to_happy",
+      "frameCount": 4,
+      "fps": 14,
+      "frameDurationsMs": [
+        90,
+        80,
+        135,
+        125
+      ],
+      "loop": false,
+      "output": "pets/mochi/qa/previews/14-idle_to_happy.gif"
+    },
+    {
+      "row": 15,
+      "clipName": "welcome_back",
+      "frameCount": 4,
+      "fps": 12,
+      "frameDurationsMs": [
+        95,
+        90,
+        110,
+        150
+      ],
+      "loop": false,
+      "output": "pets/mochi/qa/previews/15-welcome_back.gif"
+    },
+    {
+      "row": 16,
+      "clipName": "tap_affection",
+      "frameCount": 4,
+      "fps": 13,
+      "frameDurationsMs": [
+        80,
+        85,
+        100,
+        150
+      ],
+      "loop": false,
+      "output": "pets/mochi/qa/previews/16-tap_affection.gif"
+    }
+  ]
+}

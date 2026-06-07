@@ -1,0 +1,70 @@
+{
+  "states": {
+    "idle": {
+      "baseClip": "idle_loop",
+      "mode": "observing",
+      "minHoldMs": 6000,
+      "transitions": {
+        "coding": { "viaState": "thinking", "clipName": "thinking_to_idle" },
+        "sleepy": { "viaState": "thinking", "clipName": "thinking_to_idle" }
+      }
+    },
+    "sleepy": {
+      "baseClip": "sleep_loop",
+      "mode": "quiet",
+      "minHoldMs": 15000,
+      "transitions": {
+        "coding": { "viaState": "thinking", "clipName": "thinking_to_sleep" },
+        "idle": { "viaState": "thinking", "clipName": "thinking_to_sleep" }
+      }
+    },
+    "happy": {
+      "baseClip": "happy_react",
+      "fallbackClip": "idle_loop",
+      "mode": "reactive",
+      "minHoldMs": 3000,
+      "transitions": {
+        "idle": { "viaState": "idle", "clipName": "idle_to_happy" },
+        "sleepy": { "viaState": "idle", "clipName": "idle_to_happy" }
+      }
+    },
+    "thinking": {
+      "baseClip": "thinking_loop",
+      "mode": "quiet",
+      "minHoldMs": 5000
+    },
+    "coding": {
+      "baseClip": "coding_loop",
+      "mode": "focus_guardian",
+      "minHoldMs": 12000,
+      "transitions": {
+        "idle": { "viaState": "thinking", "clipName": "idle_to_thinking" },
+        "happy": { "viaState": "thinking", "clipName": "idle_to_thinking" }
+      }
+    },
+    "gaming": {
+      "baseClip": "gaming_loop",
+      "mode": "quiet",
+      "minHoldMs": 20000
+    },
+    "watching_video": {
+      "baseClip": "watching_loop",
+      "mode": "reactive",
+      "minHoldMs": 12000
+    },
+    "chatting": {
+      "baseClip": "chatting_loop",
+      "mode": "reactive",
+      "minHoldMs": 8000
+    },
+    "excited": {
+      "baseClip": "excited_loop",
+      "fallbackClip": "idle_loop",
+      "mode": "proactive",
+      "minHoldMs": 4000,
+      "transitions": {
+        "idle": { "viaState": "happy", "clipName": "idle_to_happy" }
+      }
+    }
+  }
+}

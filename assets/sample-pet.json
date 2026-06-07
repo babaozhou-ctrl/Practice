@@ -1,0 +1,28 @@
+﻿{
+  "name": "Sample Catgirl",
+  "gridWidth": 12,
+  "gridHeight": 14,
+  "pixelScale": 5,
+  "palettes": [
+    {
+      "name": "Default",
+      "body": "#fcd9b8",
+      "highlight": "#f0abfc",
+      "shadow": "#000000",
+      "eyeWhite": "#ffffff",
+      "pupil": "#1e293b",
+      "blush": "#fca5a5",
+      "hoodie": "#d8b4fe",
+      "skirt": "#9b72cf",
+      "ear": "#f9a8d4"
+    }
+  ],
+  "animations": [
+    { "name": "IDLE", "frameIndex": 0, "count": 4, "duration": 500, "loop": true },
+    { "name": "WALK", "frameIndex": 4, "count": 4, "duration": 350, "loop": true },
+    { "name": "HAPPY", "frameIndex": 8, "count": 4, "duration": 200, "loop": false },
+    { "name": "SLEEPING", "frameIndex": 12, "count": 3, "duration": 800, "loop": true },
+    { "name": "THINKING", "frameIndex": 15, "count": 4, "duration": 600, "loop": true },
+    { "name": "WATCHING", "frameIndex": 19, "count": 4, "duration": 600, "loop": true }
+  ]
+}

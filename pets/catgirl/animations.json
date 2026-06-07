@@ -1,0 +1,125 @@
+{
+  "clips": {
+    "idle_loop": {
+      "type": "atlas",
+      "fps": 8,
+      "loop": true,
+      "frames": ["idle_00", "idle_01", "idle_02", "idle_03", "idle_04", "idle_05"],
+      "additive": ["breath", "blink", "ear_twitch", "tail_sway", "center_shift"]
+    },
+    "thinking_loop": {
+      "type": "atlas",
+      "fps": 8,
+      "loop": true,
+      "frames": ["thinking_00", "thinking_01", "thinking_02", "thinking_03"],
+      "additive": ["breath", "blink", "ear_twitch", "center_shift"]
+    },
+    "coding_loop": {
+      "type": "atlas",
+      "fps": 7,
+      "loop": true,
+      "frames": ["coding_00", "coding_01", "coding_02", "coding_03"],
+      "additive": ["breath", "blink", "center_shift"]
+    },
+    "watching_loop": {
+      "type": "atlas",
+      "fps": 7,
+      "loop": true,
+      "frames": ["watching_00", "watching_01", "watching_02", "watching_03"],
+      "additive": ["breath", "blink", "ear_twitch", "center_shift"]
+    },
+    "chatting_loop": {
+      "type": "atlas",
+      "fps": 9,
+      "loop": true,
+      "frames": ["chatting_00", "chatting_01", "chatting_02", "chatting_03"],
+      "additive": ["breath", "blink", "ear_twitch", "center_shift"]
+    },
+    "gaming_loop": {
+      "type": "atlas",
+      "fps": 10,
+      "loop": true,
+      "frames": ["gaming_00", "gaming_01", "gaming_02", "gaming_03"],
+      "additive": ["breath", "blink", "ear_twitch", "center_shift"]
+    },
+    "sleep_loop": {
+      "type": "atlas",
+      "fps": 6,
+      "loop": true,
+      "frames": ["sleep_00", "sleep_01", "sleep_02", "sleep_03"]
+    },
+    "happy_react": {
+      "type": "atlas",
+      "fps": 12,
+      "loop": false,
+      "frames": ["happy_00", "happy_01", "happy_02", "happy_03"]
+    },
+    "excited_loop": {
+      "type": "atlas",
+      "fps": 12,
+      "loop": false,
+      "frames": ["excited_00", "excited_01", "excited_02", "excited_03"],
+      "additive": ["center_shift"]
+    },
+    "drag": {
+      "type": "atlas",
+      "fps": 10,
+      "loop": true,
+      "frames": ["drag_00", "drag_01", "drag_02", "drag_03"]
+    },
+    "idle_to_thinking": {
+      "type": "atlas",
+      "fps": 12,
+      "loop": false,
+      "frames": ["idle_to_thinking_00", "idle_to_thinking_01", "idle_to_thinking_02", "idle_to_thinking_03"],
+      "additive": ["breath", "ear_twitch"]
+    },
+    "thinking_to_idle": {
+      "type": "atlas",
+      "fps": 12,
+      "loop": false,
+      "frames": ["thinking_to_idle_00", "thinking_to_idle_01", "thinking_to_idle_02", "thinking_to_idle_03"],
+      "additive": ["breath", "ear_twitch"]
+    },
+    "thinking_to_sleep": {
+      "type": "atlas",
+      "fps": 10,
+      "loop": false,
+      "frames": ["thinking_to_sleep_00", "thinking_to_sleep_01", "thinking_to_sleep_02", "thinking_to_sleep_03"]
+    },
+    "idle_to_happy": {
+      "type": "atlas",
+      "fps": 14,
+      "loop": false,
+      "frames": ["idle_to_happy_00", "idle_to_happy_01", "idle_to_happy_02", "idle_to_happy_03"],
+      "additive": ["center_shift"]
+    }
+  },
+  "microMotions": {
+    "breath": {
+      "target": "body",
+      "offsetY": [0, -1, 0, 1],
+      "durationMs": 2400
+    },
+    "blink": {
+      "target": "eyes",
+      "intervalMs": [2400, 6800],
+      "holdMs": 80
+    },
+    "ear_twitch": {
+      "target": "ears",
+      "intervalMs": [4000, 9000],
+      "rotationDeg": [-2, 3, 0]
+    },
+    "tail_sway": {
+      "target": "tail",
+      "rotationDeg": [-4, 0, 4, 0],
+      "durationMs": 1800
+    },
+    "center_shift": {
+      "target": "root",
+      "offsetX": [-1, 0, 1, 0],
+      "durationMs": 3200
+    }
+  }
+}
