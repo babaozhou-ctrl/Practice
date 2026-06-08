@@ -20,3 +20,20 @@ export const useLocalPluginDiscoveryStore = create<LocalPluginDiscoveryState>((s
     })
   },
 }))
+
+let refreshPromise: Promise<void> | null = null
+
+export function ensureLocalPluginDiscoveryHydration(): Promise<void> {
+  const state = useLocalPluginDiscoveryStore.getState()
+  if (state.hydrated) {
+    return Promise.resolve()
+  }
+
+  if (!refreshPromise) {
+    refreshPromise = state.refresh().finally(() => {
+      refreshPromise = null
+    })
+  }
+
+  return refreshPromise
+}

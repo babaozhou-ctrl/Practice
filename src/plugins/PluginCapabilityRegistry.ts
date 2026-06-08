@@ -28,6 +28,7 @@ const screenAnalyzer = new ScreenAnalyzer(defaultScreenCaptureConfig)
 const registrations = new Map<string, CapabilityProviderRegistration>()
 const discoveredProviderDescriptors = new Map<string, ProviderDescriptor>()
 const discoveredProviderCandidates = new Map<string, DiscoveredPluginProviderCandidate>()
+const autoRegisteredPluginProviderIds = new Set<string>()
 
 registerCapabilityProvider({
   descriptor: {
@@ -50,16 +51,7 @@ registerCapabilityProvider({
     availability: 'active',
     description: 'Reads text-like files and prepares a lightweight summary for companion chat.',
   },
-  fileAnalysisProvider: {
-    id: 'builtin.file-analysis.default',
-    label: 'Built-in File Analyzer',
-    readFile(file) {
-      return fileAnalyzer.readFile(file)
-    },
-    summarize(content) {
-      return fileAnalyzer.summarize(content)
-    },
-  },
+  fileAnalysisProvider: createBuiltinFileAnalysisProvider(),
 })
 
 registerCapabilityProvider({
@@ -113,9 +105,11 @@ export function registerCapabilityProvider(registration: CapabilityProviderRegis
 
 export function unregisterCapabilityProvider(providerId: string) {
   registrations.delete(providerId)
+  autoRegisteredPluginProviderIds.delete(providerId)
 }
 
 export function reconcileDiscoveredPluginProviders(plugins: PluginDiscoveryRecord[]) {
+  clearAutoRegisteredPluginProviders()
   discoveredProviderDescriptors.clear()
   discoveredProviderCandidates.clear()
 
@@ -126,6 +120,10 @@ export function reconcileDiscoveredPluginProviders(plugins: PluginDiscoveryRecor
 
     const candidates = deriveProviderCandidatesFromPlugin(plugin)
     for (const candidate of candidates) {
+      if (tryActivateDiscoveredPluginProvider(candidate)) {
+        continue
+      }
+
       discoveredProviderCandidates.set(candidate.providerId, candidate)
       discoveredProviderDescriptors.set(candidate.providerId, {
         id: candidate.providerId,
@@ -165,6 +163,17 @@ export function listDiscoveredProviderCandidates(
 ): DiscoveredPluginProviderCandidate[] {
   return Array.from(discoveredProviderCandidates.values())
     .filter((candidate) => !capability || candidate.runtimeBinding === capability)
+    .filter((candidate) => !isRegisteredProvider(candidate.runtimeBinding, candidate.providerId))
+}
+
+export function listPluginBackedProviderDescriptors(
+  capability?: PluginCapabilityProvider,
+): ProviderDescriptor[] {
+  return Array.from(registrations.values())
+    .map((registration) => registration.descriptor)
+    .filter((descriptor) => descriptor.kind === 'plugin')
+    .filter((descriptor) => !capability || descriptor.capability === capability)
+    .sort((left, right) => left.label.localeCompare(right.label))
 }
 
 export function isRegisteredProvider(capability: PluginCapabilityProvider, providerId: string): boolean {
@@ -217,6 +226,60 @@ export function resolveScreenPerceptionProvider(providerId?: string): ScreenPerc
   return registration.screenPerceptionProvider
 }
 
+function createBuiltinFileAnalysisProvider(): FileAnalysisProvider {
+  return {
+    id: 'builtin.file-analysis.default',
+    label: 'Built-in File Analyzer',
+    readFile(file) {
+      return fileAnalyzer.readFile(file)
+    },
+    summarize(content) {
+      return fileAnalyzer.summarize(content)
+    },
+  }
+}
+
+function clearAutoRegisteredPluginProviders() {
+  for (const providerId of autoRegisteredPluginProviderIds) {
+    registrations.delete(providerId)
+  }
+  autoRegisteredPluginProviderIds.clear()
+}
+
+function tryActivateDiscoveredPluginProvider(
+  candidate: DiscoveredPluginProviderCandidate,
+): boolean {
+  if (candidate.runtimeBinding !== 'fileAnalysis') {
+    return false
+  }
+
+  registerCapabilityProvider({
+    descriptor: {
+      id: candidate.providerId,
+      label: candidate.label,
+      capability: 'fileAnalysis',
+      kind: 'plugin',
+      availability: 'active',
+      description:
+        `${candidate.pluginName} is connected as a selectable file-analysis provider. ` +
+        'This phase still delegates file reading and summarization to the built-in analyzer so the provider contract and persistence path can be verified safely.',
+    },
+    fileAnalysisProvider: {
+      id: candidate.providerId,
+      label: candidate.label,
+      readFile(file) {
+        return fileAnalyzer.readFile(file)
+      },
+      summarize(content) {
+        return fileAnalyzer.summarize(content)
+      },
+    },
+  })
+
+  autoRegisteredPluginProviderIds.add(candidate.providerId)
+  return true
+}
+
 function deriveProviderCandidatesFromPlugin(
   plugin: PluginDiscoveryRecord,
 ): DiscoveredPluginProviderCandidate[] {
@@ -245,7 +308,7 @@ function deriveProviderCandidatesFromPlugin(
       manifestCapability: item.capability,
       runtimeBinding: item.runtimeBinding,
       label: `${plugin.name} (${item.runtimeBinding})`,
-      description: `${plugin.name} 声明了 ${item.capability}，已经能和当前 ${item.runtimeBinding} provider 契约对齐，但还没有真正注册可执行实现。`,
+      description: `${plugin.name} 声明了 ${item.capability}，已经能和当前 ${item.runtimeBinding} provider 契约对齐，但还没有真正注册成可执行实现。`,
     }))
 }
 

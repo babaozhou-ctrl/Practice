@@ -7,10 +7,14 @@ import {
   ensureCompanionPreferencesStoreSubscription,
   useCompanionPreferencesStore,
 } from './store/companionPreferencesStore'
-import { listDiscoveredProviderCandidates, listProviderDescriptors } from './plugins/PluginCapabilityRegistry'
+import {
+  listDiscoveredProviderCandidates,
+  listPluginBackedProviderDescriptors,
+  listProviderDescriptors,
+} from './plugins/PluginCapabilityRegistry'
 import { ensurePluginProviderStoreSubscription, usePluginProviderStore } from './plugins/PluginProviderStore'
 import { describePluginCapabilities } from './plugins/runtime/capabilityMap'
-import { useLocalPluginDiscoveryStore } from './plugins/runtime/LocalPluginDiscoveryStore'
+import { ensureLocalPluginDiscoveryHydration, useLocalPluginDiscoveryStore } from './plugins/runtime/LocalPluginDiscoveryStore'
 import type { DiscoveredPluginProviderCandidate } from './plugins/runtime/types'
 import { ensureSelectedPetCapabilitySubscription } from './store/selectedPetCapabilityStore'
 import { usePetStore } from './store/petStore'
@@ -70,6 +74,7 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     ...discoveredFileProviders,
     ...discoveredScreenProviders,
   ]
+  const pluginBackedActiveProviders = listPluginBackedProviderDescriptors()
   const localPlugins = useLocalPluginDiscoveryStore((state) => state.plugins)
   const refreshLocalPlugins = useLocalPluginDiscoveryStore((state) => state.refresh)
 
@@ -441,10 +446,15 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         <div style={{ marginBottom: '12px', fontSize: '12px', color: 'rgba(104, 132, 157, 0.72)', lineHeight: 1.6 }}>
           下面这些是已经能和当前 provider 契约对齐的插件候选，但现在还没有真正注册成可执行 provider。
         </div>
+        {pluginBackedActiveProviders.length > 0 && (
+          <div style={{ marginBottom: '12px', fontSize: '11px', color: 'rgba(92, 118, 143, 0.78)', lineHeight: 1.6 }}>
+            已接入的插件 provider：{pluginBackedActiveProviders.map((provider) => provider.label).join(', ')}
+          </div>
+        )}
         <div style={{ display: 'grid', gap: '10px', marginBottom: '14px' }}>
           {discoveredProviderCandidates.length === 0 && (
             <div style={{ fontSize: '12px', color: 'rgba(104, 132, 157, 0.72)' }}>
-              当前还没有发现可对齐到 provider 契约的插件候选。
+              当前没有剩余的未接入候选；如果插件已经通过当前阶段的契约检查，它会直接出现在上面的 provider 选择器里。
             </div>
           )}
           {discoveredProviderCandidates.map((provider) => (
@@ -686,6 +696,7 @@ const App: React.FC = () => {
     useCompanionPreferencesStore.getState().hydrate()
     void useSelectedPetStore.getState().hydrate()
     usePluginProviderStore.getState().hydrate()
+    void ensureLocalPluginDiscoveryHydration()
   }, [])
 
   useEffect(() => {
