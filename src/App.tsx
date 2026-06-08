@@ -2,26 +2,27 @@ import React, { useEffect, useState } from 'react'
 
 import ChatPanel from './components/chat/ChatPanel'
 import PrivacyIndicator from './components/status/PrivacyIndicator'
-import { useChatStore } from './store/chatStore'
-import {
-  ensureCompanionPreferencesStoreSubscription,
-  useCompanionPreferencesStore,
-} from './store/companionPreferencesStore'
+import { useContextAwareness } from './hooks/useContextAwareness'
 import {
   listDiscoveredProviderCandidates,
   listPluginBackedProviderDescriptors,
   listProviderDescriptors,
+  resolveAIChatProvider,
 } from './plugins/PluginCapabilityRegistry'
 import { ensurePluginProviderStoreSubscription, usePluginProviderStore } from './plugins/PluginProviderStore'
 import { describePluginCapabilities } from './plugins/runtime/capabilityMap'
 import { ensureLocalPluginDiscoveryHydration, useLocalPluginDiscoveryStore } from './plugins/runtime/LocalPluginDiscoveryStore'
 import type { DiscoveredPluginProviderCandidate } from './plugins/runtime/types'
-import { ensureSelectedPetCapabilitySubscription } from './store/selectedPetCapabilityStore'
-import { usePetStore } from './store/petStore'
-import { ensureSelectedPetStoreSubscription, useSelectedPetStore } from './store/selectedPetStore'
 import { resolveSelectedPetCapabilities } from './pets/resolveSelectedPetCapabilities'
+import { useChatStore } from './store/chatStore'
+import {
+  ensureCompanionPreferencesStoreSubscription,
+  useCompanionPreferencesStore,
+} from './store/companionPreferencesStore'
+import { usePetStore } from './store/petStore'
+import { ensureSelectedPetCapabilitySubscription } from './store/selectedPetCapabilityStore'
+import { ensureSelectedPetStoreSubscription, useSelectedPetStore } from './store/selectedPetStore'
 import { ensureWorkModeStoreSubscription, useWorkModeStore } from './store/workModeStore'
-import { useContextAwareness } from './hooks/useContextAwareness'
 
 const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { config, setConfig } = useChatStore()
@@ -37,6 +38,7 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const resetWorkMode = useWorkModeStore((state) => state.reset)
   const lowDistractionMode = useCompanionPreferencesStore((state) => state.lowDistractionMode)
   const setLowDistractionMode = useCompanionPreferencesStore((state) => state.setLowDistractionMode)
+  const setConnected = useChatStore((state) => state.setConnected)
 
   const [endpoint, setEndpoint] = useState(config.endpoint)
   const [apiKey, setApiKey] = useState(config.apiKey)
@@ -53,9 +55,16 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const [autoStartFocus, setAutoStartFocus] = useState(workMode.autoStartFocus)
   const [overworkReminderMinutes, setOverworkReminderMinutes] = useState(workMode.overworkReminderMinutes)
   const [quietCompanionMode, setQuietCompanionMode] = useState(lowDistractionMode)
+  const [aiHealth, setAiHealth] = useState<{ loading: boolean; ok: boolean | null; message: string }>({
+    loading: false,
+    ok: null,
+    message: '还没有检查当前聊天接入状态。',
+  })
+
   const capabilitySummary = Object.entries(resolveSelectedPetCapabilities())
-    .filter(([, enabled]) => enabled)
-    .map(([name]) => name.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase()))
+    .filter(([, enabledFlag]) => enabledFlag)
+    .map(([name]) => formatCapabilityLabel(name))
+
   const aiChatProviderId = usePluginProviderStore((state) => state.aiChatProviderId)
   const fileAnalysisProviderId = usePluginProviderStore((state) => state.fileAnalysisProviderId)
   const screenPerceptionProviderId = usePluginProviderStore((state) => state.screenPerceptionProviderId)
@@ -63,6 +72,7 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const [selectedAiProviderId, setSelectedAiProviderId] = useState(aiChatProviderId)
   const [selectedFileProviderId, setSelectedFileProviderId] = useState(fileAnalysisProviderId)
   const [selectedScreenProviderId, setSelectedScreenProviderId] = useState(screenPerceptionProviderId)
+
   const aiProviders = listProviderDescriptors('aiChat')
   const fileProviders = listProviderDescriptors('fileAnalysis')
   const screenProviders = listProviderDescriptors('screenPerception')
@@ -102,12 +112,62 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     setQuietCompanionMode(lowDistractionMode)
   }, [lowDistractionMode])
 
+  useEffect(() => {
+    let cancelled = false
+
+    const checkHealth = async () => {
+      setAiHealth((current) => ({
+        ...current,
+        loading: true,
+        message: current.ok === null ? '正在检查当前聊天接入状态...' : current.message,
+      }))
+
+      try {
+        const provider = resolveAIChatProvider(selectedAiProviderId)
+        const result = await provider.healthCheck({
+          ...config,
+          endpoint,
+          apiKey,
+          model,
+          enabled,
+        })
+
+        if (cancelled) {
+          return
+        }
+
+        setAiHealth({
+          loading: false,
+          ok: result.ok,
+          message: result.message,
+        })
+      } catch (error: any) {
+        if (cancelled) {
+          return
+        }
+
+        setAiHealth({
+          loading: false,
+          ok: false,
+          message: error?.message ?? '当前聊天接入检查失败。',
+        })
+      }
+    }
+
+    void checkHealth()
+
+    return () => {
+      cancelled = true
+    }
+  }, [apiKey, config, enabled, endpoint, model, selectedAiProviderId])
+
   const save = () => {
     selectPet(petId)
     setProvider('aiChat', selectedAiProviderId)
     setProvider('fileAnalysis', selectedFileProviderId)
     setProvider('screenPerception', selectedScreenProviderId)
     setConfig({ endpoint, apiKey, model, enabled })
+    setConnected(aiHealth.ok === true)
     setLowDistractionMode(quietCompanionMode)
     setWorkModeConfig({
       enabled: workEnabled,
@@ -122,7 +182,7 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     onClose()
   }
 
-  const ov: React.CSSProperties = {
+  const overlayStyle: React.CSSProperties = {
     position: 'fixed',
     inset: 0,
     background: 'rgba(0,0,0,0.6)',
@@ -131,7 +191,8 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     justifyContent: 'center',
     zIndex: 10001,
   }
-  const pn: React.CSSProperties = {
+
+  const panelStyle: React.CSSProperties = {
     background: 'linear-gradient(180deg, rgba(255, 252, 247, 0.96), rgba(243, 249, 255, 0.92))',
     backdropFilter: 'blur(16px)',
     borderRadius: '18px',
@@ -143,12 +204,14 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     border: '1px solid rgba(138, 191, 230, 0.28)',
     boxShadow: '0 18px 42px rgba(74, 102, 128, 0.18)',
   }
-  const lb: React.CSSProperties = {
+
+  const labelStyle: React.CSSProperties = {
     fontSize: '12px',
     color: 'rgba(104, 132, 157, 0.72)',
     marginBottom: '4px',
   }
-  const inp: React.CSSProperties = {
+
+  const inputStyle: React.CSSProperties = {
     width: '100%',
     padding: '8px 12px',
     borderRadius: '10px',
@@ -159,20 +222,23 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     marginBottom: '12px',
     outline: 'none',
   }
-  const row: React.CSSProperties = {
+
+  const rowStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
     marginBottom: '12px',
   }
-  const sectionTitle: React.CSSProperties = {
+
+  const sectionTitleStyle: React.CSSProperties = {
     margin: '18px 0 10px',
     fontSize: '13px',
     fontWeight: 700,
     letterSpacing: '0.3px',
     color: '#56728b',
   }
-  const quickButton: React.CSSProperties = {
+
+  const quickButtonStyle: React.CSSProperties = {
     padding: '8px 12px',
     borderRadius: '10px',
     border: '1px solid rgba(138, 191, 230, 0.24)',
@@ -181,19 +247,22 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     fontSize: '12px',
     cursor: 'pointer',
   }
-  const helperText: React.CSSProperties = {
+
+  const helperTextStyle: React.CSSProperties = {
     marginTop: '-6px',
     marginBottom: '12px',
     fontSize: '11px',
     color: 'rgba(104, 132, 157, 0.72)',
     lineHeight: 1.6,
   }
-  const candidateList: React.CSSProperties = {
+
+  const candidateListStyle: React.CSSProperties = {
     display: 'grid',
     gap: '8px',
     marginTop: '8px',
   }
-  const candidateCard: React.CSSProperties = {
+
+  const candidateCardStyle: React.CSSProperties = {
     padding: '10px 12px',
     borderRadius: '12px',
     border: '1px solid rgba(138, 191, 230, 0.16)',
@@ -201,12 +270,12 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   }
 
   return (
-    <div style={ov} onClick={onClose}>
-      <div onClick={(event) => event.stopPropagation()} style={pn}>
-        <h3 style={{ margin: '0 0 16px', fontSize: '16px', fontWeight: 600 }}>Companion Settings</h3>
+    <div style={overlayStyle} onClick={onClose}>
+      <div onClick={(event) => event.stopPropagation()} style={panelStyle}>
+        <h3 style={{ margin: '0 0 16px', fontSize: '16px', fontWeight: 600 }}>陪伴设置</h3>
 
-        <div style={sectionTitle}>Companion Package</div>
-        <div style={lb}>Current desktop companion</div>
+        <div style={sectionTitleStyle}>当前角色</div>
+        <div style={labelStyle}>选择现在留在桌面上的陪伴角色</div>
         <div style={{ display: 'grid', gap: '10px', marginBottom: '12px' }}>
           {availablePets.map((pet) => {
             const selected = pet.id === petId
@@ -225,12 +294,18 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     ? 'linear-gradient(180deg, rgba(255,255,255,0.82), rgba(240,247,255,0.92))'
                     : 'rgba(255,255,255,0.62)',
                   cursor: 'pointer',
-                  boxShadow: selected
-                    ? '0 12px 28px rgba(116, 148, 181, 0.16)'
-                    : 'none',
+                  boxShadow: selected ? '0 12px 28px rgba(116, 148, 181, 0.16)' : 'none',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '6px' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '10px',
+                    marginBottom: '6px',
+                  }}
+                >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
                     <div style={previewFrameStyle(selected, pet.accentColor)}>
                       {pet.previewImageUrl ? (
@@ -246,73 +321,79 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                           }}
                         />
                       ) : (
-                        <div style={previewFallbackStyle}>
-                          {pet.name.slice(0, 1).toUpperCase()}
-                        </div>
+                        <div style={previewFallbackStyle}>{pet.name.slice(0, 1).toUpperCase()}</div>
                       )}
                     </div>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: '14px', fontWeight: 700, color: '#4f6880' }}>
-                        {pet.name}
-                      </div>
+                      <div style={{ fontSize: '14px', fontWeight: 700, color: '#4f6880' }}>{pet.name}</div>
                       <div style={{ fontSize: '11px', color: 'rgba(104, 132, 157, 0.72)' }}>
-                        {pet.source === 'built-in' ? 'Built-in' : 'Imported'} · {pet.renderer}
+                        {renderPetSourceLabel(pet.source)} · {pet.renderer}
                       </div>
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                     {pet.packageStage && (
                       <span style={pillStyle(selected, pet.accentColor, false)}>
-                        {pet.packageStage}
+                        {renderPackageStageLabel(pet.packageStage)}
                       </span>
                     )}
-                    {selected && (
-                      <span style={pillStyle(selected, pet.accentColor, true)}>
-                        Current
-                      </span>
-                    )}
+                    {selected && <span style={pillStyle(selected, pet.accentColor, true)}>当前使用中</span>}
                   </div>
                 </div>
 
                 {pet.summary && (
-                  <div style={{ fontSize: '12px', lineHeight: 1.55, color: 'rgba(79, 104, 128, 0.88)', marginBottom: '8px' }}>
+                  <div
+                    style={{
+                      fontSize: '12px',
+                      lineHeight: 1.55,
+                      color: 'rgba(79, 104, 128, 0.88)',
+                      marginBottom: '8px',
+                    }}
+                  >
                     {pet.summary}
                   </div>
                 )}
 
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: pet.capabilities.length > 0 ? '8px' : 0 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '6px',
+                    marginBottom: pet.capabilities.length > 0 ? '8px' : 0,
+                  }}
+                >
                   {pet.tags.slice(0, 4).map((tag) => (
                     <span key={tag} style={miniTagStyle}>
                       {tag}
                     </span>
                   ))}
-                  {pet.archetype && (
-                    <span style={miniTagStyle}>
-                      {pet.archetype}
-                    </span>
-                  )}
+                  {pet.archetype && <span style={miniTagStyle}>{pet.archetype}</span>}
                 </div>
 
                 {pet.capabilities.length > 0 && (
                   <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(104, 132, 157, 0.76)' }}>
-                    Capabilities: {pet.capabilities.join(', ')}
+                    已启用能力：{pet.capabilities.map((capability) => formatCapabilityLabel(capability)).join('、')}
                   </div>
                 )}
               </button>
             )
           })}
         </div>
-        <div style={{ marginBottom: '12px', fontSize: '12px', color: 'rgba(104, 132, 157, 0.72)', lineHeight: 1.5 }}>
-          Active capabilities: {capabilitySummary.join(', ')}
+
+        <div
+          style={{
+            marginBottom: '12px',
+            fontSize: '12px',
+            color: 'rgba(104, 132, 157, 0.72)',
+            lineHeight: 1.5,
+          }}
+        >
+          当前角色能力：{capabilitySummary.length > 0 ? capabilitySummary.join('、') : '基础陪伴'}
         </div>
 
-        <div style={sectionTitle}>Capability Providers</div>
-        <div style={lb}>AI Chat Provider</div>
-        <select
-          style={inp}
-          value={selectedAiProviderId}
-          onChange={(event) => setSelectedAiProviderId(event.target.value)}
-        >
+        <div style={sectionTitleStyle}>能力接入</div>
+        <div style={labelStyle}>聊天接入</div>
+        <select style={inputStyle} value={selectedAiProviderId} onChange={(event) => setSelectedAiProviderId(event.target.value)}>
           {aiProviders.map((provider) => (
             <option key={provider.id} value={provider.id}>
               {provider.label}
@@ -321,16 +402,13 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         </select>
         <ProviderCandidateHint
           candidates={discoveredAiProviders}
-          helperStyle={helperText}
-          listStyle={candidateList}
-          cardStyle={candidateCard}
+          helperStyle={helperTextStyle}
+          listStyle={candidateListStyle}
+          cardStyle={candidateCardStyle}
         />
-        <div style={lb}>File Analysis Provider</div>
-        <select
-          style={inp}
-          value={selectedFileProviderId}
-          onChange={(event) => setSelectedFileProviderId(event.target.value)}
-        >
+
+        <div style={labelStyle}>文件分析接入</div>
+        <select style={inputStyle} value={selectedFileProviderId} onChange={(event) => setSelectedFileProviderId(event.target.value)}>
           {fileProviders.map((provider) => (
             <option key={provider.id} value={provider.id}>
               {provider.label}
@@ -339,13 +417,14 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         </select>
         <ProviderCandidateHint
           candidates={discoveredFileProviders}
-          helperStyle={helperText}
-          listStyle={candidateList}
-          cardStyle={candidateCard}
+          helperStyle={helperTextStyle}
+          listStyle={candidateListStyle}
+          cardStyle={candidateCardStyle}
         />
-        <div style={lb}>Screen Perception Provider</div>
+
+        <div style={labelStyle}>屏幕感知接入</div>
         <select
-          style={inp}
+          style={inputStyle}
           value={selectedScreenProviderId}
           onChange={(event) => setSelectedScreenProviderId(event.target.value)}
         >
@@ -357,20 +436,25 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         </select>
         <ProviderCandidateHint
           candidates={discoveredScreenProviders}
-          helperStyle={helperText}
-          listStyle={candidateList}
-          cardStyle={candidateCard}
+          helperStyle={helperTextStyle}
+          listStyle={candidateListStyle}
+          cardStyle={candidateCardStyle}
         />
 
-        <div style={sectionTitle}>Local Plugins</div>
-        <div style={{ marginBottom: '12px', fontSize: '12px', color: 'rgba(104, 132, 157, 0.72)', lineHeight: 1.6 }}>
-          这里展示本地 `plugins/` 目录里发现到的插件 manifest，以及它们当前是否已经通过运行时加载。
+        <div style={sectionTitleStyle}>本地插件</div>
+        <div
+          style={{
+            marginBottom: '12px',
+            fontSize: '12px',
+            color: 'rgba(104, 132, 157, 0.72)',
+            lineHeight: 1.6,
+          }}
+        >
+          这里会显示 `plugins/` 目录里发现的本地插件，以及它们现在是否已经接入 bb7 的能力链路。
         </div>
         <div style={{ display: 'grid', gap: '10px', marginBottom: '14px' }}>
           {localPlugins.length === 0 && (
-            <div style={{ fontSize: '12px', color: 'rgba(104, 132, 157, 0.72)' }}>
-              当前还没有发现本地插件。
-            </div>
+            <div style={{ fontSize: '12px', color: 'rgba(104, 132, 157, 0.72)' }}>当前还没有发现可用的本地插件。</div>
           )}
           {localPlugins.map((plugin) => (
             <div
@@ -378,35 +462,39 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               style={{
                 padding: '12px 14px',
                 borderRadius: '14px',
-                border: plugin.status === 'valid'
-                  ? '1px solid rgba(138, 191, 230, 0.22)'
-                  : '1px solid rgba(255, 159, 159, 0.3)',
-                background: plugin.status === 'valid'
-                  ? 'rgba(255,255,255,0.6)'
-                  : 'rgba(255, 241, 241, 0.75)',
+                border:
+                  plugin.status === 'valid'
+                    ? '1px solid rgba(138, 191, 230, 0.22)'
+                    : '1px solid rgba(255, 159, 159, 0.3)',
+                background: plugin.status === 'valid' ? 'rgba(255,255,255,0.6)' : 'rgba(255, 241, 241, 0.75)',
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
                 <div>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#4f6880' }}>
-                    {plugin.name}
-                  </div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#4f6880' }}>{plugin.name}</div>
                   <div style={{ fontSize: '11px', color: 'rgba(104, 132, 157, 0.72)' }}>
                     {plugin.id} · v{plugin.version}
                   </div>
                 </div>
-                <span style={pillStyle(plugin.status === 'valid', plugin.status === 'valid' ? '#8ec5ec' : '#f3a0a0', true)}>
-                  {plugin.status === 'valid' ? 'Valid' : 'Invalid'}
+                <span
+                  style={pillStyle(
+                    plugin.status === 'valid',
+                    plugin.status === 'valid' ? '#8ec5ec' : '#f3a0a0',
+                    true,
+                  )}
+                >
+                  {plugin.status === 'valid' ? '可用' : '配置有误'}
                 </span>
               </div>
               <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(92, 118, 143, 0.8)', marginBottom: '6px' }}>
-                Entry: {plugin.entry} · API: {plugin.apiVersion ?? 'unknown'}
+                入口文件：{plugin.entry} · API 版本：{plugin.apiVersion ?? '未声明'}
               </div>
               <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(92, 118, 143, 0.8)', marginBottom: '6px' }}>
-                Runtime: {renderPluginRuntimeLabel(plugin.runtimeStatus)}
+                运行状态：{renderPluginRuntimeLabel(plugin.runtimeStatus)}
               </div>
               <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(92, 118, 143, 0.8)', marginBottom: '6px' }}>
-                Capabilities: {plugin.capabilities.join(', ') || 'none'} · Permissions: {plugin.permissions.join(', ') || 'none'}
+                能力：{renderPluginTokenList(plugin.capabilities, renderPluginCapabilityLabel, '未声明')} · 权限：
+                {renderPluginTokenList(plugin.permissions, renderPluginPermissionLabel, '未声明')}
               </div>
               {plugin.capabilities.length > 0 && (
                 <div style={{ display: 'grid', gap: '6px', marginBottom: plugin.errors.length > 0 ? '8px' : 0 }}>
@@ -422,14 +510,20 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
                         <span style={{ fontSize: '11px', fontWeight: 700, color: '#56728b' }}>
-                          {item.capability}
+                          {renderPluginCapabilityLabel(item.capability)}
                         </span>
-                        <span style={pillStyle(item.status === 'ready', item.status === 'ready' ? '#8ec5ec' : item.status === 'planned' ? '#e7b36a' : '#b7b7b7', true)}>
-                          {item.status === 'ready' ? 'Ready' : item.status === 'planned' ? 'Planned' : 'Unknown'}
+                        <span
+                          style={pillStyle(
+                            item.status === 'ready',
+                            item.status === 'ready' ? '#8ec5ec' : item.status === 'planned' ? '#e7b36a' : '#b7b7b7',
+                            true,
+                          )}
+                        >
+                          {renderCapabilityStatusLabel(item.status)}
                         </span>
                       </div>
                       <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(92, 118, 143, 0.8)' }}>
-                        {item.runtimeBinding ? `Runtime binding: ${item.runtimeBinding}。` : ''}
+                        {item.runtimeBinding ? `运行绑定：${renderRuntimeBindingLabel(item.runtimeBinding)}。` : ''}
                         {item.summary}
                       </div>
                     </div>
@@ -437,12 +531,17 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 </div>
               )}
               {plugin.errors.length > 0 && (
-                <div style={{ fontSize: '11px', lineHeight: 1.6, color: '#b86565' }}>
-                  {plugin.errors.join(' ')}
-                </div>
+                <div style={{ fontSize: '11px', lineHeight: 1.6, color: '#b86565' }}>{plugin.errors.join(' ')}</div>
               )}
               {plugin.runtimeErrors.length > 0 && (
-                <div style={{ fontSize: '11px', lineHeight: 1.6, color: '#b07a45', marginTop: plugin.errors.length > 0 ? '6px' : 0 }}>
+                <div
+                  style={{
+                    fontSize: '11px',
+                    lineHeight: 1.6,
+                    color: '#b07a45',
+                    marginTop: plugin.errors.length > 0 ? '6px' : 0,
+                  }}
+                >
                   {plugin.runtimeErrors.join(' ')}
                 </div>
               )}
@@ -450,19 +549,26 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           ))}
         </div>
 
-        <div style={sectionTitle}>Provider Candidates</div>
-        <div style={{ marginBottom: '12px', fontSize: '12px', color: 'rgba(104, 132, 157, 0.72)', lineHeight: 1.6 }}>
-          下面这些是已经能和当前 provider 契约对齐的插件候选，但现在还没有真正注册成可执行 provider。
+        <div style={sectionTitleStyle}>候选接入项</div>
+        <div
+          style={{
+            marginBottom: '12px',
+            fontSize: '12px',
+            color: 'rgba(104, 132, 157, 0.72)',
+            lineHeight: 1.6,
+          }}
+        >
+          下面这些插件已经声明了对应能力，但还没走完整条接入链路，所以暂时不会直接出现在上面的接入选择里。
         </div>
         {pluginBackedActiveProviders.length > 0 && (
           <div style={{ marginBottom: '12px', fontSize: '11px', color: 'rgba(92, 118, 143, 0.78)', lineHeight: 1.6 }}>
-            已接入的插件 provider：{pluginBackedActiveProviders.map((provider) => provider.label).join(', ')}
+            已接入的插件能力：{pluginBackedActiveProviders.map((provider) => provider.label).join('、')}
           </div>
         )}
         <div style={{ display: 'grid', gap: '10px', marginBottom: '14px' }}>
           {discoveredProviderCandidates.length === 0 && (
             <div style={{ fontSize: '12px', color: 'rgba(104, 132, 157, 0.72)' }}>
-              当前没有剩余的未接入候选；如果插件已经通过当前阶段的契约检查，它会直接出现在上面的 provider 选择器里。
+              当前没有额外候选项。只要某个插件完成当前阶段的能力校验，它就会直接出现在上面的接入选择里。
             </div>
           )}
           {discoveredProviderCandidates.map((provider) => (
@@ -477,22 +583,25 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
                 <div>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#4f6880' }}>
-                    {provider.label}
-                  </div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#4f6880' }}>{provider.label}</div>
                   <div style={{ fontSize: '11px', color: 'rgba(104, 132, 157, 0.72)' }}>
-                    {provider.pluginId} · {provider.declaredProviderId}
+                    {provider.pluginId} · {renderProviderIdentity(provider.declaredProviderId, provider.manifestCapability)}
                   </div>
                 </div>
-                <span style={pillStyle(false, '#e7b36a', true)}>
-                  Candidate
-                </span>
+                <span style={pillStyle(false, '#e7b36a', true)}>候选中</span>
               </div>
               <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(92, 118, 143, 0.8)' }}>
-                Capability: {provider.runtimeBinding} · Source: plugin
+                绑定能力：{renderRuntimeBindingLabel(provider.runtimeBinding)} · 来源：本地插件
               </div>
               {provider.description && (
-                <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(92, 118, 143, 0.8)', marginTop: '4px' }}>
+                <div
+                  style={{
+                    fontSize: '11px',
+                    lineHeight: 1.5,
+                    color: 'rgba(92, 118, 143, 0.8)',
+                    marginTop: '4px',
+                  }}
+                >
                   {provider.description}
                 </div>
               )}
@@ -500,98 +609,130 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           ))}
         </div>
 
-        <div style={sectionTitle}>AI Chat</div>
-        <div style={row}>
+        <div style={sectionTitleStyle}>聊天能力</div>
+        <div style={rowStyle}>
           <input
             type="checkbox"
             checked={enabled}
             onChange={(event) => setEnabled(event.target.checked)}
             style={{ accentColor: '#8ec5ec' }}
           />
-          <label style={{ fontSize: '13px' }}>Enable AI chat</label>
+          <label style={{ fontSize: '13px' }}>启用 AI 对话</label>
         </div>
-        <div style={lb}>Endpoint</div>
-        <input style={inp} value={endpoint} onChange={(event) => setEndpoint(event.target.value)} />
-        <div style={lb}>API Key</div>
+        <div style={labelStyle}>Endpoint</div>
+        <input style={inputStyle} value={endpoint} onChange={(event) => setEndpoint(event.target.value)} />
+        <div style={labelStyle}>API Key</div>
         <input
-          style={inp}
+          style={inputStyle}
           type="password"
           value={apiKey}
           onChange={(event) => setApiKey(event.target.value)}
           placeholder="sk-..."
         />
-        <div style={lb}>Model</div>
-        <input style={inp} value={model} onChange={(event) => setModel(event.target.value)} />
+        <div style={labelStyle}>Model</div>
+        <input style={inputStyle} value={model} onChange={(event) => setModel(event.target.value)} />
+        <div
+          style={{
+            marginTop: '-4px',
+            marginBottom: '14px',
+            padding: '10px 12px',
+            borderRadius: '12px',
+            border:
+              aiHealth.ok === null
+                ? '1px solid rgba(138, 191, 230, 0.18)'
+                : aiHealth.ok
+                  ? '1px solid rgba(142, 197, 236, 0.28)'
+                  : '1px solid rgba(243, 160, 160, 0.3)',
+            background:
+              aiHealth.ok === null
+                ? 'rgba(255,255,255,0.52)'
+                : aiHealth.ok
+                  ? 'rgba(245, 252, 255, 0.78)'
+                  : 'rgba(255, 244, 244, 0.82)',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#56728b' }}>当前接入状态</span>
+            <span
+              style={pillStyle(
+                aiHealth.ok === true,
+                aiHealth.ok === false ? '#f3a0a0' : '#8ec5ec',
+                true,
+              )}
+            >
+              {aiHealth.loading ? '检查中' : aiHealth.ok === true ? '已就绪' : aiHealth.ok === false ? '需要处理' : '未检查'}
+            </span>
+          </div>
+          <div style={{ fontSize: '11px', lineHeight: 1.6, color: 'rgba(92, 118, 143, 0.84)' }}>{aiHealth.message}</div>
+        </div>
 
-        <div style={sectionTitle}>Companion Presence</div>
-        <div style={row}>
+        <div style={sectionTitleStyle}>陪伴存在感</div>
+        <div style={rowStyle}>
           <input
             type="checkbox"
             checked={quietCompanionMode}
             onChange={(event) => setQuietCompanionMode(event.target.checked)}
             style={{ accentColor: '#8ec5ec' }}
           />
-          <label style={{ fontSize: '13px' }}>Low-distraction mode</label>
+          <label style={{ fontSize: '13px' }}>低打扰模式</label>
         </div>
         <div style={{ marginBottom: '12px', fontSize: '12px', color: 'rgba(104, 132, 157, 0.72)', lineHeight: 1.5 }}>
-          Keeps the companion smaller-feeling in motion, reduces idle animation energy, and makes proactive interruptions rarer.
+          会让 bb7 的动作更克制一点，待机更安静，也会减少突然打断你的频率。
         </div>
 
-        <div style={sectionTitle}>Work Companion Mode</div>
-        <div style={row}>
+        <div style={sectionTitleStyle}>工作节奏</div>
+        <div style={rowStyle}>
           <input
             type="checkbox"
             checked={workEnabled}
             onChange={(event) => setWorkEnabled(event.target.checked)}
             style={{ accentColor: '#8ec5ec' }}
           />
-          <label style={{ fontSize: '13px' }}>Enable focus and break rhythm</label>
+          <label style={{ fontSize: '13px' }}>启用专注与休息节奏</label>
         </div>
 
-        <div style={{ ...lb, marginTop: 6 }}>Current phase</div>
-        <div style={{ marginBottom: '12px', fontSize: '13px', color: '#56728b' }}>
-          {renderPhaseLabel(workSnapshot.phase)}
-        </div>
+        <div style={{ ...labelStyle, marginTop: 6 }}>当前阶段</div>
+        <div style={{ marginBottom: '12px', fontSize: '13px', color: '#56728b' }}>{renderPhaseLabel(workSnapshot.phase)}</div>
 
-        <div style={lb}>Focus minutes</div>
+        <div style={labelStyle}>专注时长（分钟）</div>
         <input
-          style={inp}
+          style={inputStyle}
           type="number"
           min={15}
           max={120}
           value={focusMinutes}
           onChange={(event) => setFocusMinutes(Number(event.target.value))}
         />
-        <div style={lb}>Short break minutes</div>
+        <div style={labelStyle}>短休息时长（分钟）</div>
         <input
-          style={inp}
+          style={inputStyle}
           type="number"
           min={1}
           max={30}
           value={shortBreakMinutes}
           onChange={(event) => setShortBreakMinutes(Number(event.target.value))}
         />
-        <div style={lb}>Long break minutes</div>
+        <div style={labelStyle}>长休息时长（分钟）</div>
         <input
-          style={inp}
+          style={inputStyle}
           type="number"
           min={5}
           max={60}
           value={longBreakMinutes}
           onChange={(event) => setLongBreakMinutes(Number(event.target.value))}
         />
-        <div style={lb}>Long break every N focus sessions</div>
+        <div style={labelStyle}>每几轮专注进入一次长休息</div>
         <input
-          style={inp}
+          style={inputStyle}
           type="number"
           min={2}
           max={8}
           value={longBreakEvery}
           onChange={(event) => setLongBreakEvery(Number(event.target.value))}
         />
-        <div style={lb}>Overwork reminder after minutes</div>
+        <div style={labelStyle}>过劳提醒阈值（分钟）</div>
         <input
-          style={inp}
+          style={inputStyle}
           type="number"
           min={30}
           max={240}
@@ -599,30 +740,38 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           onChange={(event) => setOverworkReminderMinutes(Number(event.target.value))}
         />
 
-        <div style={row}>
+        <div style={rowStyle}>
           <input
             type="checkbox"
             checked={autoStartBreaks}
             onChange={(event) => setAutoStartBreaks(event.target.checked)}
             style={{ accentColor: '#8ec5ec' }}
           />
-          <label style={{ fontSize: '13px' }}>Auto-start breaks</label>
+          <label style={{ fontSize: '13px' }}>自动开始休息</label>
         </div>
-        <div style={row}>
+        <div style={rowStyle}>
           <input
             type="checkbox"
             checked={autoStartFocus}
             onChange={(event) => setAutoStartFocus(event.target.checked)}
             style={{ accentColor: '#8ec5ec' }}
           />
-          <label style={{ fontSize: '13px' }}>Auto-start next focus</label>
+          <label style={{ fontSize: '13px' }}>自动开始下一轮专注</label>
         </div>
 
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '18px' }}>
-          <button onClick={startFocus} style={quickButton}>Start Focus</button>
-          <button onClick={startBreak} style={quickButton}>Start Break</button>
-          <button onClick={pauseWorkMode} style={quickButton}>Pause</button>
-          <button onClick={resetWorkMode} style={quickButton}>Reset</button>
+          <button onClick={startFocus} style={quickButtonStyle}>
+            开始专注
+          </button>
+          <button onClick={startBreak} style={quickButtonStyle}>
+            开始休息
+          </button>
+          <button onClick={pauseWorkMode} style={quickButtonStyle}>
+            暂停
+          </button>
+          <button onClick={resetWorkMode} style={quickButtonStyle}>
+            重置
+          </button>
         </div>
 
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '16px' }}>
@@ -637,7 +786,7 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               cursor: 'pointer',
             }}
           >
-            Cancel
+            取消
           </button>
           <button
             onClick={save}
@@ -650,7 +799,7 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               cursor: 'pointer',
             }}
           >
-            Save
+            保存
           </button>
         </div>
       </div>
@@ -670,15 +819,17 @@ const ProviderCandidateHint: React.FC<{
 
   return (
     <div style={helperStyle}>
-      <div>已发现候选 provider，但它们现在还不能直接在这里被选中。</div>
+      <div>已经发现候选接入项，但它们现在还不能直接在这里启用。</div>
       <div style={listStyle}>
         {candidates.map((candidate) => (
           <div key={candidate.providerId} style={cardStyle}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
               <span style={{ fontWeight: 700, color: '#56728b' }}>{candidate.label}</span>
-              <span style={{ color: '#b58545', fontWeight: 700 }}>Candidate</span>
+              <span style={{ color: '#b58545', fontWeight: 700 }}>候选中</span>
             </div>
-            <div>{candidate.pluginName} · {candidate.declaredProviderId}</div>
+            <div>
+              {candidate.pluginName} · {renderProviderIdentity(candidate.declaredProviderId, candidate.manifestCapability)}
+            </div>
             <div>{candidate.description}</div>
           </div>
         ))}
@@ -690,6 +841,7 @@ const ProviderCandidateHint: React.FC<{
 const App: React.FC = () => {
   const isChatOpen = usePetStore((state) => state.isChatOpen)
   const toggleChat = usePetStore((state) => state.toggleChat)
+  const setChatOpen = usePetStore((state) => state.setChatOpen)
   const [showSettings, setShowSettings] = useState(false)
 
   useContextAwareness()
@@ -711,7 +863,10 @@ const App: React.FC = () => {
     if (window.electronAPI?.onShowSettings) {
       window.electronAPI.onShowSettings(() => setShowSettings(true))
     }
-  }, [])
+    if (window.electronAPI?.onShowChat) {
+      window.electronAPI.onShowChat(() => setChatOpen(true))
+    }
+  }, [setChatOpen])
 
   useEffect(() => {
     const id = setInterval(() => usePetStore.getState().tickStatus(), 10000)
@@ -755,30 +910,153 @@ const App: React.FC = () => {
   )
 }
 
+function formatCapabilityLabel(name: string): string {
+  const normalized = name.replace(/([A-Z])/g, ' $1').trim().toLowerCase()
+
+  switch (normalized) {
+    case 'ai chat':
+    case 'aichat':
+      return 'AI 对话'
+    case 'file analysis':
+    case 'fileanalysis':
+      return '文件分析'
+    case 'screen perception':
+    case 'screenperception':
+      return '屏幕感知'
+    case 'document analysis':
+    case 'document-analysis':
+      return '文档分析'
+    case 'ai provider':
+    case 'ai-provider':
+      return 'AI 提供器'
+    case 'memory':
+      return '长期记忆'
+    case 'proactive interaction':
+    case 'proactiveinteraction':
+      return '主动互动'
+    case 'work mode':
+    case 'work-mode':
+      return '工作节奏'
+    case 'pet behavior':
+    case 'pet-behavior':
+      return '宠物行为扩展'
+    case 'ui extension':
+    case 'ui-extension':
+      return '界面扩展'
+    case 'context classifier':
+    case 'context-classifier':
+      return '上下文识别'
+    default:
+      return name.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase())
+  }
+}
+
+function renderPetSourceLabel(source: string): string {
+  return source === 'built-in' ? '内置角色' : '导入角色'
+}
+
+function renderPackageStageLabel(stage: string): string {
+  switch (stage.toLowerCase()) {
+    case 'stable':
+      return '稳定'
+    case 'preview':
+      return '预览'
+    case 'beta':
+      return '测试中'
+    case 'experimental':
+      return '实验中'
+    case 'production-ready':
+      return '可正式使用'
+    case 'hybrid':
+      return '混合资源'
+    case 'placeholder-runtime':
+      return '占位运行态'
+    default:
+      return stage
+  }
+}
+
 function renderPhaseLabel(phase: string): string {
   switch (phase) {
     case 'focus':
-      return 'Focusing'
+      return '专注中'
     case 'short_break':
-      return 'Short Break'
+      return '短休息'
     case 'long_break':
-      return 'Long Break'
+      return '长休息'
     case 'paused':
-      return 'Paused'
+      return '已暂停'
     default:
-      return 'Idle'
+      return '待命'
   }
 }
 
 function renderPluginRuntimeLabel(status: 'not_loaded' | 'loaded' | 'load_failed'): string {
   switch (status) {
     case 'loaded':
-      return 'Loaded'
+      return '已加载'
     case 'load_failed':
-      return 'Load Failed'
+      return '加载失败'
     default:
-      return 'Not Loaded'
+      return '未加载'
   }
+}
+
+function renderRuntimeBindingLabel(binding: 'aiChat' | 'fileAnalysis' | 'screenPerception' | null): string {
+  if (!binding) {
+    return '尚未绑定'
+  }
+
+  return formatCapabilityLabel(binding)
+}
+
+function renderCapabilityStatusLabel(status: 'ready' | 'planned' | 'unknown'): string {
+  switch (status) {
+    case 'ready':
+      return '可用'
+    case 'planned':
+      return '规划中'
+    default:
+      return '未知'
+  }
+}
+
+function renderPluginCapabilityLabel(capability: string): string {
+  return formatCapabilityLabel(capability)
+}
+
+function renderProviderIdentity(providerId: string, manifestCapability?: string | null): string {
+  const capabilityLabel = manifestCapability ? formatCapabilityLabel(manifestCapability) : null
+  if (!capabilityLabel) {
+    return providerId
+  }
+
+  return `${capabilityLabel} · ${providerId}`
+}
+
+function renderPluginPermissionLabel(permission: string): string {
+  switch (permission) {
+    case 'fs.read.user-selected':
+      return '读取用户主动选择的文件'
+    case 'ai.provider.invoke':
+      return '调用外部 AI 提供器'
+    case 'screen.read.summary':
+      return '读取屏幕摘要信息'
+    default:
+      return permission
+  }
+}
+
+function renderPluginTokenList(
+  tokens: string[],
+  renderer: (token: string) => string,
+  fallback: string,
+): string {
+  if (tokens.length === 0) {
+    return fallback
+  }
+
+  return tokens.map((token) => renderer(token)).join('、')
 }
 
 function pillStyle(selected: boolean, accentColor: string | null, strong: boolean): React.CSSProperties {

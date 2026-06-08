@@ -1,61 +1,70 @@
-# Pet Package System
+# 宠物包系统
 
-This directory will contain pet schema definitions and loaders for built-in and imported pets.
+这个目录负责宠物包 schema、加载器和跨窗口同步能力，服务于内置宠物和导入宠物两条路径。
 
-Core goals:
+## 核心目标
 
-- validate pet package manifests
-- resolve atlas and animation assets
-- load personality and state mappings
-- load companion-content and proactive interaction presets
-- allow new pets without core runtime edits
+- 校验宠物包 manifest
+- 解析 atlas 与动画资源
+- 加载 personality 和状态映射
+- 加载 companion-content 与主动互动预设
+- 让新宠物接入时尽量不改核心运行时
 
-Current architecture direction:
+## 当前架构方向
 
-- built-in pets are discovered through a small registry instead of being hard-coded directly into the runtime
-- the selected pet is persisted and broadcast across windows so chat, settings, and the pet window stay in sync
-- pet packages own their own animation/state/personality metadata
-- pet packages can also own companion-content, prompt directives, and contextual behavior presets
-- pet capabilities are typed and can be fulfilled by provider hooks instead of direct UI-level service construction
-- imported pets now have a disk-backed persistence path through Electron IPC so they can evolve toward a real local pet package library
-- capability providers are now normalized through a registry/store layer, which allows future plugin backends to register and fall back safely
-- legacy aliases may exist temporarily while package identities migrate cleanly
+- 内置宠物通过小型 registry 发现，而不是直接写死在运行时里
+- 当前选择的宠物会持久化并在多个窗口之间广播，保证聊天、设置和宠物窗口同步
+- 宠物包自己拥有动画、状态、人格与陪伴内容元数据
+- 宠物包也可以定义 prompt 指令、上下文行为和互动预设
+- 宠物能力通过 typed capability 描述，再由 provider hook 或插件层满足
+- 导入宠物已经接上基于 Electron IPC 的磁盘持久化路径，后面可以自然演进成真正的本地宠物库
+- capability provider 已经统一过 registry/store 层，为后续插件后端接入预留了安全回退空间
+- 迁移阶段允许保留少量 legacy alias，但不应该继续把它们暴露成对外主命名
 
-Near-term next steps:
+## 近期重点
 
-- support package-level capability flags for file analysis, emotes, and proactive behavior styles
-- separate sprite fallback generation from package identity so non-Mochi pets can ship their own procedural fallback
-- replace built-in capability providers with real plugin/provider resolution for community and local integrations
+- 支持 package 级别的 file analysis、emote、主动互动风格开关
+- 把 procedural fallback 与包身份解耦，让非 bb7 宠物也能带自己的 fallback 方案
+- 逐步把内置 capability provider 替换成真实的 plugin/provider 解析链路
 
-Custom package notes:
+## 自定义宠物包说明
 
-- Recommended package files:
-  - `manifest.json`
-  - `animations.json`
-  - `states.json`
-  - `personality.json`
-  - `companion-content.json`
-  - `appearance.json` (optional)
-  - `production.json` (optional)
-- `personality.json` should define:
-  - `identity.role`
-  - `identity.presence`
-  - `identity.responseStyle`
-  - `tone`
-  - `speechRules`
-  - `contextBehaviors`
-  - `promptDirectives.core`
-  - `promptDirectives.avoid`
-  - `promptDirectives.do`
-  - `memoryPolicy`
-- `companion-content.json` should carry the pet's proactive action copy, so follow-up chips and ambient check-ins stay on-brand for that pet.
-- Imported pets now persist both `personality` and `companionContent`, which means custom pets can keep their own tone and interactive prompts after restart.
-- Runtime import now supports two lanes:
-  - full package import: drag in a package folder's files including `manifest.json`, optional atlas, and companion metadata
-  - legacy sprite import: drag in one older config JSON plus one PNG sprite sheet, then let the app generate fallback personality/content defaults
-- Full package import keeps atlas assets on disk and serves them through a local Electron protocol, so imported pets can actually render their own runtime atlas instead of falling back to Mochi-only public assets.
-- When an imported package does not ship `previewImage`, the renderer now generates a local preview thumbnail from the atlas or procedural sprite fallback so package cards still feel complete in settings.
-- For a concrete starting point, see:
-  - `pets/template-luna/`
-  - `docs/specs/pet-package-template.md`
-- The settings UI now treats pet packages as first-class product entries, showing source, stage, summary, tags, and capability labels instead of a bare name-only dropdown.
+建议的包文件包括：
+
+- `manifest.json`
+- `animations.json`
+- `states.json`
+- `personality.json`
+- `companion-content.json`
+- `appearance.json`（可选）
+- `production.json`（可选）
+
+`personality.json` 建议定义这些内容：
+
+- `identity.role`
+- `identity.presence`
+- `identity.responseStyle`
+- `tone`
+- `speechRules`
+- `contextBehaviors`
+- `promptDirectives.core`
+- `promptDirectives.avoid`
+- `promptDirectives.do`
+- `memoryPolicy`
+
+`companion-content.json` 负责角色主动互动的文案和 follow-up chips，这样每个宠物都能保留自己的语气和节奏。
+
+## 当前导入能力
+
+- 导入宠物现在会同时持久化 `personality` 和 `companionContent`
+- 运行时导入支持两条路径：
+  - 完整包导入：导入 `manifest.json`、可选 atlas 和 companion metadata
+  - 旧版 sprite 导入：导入一份旧配置 JSON 和一张 PNG sprite sheet，由应用生成默认 personality / content
+- 完整包导入会把 atlas 资源保存在本地，并通过 Electron protocol 提供给运行时读取，这样导入宠物可以真正渲染自己的 atlas，而不必退回到内置资源
+- 如果导入包没有提供 `previewImage`，设置页会从 atlas 或 procedural fallback 自动生成本地预览缩略图，避免卡片只剩名字
+- 设置页现在会把宠物包作为完整的产品条目展示，而不是一个只有名字的下拉框
+
+## 参考起点
+
+- `pets/template-luna/`
+- `docs/specs/pet-package-template.md`

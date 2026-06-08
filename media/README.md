@@ -1,17 +1,17 @@
-# Media Folder
+# 展示素材
 
-This folder is reserved for repository screenshots and short motion captures used in the public README.
+这个目录用来放仓库 README 和后续发布页会用到的截图、动图和短演示素材。
 
-Recommended files:
+建议准备这些文件：
 
 - `hero-desktop.png`
 - `chat-panel.png`
 - `file-analysis.png`
-- `mochi-motion.gif`
+- `bb7-motion.gif`
 
-Keep captures clean:
+截图时尽量保持干净：
 
-- no personal notifications
-- no private file names
-- no cluttered desktop backgrounds
-- keep Mochi readable at a glance
+- 不要带个人通知
+- 不要露出私密文件名
+- 不要用过于杂乱的桌面背景
+- 让 bb7 在画面里一眼能看清

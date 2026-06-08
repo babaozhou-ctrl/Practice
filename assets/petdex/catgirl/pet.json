@@ -1,6 +1,0 @@
-﻿{
-  "id": "catgirl",
-  "displayName": "Legacy Mascot",
-  "description": "A legacy pixel mascot package kept only for prototype compatibility during the Mochi-first migration.",
-  "spritesheetPath": "spritesheet.png"
-}

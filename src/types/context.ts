@@ -19,3 +19,20 @@ export interface ScreenCaptureConfig {
   localVisionEnabled: boolean
   cloudVisionEnabled: boolean
 }
+
+export type ScreenPerceptionSource =
+  | 'ocr'
+  | 'local_vision'
+  | 'cloud_vision'
+  | 'capture_only'
+  | 'idle'
+
+export interface ScreenPerceptionSnapshot {
+  summary: string | null
+  source: ScreenPerceptionSource
+  providerId: string
+  imageAvailable: boolean
+  updatedAt: number
+  windowTitle: string
+  windowProcess: string
+}

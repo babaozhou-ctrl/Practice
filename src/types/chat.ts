@@ -59,10 +59,19 @@ export interface CompanionMemorySnapshot {
   avoidances: string[]
   rituals: string[]
   recentTopics: string[]
+  recentFileAnalyses: CompanionFileAnalysisMemory[]
   lastActivity: string | null
   lastScene: string | null
   lastWindowTitle: string | null
   updatedAt: number | null
+}
+
+export interface CompanionFileAnalysisMemory {
+  fileName: string
+  briefSummary: string
+  detailedAnalysis?: string | null
+  sceneId: string | null
+  capturedAt: number
 }
 
 export interface CompanionChatContext {
@@ -82,6 +91,13 @@ export interface CompanionChatContext {
   sceneGuidance: string[]
   contextFlags: string[]
   capabilityFlags?: string[]
+  sharedAttention?: string | null
+  sceneIntent?: string | null
+  emotionalAim?: string | null
+  replyPriorities?: string[]
+  avoidReplyPatterns?: string[]
+  screenSummary?: string | null
+  screenSource?: 'ocr' | 'local_vision' | 'cloud_vision' | 'capture_only' | 'idle' | null
 }
 
 export interface ChatSession {

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Deep Pet</title>
+  <title>Deep Pet | bb7</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -21,6 +21,131 @@
     #pet-root {
       position: absolute;
       inset: 0;
+    }
+    #feed-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 12;
+    }
+    #feed-highlight {
+      position: absolute;
+      left: 50%;
+      bottom: 36px;
+      width: 218px;
+      height: 256px;
+      transform: translateX(-50%) scale(0.92);
+      border-radius: 28px 28px 44px 44px;
+      border: 1px dashed rgba(173, 206, 236, 0.24);
+      background:
+        radial-gradient(circle at 50% 26%, rgba(255, 255, 255, 0.72), transparent 58%),
+        linear-gradient(180deg, rgba(255, 248, 248, 0.28), rgba(237, 246, 255, 0.18));
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.28),
+        0 20px 42px rgba(107, 139, 174, 0.08);
+      opacity: 0;
+      transition: opacity 180ms ease, transform 220ms ease, border-color 180ms ease, box-shadow 220ms ease;
+    }
+    #feed-highlight.show {
+      opacity: 1;
+      transform: translateX(-50%) scale(1);
+      border-color: rgba(153, 198, 235, 0.78);
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.46),
+        0 20px 44px rgba(113, 148, 188, 0.16);
+    }
+    #feed-card {
+      position: absolute;
+      left: 50%;
+      bottom: 56px;
+      width: 236px;
+      padding: 14px 14px 12px;
+      border-radius: 22px;
+      border: 1px solid rgba(176, 209, 236, 0.52);
+      background:
+        radial-gradient(circle at top, rgba(255, 255, 255, 0.74), transparent 58%),
+        linear-gradient(180deg, rgba(255, 251, 247, 0.94), rgba(241, 248, 255, 0.92));
+      box-shadow:
+        0 18px 38px rgba(109, 143, 180, 0.18),
+        0 6px 16px rgba(153, 181, 207, 0.12);
+      transform: translateX(-50%) translateY(10px) scale(0.96);
+      opacity: 0;
+      transition: opacity 180ms ease, transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+      pointer-events: none;
+    }
+    #feed-card.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0) scale(1);
+      pointer-events: auto;
+    }
+    #feed-card[data-mode="thinking"] {
+      border-color: rgba(166, 196, 232, 0.74);
+    }
+    #feed-card[data-mode="done"] {
+      border-color: rgba(236, 194, 211, 0.74);
+    }
+    .feed-title {
+      margin-bottom: 6px;
+      color: #4f6982;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-align: center;
+    }
+    .feed-text {
+      color: rgba(79, 105, 130, 0.88);
+      font-size: 12px;
+      line-height: 1.55;
+      text-align: center;
+      white-space: pre-wrap;
+      text-wrap: pretty;
+    }
+    .feed-actions {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 12px;
+      pointer-events: auto;
+    }
+    .feed-actions button {
+      min-width: 74px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(171, 203, 231, 0.42);
+      background: rgba(255, 255, 255, 0.72);
+      color: #57748f;
+      font-size: 12px;
+      cursor: pointer;
+      transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+    }
+    .feed-actions button:hover {
+      transform: translateY(-1px);
+      background: rgba(255, 255, 255, 0.9);
+      border-color: rgba(151, 196, 236, 0.72);
+    }
+    .feed-actions button.primary {
+      border: none;
+      background: linear-gradient(135deg, #8ec5ec, #f6c3d4);
+      color: #ffffff;
+      box-shadow: 0 10px 20px rgba(160, 184, 224, 0.2);
+    }
+    .feed-pulse {
+      width: 76px;
+      height: 8px;
+      margin: 10px auto 0;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(174, 209, 236, 0), rgba(174, 209, 236, 0.92), rgba(174, 209, 236, 0));
+      animation: feed-pulse 1.7s ease-in-out infinite;
+    }
+    @keyframes feed-pulse {
+      0%, 100% {
+        opacity: 0.4;
+        transform: scaleX(0.84);
+      }
+      50% {
+        opacity: 0.9;
+        transform: scaleX(1.06);
+      }
     }
     #speech {
       position: absolute;
@@ -190,11 +315,13 @@
       display: none;
       min-width: 190px;
       padding: 6px;
-      border: 1px solid rgba(206, 196, 240, 0.2);
+      border: 1px solid rgba(178, 205, 230, 0.24);
       border-radius: 16px;
-      background: rgba(19, 17, 29, 0.95);
-      backdrop-filter: blur(16px);
-      box-shadow: 0 18px 40px rgba(5, 5, 13, 0.36);
+      background:
+        radial-gradient(circle at top, rgba(255, 255, 255, 0.8), transparent 58%),
+        linear-gradient(180deg, rgba(255, 251, 247, 0.96), rgba(241, 248, 255, 0.94));
+      backdrop-filter: blur(18px);
+      box-shadow: 0 18px 40px rgba(109, 143, 180, 0.18), 0 8px 18px rgba(153, 181, 207, 0.12);
       z-index: 20;
     }
     #ctx.show {
@@ -203,23 +330,28 @@
     #ctx .i {
       padding: 10px 14px;
       border-radius: 10px;
-      color: #e9e1f4;
+      color: #4d6984;
       font-size: 13px;
       cursor: pointer;
-      transition: background 120ms ease;
+      transition: background 120ms ease, transform 120ms ease;
     }
     #ctx .i:hover {
-      background: rgba(167, 151, 209, 0.14);
+      background: rgba(255, 255, 255, 0.72);
+      transform: translateY(-1px);
     }
     #ctx .d {
       height: 1px;
       margin: 5px 8px;
-      background: rgba(255, 255, 255, 0.08);
+      background: rgba(170, 198, 222, 0.24);
     }
   </style>
 </head>
 <body>
   <div id="pet-root"></div>
+  <div id="feed-layer">
+    <div id="feed-highlight"></div>
+    <div id="feed-card"></div>
+  </div>
   <div id="speech"></div>
   <div id="ctx"></div>
   <script type="module" src="/src/pet-main.ts"></script>

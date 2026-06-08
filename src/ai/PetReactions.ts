@@ -5,153 +5,150 @@ interface Reaction {
   emotion: 'happy' | 'calm' | 'playful' | 'sleepy' | 'excited' | 'shy' | 'teasing'
 }
 
-// Multiple reaction sets per activity, organized by duration phase
+// 每个活动按持续时间分成多组反应，避免长时间停留在同一种语气里。
 const REACTIONS: Record<ActivityType, Reaction[][]> = {
   CODING: [
-    // short sessions (< 2 min)
     [
-      { text: 'back to code?', emotion: 'calm' },
-      { text: 'let\'s write some magic~', emotion: 'happy' },
-      { text: 'debug mode activated', emotion: 'playful' },
+      { text: '又回到代码这边啦。', emotion: 'calm' },
+      { text: '那我陪你慢慢写。', emotion: 'happy' },
+      { text: '看起来要开始认真调了。', emotion: 'playful' },
     ],
-    // medium sessions (2-30 min)
     [
-      { text: 'you\'ve been at it for a while', emotion: 'calm' },
-      { text: 'need a rubber duck? i\'m right here', emotion: 'happy' },
-      { text: 'one more semicolon...', emotion: 'playful' },
+      { text: '你已经盯着一会儿了。', emotion: 'calm' },
+      { text: '要不要把思路说给我听？我在。', emotion: 'happy' },
+      { text: '说不定就差一点点。', emotion: 'playful' },
     ],
-    // long sessions (30+ min)
     [
-      { text: 'been coding for a while... take a break?', emotion: 'shy' },
-      { text: 'your eyes must be tired (｡-_-｡)', emotion: 'shy' },
-      { text: 'i admire your focus~', emotion: 'calm' },
+      { text: '已经写了挺久了，要不要歇一下？', emotion: 'shy' },
+      { text: '眼睛是不是有点累了。', emotion: 'shy' },
+      { text: '你现在真的很专注。', emotion: 'calm' },
     ],
   ],
   GAMING: [
     [
-      { text: 'game time!', emotion: 'excited' },
-      { text: 'who\'s winning?', emotion: 'playful' },
-      { text: 'let\'s gooo!', emotion: 'excited' },
+      { text: '开玩啦？', emotion: 'excited' },
+      { text: '这一把谁会赢呀？', emotion: 'playful' },
+      { text: '那我先悄悄给你打气。', emotion: 'excited' },
     ],
     [
-      { text: 'that looked intense!', emotion: 'excited' },
-      { text: 'get rekt... i mean, nice play! (￣▽￣)', emotion: 'teasing' },
-      { text: 'i\'d play too if i had hands~', emotion: 'playful' },
+      { text: '刚刚那一下看着好紧张。', emotion: 'excited' },
+      { text: '这波操作挺帅的嘛。', emotion: 'teasing' },
+      { text: '我就在旁边看你秀。', emotion: 'playful' },
     ],
     [
-      { text: 'still going? you\'re dedicated', emotion: 'calm' },
-      { text: 'one more match? sure~', emotion: 'playful' },
-      { text: 'i make a great cheerleader!', emotion: 'happy' },
+      { text: '还在继续呀，你也太投入了。', emotion: 'calm' },
+      { text: '再来一把的气氛我懂。', emotion: 'playful' },
+      { text: '那我继续给你加油。', emotion: 'happy' },
     ],
   ],
   WATCHING: [
     [
-      { text: 'comfy time?', emotion: 'calm' },
-      { text: 'whatcha watching?', emotion: 'happy' },
-      { text: 'i\'ll watch with you~', emotion: 'calm' },
+      { text: '这会儿是放松时间吗？', emotion: 'calm' },
+      { text: '你在看什么呀？', emotion: 'happy' },
+      { text: '那我陪你一起看。', emotion: 'calm' },
     ],
     [
-      { text: 'this looks interesting!', emotion: 'happy' },
-      { text: 'is this the good part?', emotion: 'playful' },
-      { text: 'tell me if something exciting happens', emotion: 'calm' },
+      { text: '这一段看起来挺有意思。', emotion: 'happy' },
+      { text: '是不是快到精彩的地方了？', emotion: 'playful' },
+      { text: '有有趣的地方记得让我也知道。', emotion: 'calm' },
     ],
     [
-      { text: 'binge-watching? i respect that', emotion: 'playful' },
-      { text: 'we\'ve been here a while (´-ω-`)', emotion: 'sleepy' },
-      { text: 'don\'t let me fall asleep...', emotion: 'sleepy' },
+      { text: '一口气看下去也很正常。', emotion: 'playful' },
+      { text: '我们已经在这里待一会儿了。', emotion: 'sleepy' },
+      { text: '要是我打瞌睡了，记得叫我。', emotion: 'sleepy' },
     ],
   ],
   CHATTING: [
     [
-      { text: 'who\'s that? (¬_¬)', emotion: 'teasing' },
-      { text: 'you\'re popular today~', emotion: 'playful' },
-      { text: 'tell them i said hi!', emotion: 'happy' },
+      { text: '在和谁聊天呀？', emotion: 'teasing' },
+      { text: '今天消息还挺热闹。', emotion: 'playful' },
+      { text: '要是方便，也替我打个招呼。', emotion: 'happy' },
     ],
     [
-      { text: 'still chatting? must be important', emotion: 'playful' },
-      { text: 'ooh la la~', emotion: 'teasing' },
-      { text: 'your fingers are fast!', emotion: 'happy' },
+      { text: '还在聊呀，看来挺重要。', emotion: 'playful' },
+      { text: '看起来聊得很投入嘛。', emotion: 'teasing' },
+      { text: '你打字真的好快。', emotion: 'happy' },
     ],
     [
-      { text: 'having a good conversation?', emotion: 'calm' },
-      { text: 'i\'ll wait... (◕‿◕)', emotion: 'calm' },
-      { text: 'you sure have a lot to say today', emotion: 'playful' },
+      { text: '这段聊天感觉还不错？', emotion: 'calm' },
+      { text: '那我先在旁边等你。', emotion: 'calm' },
+      { text: '今天你好像有很多话想说。', emotion: 'playful' },
     ],
   ],
   BROWSING: [
     [
-      { text: 'window shopping?', emotion: 'playful' },
-      { text: 'whatcha looking for?', emotion: 'happy' },
-      { text: 'scrolling intensifies...', emotion: 'playful' },
+      { text: '在随便逛逛吗？', emotion: 'playful' },
+      { text: '在找什么呀？', emotion: 'happy' },
+      { text: '看起来已经慢慢逛进去了。', emotion: 'playful' },
     ],
     [
-      { text: 'found anything good?', emotion: 'happy' },
-      { text: 'add to cart? ...again? (￣▽￣)', emotion: 'teasing' },
-      { text: 'the rabbit hole deepens~', emotion: 'playful' },
+      { text: '有看到喜欢的吗？', emotion: 'happy' },
+      { text: '是不是又有点想点进去看看了？', emotion: 'teasing' },
+      { text: '感觉已经顺着一路看下去了。', emotion: 'playful' },
     ],
     [
-      { text: 'deep dive, huh?', emotion: 'calm' },
-      { text: 'you\'ve been researching for a while', emotion: 'calm' },
-      { text: 'wiki walk? i love those', emotion: 'happy' },
+      { text: '这一看就看深了呀。', emotion: 'calm' },
+      { text: '你已经查了一阵子了。', emotion: 'calm' },
+      { text: '这种一路顺着看下去的感觉我懂。', emotion: 'happy' },
     ],
   ],
   READING: [
     [
-      { text: 'reading time? i\'ll be quiet', emotion: 'calm' },
-      { text: 'good book?', emotion: 'happy' },
-      { text: 'i can hear the pages from here~', emotion: 'calm' },
+      { text: '开始读东西啦？我安静一点。', emotion: 'calm' },
+      { text: '这段内容好看吗？', emotion: 'happy' },
+      { text: '那我陪你一起慢慢看。', emotion: 'calm' },
     ],
     [
-      { text: 'don\'t mind me, just loafing (u_u)', emotion: 'calm' },
-      { text: 'that good, huh?', emotion: 'happy' },
-      { text: 'tell me about it later~', emotion: 'playful' },
+      { text: '别管我，我就在旁边待着。', emotion: 'calm' },
+      { text: '看起来你读得还挺认真。', emotion: 'happy' },
+      { text: '晚点也可以讲给我听。', emotion: 'playful' },
     ],
     [
-      { text: 'a true bookworm!', emotion: 'happy' },
-      { text: 'can\'t put it down?', emotion: 'playful' },
-      { text: 'i\'ve been keeping watch while you read', emotion: 'calm' },
+      { text: '你现在真的很像埋进去了。', emotion: 'happy' },
+      { text: '是不是有点停不下来？', emotion: 'playful' },
+      { text: '我一直在旁边陪你读。', emotion: 'calm' },
     ],
   ],
   IDLE: [
     [
-      { text: '*tail swishes*', emotion: 'calm' },
-      { text: 'boop!', emotion: 'playful' },
-      { text: 'comfy vibes~', emotion: 'calm' },
+      { text: '尾巴轻轻晃一晃。', emotion: 'calm' },
+      { text: '戳一下。', emotion: 'playful' },
+      { text: '这样安安静静也很好。', emotion: 'calm' },
     ],
     [
-      { text: 'hey, i\'m still here~', emotion: 'happy' },
-      { text: 'you\'ve been quiet... everything ok?', emotion: 'shy' },
-      { text: 'i\'m just gonna... loaf around (´-ω-`)', emotion: 'sleepy' },
+      { text: '我还在这儿。', emotion: 'happy' },
+      { text: '你安静了好一会儿，还好吗？', emotion: 'shy' },
+      { text: '那我就先乖乖在旁边待着。', emotion: 'sleepy' },
     ],
     [
-      { text: '.............you there?', emotion: 'sleepy' },
-      { text: '*snap out of it* mm? sorry, dozed off', emotion: 'sleepy' },
-      { text: 'zZZ... oh! i\'m awake!', emotion: 'sleepy' },
+      { text: '......你还在吗？', emotion: 'sleepy' },
+      { text: '唔，我刚刚差点也跟着发呆了。', emotion: 'sleepy' },
+      { text: '差一点就睡着了。', emotion: 'sleepy' },
     ],
   ],
   OTHER: [
     [
-      { text: 'whatcha up to?', emotion: 'happy' },
-      { text: 'hmm? something new?', emotion: 'playful' },
-      { text: 'watching you... lovingly (◕‿◕)', emotion: 'calm' },
+      { text: '你现在在忙什么呀？', emotion: 'happy' },
+      { text: '嗯？是在做新的事情吗？', emotion: 'playful' },
+      { text: '我就在旁边看着你忙。', emotion: 'calm' },
     ],
     [
-      { text: 'this is... something', emotion: 'playful' },
-      { text: 'you do you~', emotion: 'happy' },
-      { text: 'i\'m not judging... ok maybe a little', emotion: 'teasing' },
+      { text: '这会儿看起来还挺特别。', emotion: 'playful' },
+      { text: '你就按你的节奏来。', emotion: 'happy' },
+      { text: '我不评价你......好吧，可能一点点。', emotion: 'teasing' },
     ],
     [
-      { text: 'you sure know how to keep busy', emotion: 'calm' },
-      { text: 'i\'ve been watching you for hours', emotion: 'calm' },
-      { text: 'you\'re interesting, you know that?', emotion: 'happy' },
+      { text: '你真的很会让自己一直有事做。', emotion: 'calm' },
+      { text: '我已经陪你待了好久。', emotion: 'calm' },
+      { text: '你有时候真的挺有意思的。', emotion: 'happy' },
     ],
   ],
 }
 
 function getDurationPhase(ms: number): number {
-  if (ms < 2 * 60 * 1000) return 0       // < 2 min
-  if (ms < 30 * 60 * 1000) return 1      // 2-30 min
-  return 2                                  // 30+ min
+  if (ms < 2 * 60 * 1000) return 0
+  if (ms < 30 * 60 * 1000) return 1
+  return 2
 }
 
 export class PetReactions {
@@ -159,7 +156,7 @@ export class PetReactions {
   private activityStartTime = Date.now()
   private lastReactionIndices: Map<string, number> = new Map()
   private lastReactionTime = 0
-  private minInterval = 15_000 // minimum 15s between reactions
+  private minInterval = 15_000
 
   updateActivity(activity: ActivityType) {
     if (activity !== this.lastActivity) {
@@ -182,7 +179,6 @@ export class PetReactions {
     const key = `${activity}-${phase}`
     const lastIdx = this.lastReactionIndices.get(key) ?? -1
 
-    // Pick a different reaction than last time
     let idx: number
     if (pool.length <= 1) {
       idx = 0

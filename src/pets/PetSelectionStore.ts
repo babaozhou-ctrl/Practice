@@ -1,4 +1,4 @@
-import { DEFAULT_PET_PACKAGE_ID } from './constants'
+import { DEFAULT_PET_PACKAGE_ID, LEGACY_DEFAULT_PET_PACKAGE_ID } from './constants'
 import { hasBuiltInPetPackage, listBuiltInPetCatalog } from './registry/builtInPetRegistry'
 
 export const PET_SELECTION_STORAGE_KEY = 'deep-pet.selected-pet.v1'
@@ -100,9 +100,9 @@ export function listSelectablePets() {
 }
 
 function normalizeSelectedPetState(value: Partial<SelectedPetState>): SelectedPetState {
-  const petId = typeof value.selectedPetId === 'string' && hasBuiltInPetPackage(value.selectedPetId)
-    ? value.selectedPetId
-    : DEFAULT_PET_PACKAGE_ID
+  const rawPetId = typeof value.selectedPetId === 'string' ? value.selectedPetId : ''
+  const normalizedLegacyPetId = rawPetId === LEGACY_DEFAULT_PET_PACKAGE_ID ? DEFAULT_PET_PACKAGE_ID : rawPetId
+  const petId = hasBuiltInPetPackage(normalizedLegacyPetId) ? normalizedLegacyPetId : DEFAULT_PET_PACKAGE_ID
 
   return {
     selectedPetId: petId,

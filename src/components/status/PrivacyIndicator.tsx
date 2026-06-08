@@ -10,17 +10,17 @@ const PrivacyIndicator: React.FC = () => {
   const indicators: Array<{ active: boolean; label: string; color: string }> = [
     {
       active: isScreenMonitoring,
-      label: 'Screen',
+      label: '屏幕感知',
       color: '#ef4444',
     },
     {
       active: isAnalyzing,
-      label: 'AI',
+      label: '分析中',
       color: '#f59e0b',
     },
     {
       active: config.enabled,
-      label: 'API',
+      label: 'AI 对话',
       color: '#22c55e',
     },
   ]
@@ -50,7 +50,7 @@ const PrivacyIndicator: React.FC = () => {
         <div
           key={i}
           style={dotStyle(ind.active, ind.color)}
-          title={`${ind.label}: ${ind.active ? 'Active' : 'Inactive'}`}
+          title={`${ind.label}：${ind.active ? '已开启' : '未开启'}`}
         />
       ))}
     </div>

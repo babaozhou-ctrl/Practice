@@ -1,4 +1,7 @@
 import type { SpriteDefinition } from '../../types/animation'
+import type { AIConfig } from '../../types/chat'
+import type { PluginAIChatExecutionRequest } from '../../plugins/types'
+import type { PluginDiscoveryRecord } from '../../plugins/runtime/types'
 import type {
   PetAnimationConfig,
   PetAppearanceProfile,
@@ -9,8 +12,6 @@ import type {
   PetProductionProfile,
   PetStatesConfig,
 } from './petPackage'
-import type { PluginDiscoveryRecord } from '../../plugins/runtime/types'
-import type { PluginAIChatExecutionRequest } from '../../plugins/types'
 
 interface ImportedPetDiskPackage {
   id: string
@@ -29,6 +30,7 @@ interface ImportedPetDiskPackage {
 
 declare global {
   interface Window {
+    BroadcastChannel?: typeof BroadcastChannel
     PIXI?: any
     electronAPI?: {
       movePet?: (x: number, y: number) => void
@@ -36,7 +38,9 @@ declare global {
       toggleClickThrough?: () => void
       openChat?: () => void
       openSettings?: () => void
+      onShowChat?: (callback: () => void) => void
       quitApp?: () => void
+      capturePrimaryScreen?: () => Promise<string | null>
       extractDocumentText?: (payload: {
         fileName: string
         mimeType?: string
@@ -51,6 +55,31 @@ declare global {
         payload: PluginAIChatExecutionRequest,
         onChunk?: (chunk: string) => void,
       ) => Promise<string>
+      runPluginAISummary?: (payload: {
+        providerId: string
+        config: AIConfig
+        fileName: string
+        content: string
+      }) => Promise<string>
+      runPluginScreenCapture?: (payload: {
+        providerId: string
+      }) => Promise<string | null>
+      runPluginScreenOCR?: (payload: {
+        providerId: string
+        imageData: string
+      }) => Promise<string>
+      runPluginScreenLocalVision?: (payload: {
+        providerId: string
+        imageData: string
+      }) => Promise<string>
+      runPluginScreenCloudVision?: (payload: {
+        providerId: string
+        imageData: string
+      }) => Promise<string>
+      runPluginAIHealthCheck?: (payload: {
+        providerId: string
+        config: AIConfig
+      }) => Promise<{ ok: boolean; message: string }>
       cancelPluginAIChat?: (requestId: string) => Promise<boolean>
       onSpeech?: (callback: (msg: string, dur: number) => void) => void
       onContextUpdate?: (callback: (info: { title: string; process: string; idleMs?: number }) => void) => void

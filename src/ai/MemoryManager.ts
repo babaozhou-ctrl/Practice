@@ -1,6 +1,7 @@
 import type { ChatMessage, CompanionChatContext, CompanionMemorySnapshot } from '../types/chat'
 import {
   EMPTY_COMPANION_MEMORY,
+  captureCompanionFileAnalysis,
   cloneCompanionMemory,
   readCompanionMemory,
   writeCompanionMemory,
@@ -84,6 +85,15 @@ export class MemoryManager {
     this.companionMemory = writeCompanionMemory(next)
   }
 
+  rememberFileAnalysis(
+    fileName: string,
+    briefSummary: string,
+    detailedAnalysis?: string | null,
+    sceneId?: string | null,
+  ) {
+    this.companionMemory = captureCompanionFileAnalysis(fileName, briefSummary, detailedAnalysis, sceneId)
+  }
+
   captureContext(context: CompanionChatContext, target?: CompanionMemorySnapshot) {
     const next = target ?? cloneCompanionMemory(readCompanionMemory())
     next.lastActivity = context.activityLabel
@@ -138,9 +148,10 @@ function pushUnique(items: string[], value: string, max: number) {
 
 function extractPreferredName(text: string): string | null {
   const patterns = [
-    /(?:叫我|可以叫我|你可以叫我|以后叫我)\s*([^\s，。！？,.!?\n]{1,12})/,
-    /(?:我的名字是|我叫)\s*([^\s，。！？,.!?\n]{1,12})/,
+    /(?:叫我|可以叫我|你可以叫我|以后叫我)\s*([^\s，。！？、,.!?\n]{1,12})/u,
+    /(?:我的名字是|我叫)\s*([^\s，。！？、,.!?\n]{1,12})/u,
     /call me\s+([a-zA-Z0-9_-]{1,16})/i,
+    /my name is\s+([a-zA-Z0-9_-]{1,16})/i,
   ]
 
   for (const pattern of patterns) {
@@ -156,9 +167,10 @@ function extractPreferredName(text: string): string | null {
 
 function extractPreferencePhrases(text: string): string[] {
   const results = extractPhrases(text, [
-    /(?:我喜欢|我很喜欢|最喜欢)([^，。！？,.!?\n]{1,20})/g,
-    /我对([^，。！？,.!?\n]{1,20})很感兴趣/g,
+    /(?:我喜欢|我很喜欢|最喜欢)([^，。！？、,.!?\n]{1,20})/gu,
+    /我对([^，。！？、,.!?\n]{1,20})很感兴趣/gu,
     /I like\s+([^,.!?\n]{1,20})/gi,
+    /I love\s+([^,.!?\n]{1,20})/gi,
   ])
 
   return results.map((value) => `喜欢${value}`)
@@ -166,9 +178,10 @@ function extractPreferencePhrases(text: string): string[] {
 
 function extractAvoidancePhrases(text: string): string[] {
   const results = extractPhrases(text, [
-    /(?:我不喜欢|我讨厌)([^，。！？,.!?\n]{1,20})/g,
-    /我受不了([^，。！？,.!?\n]{1,20})/g,
+    /(?:我不喜欢|我讨厌)([^，。！？、,.!?\n]{1,20})/gu,
+    /我受不了([^，。！？、,.!?\n]{1,20})/gu,
     /I don't like\s+([^,.!?\n]{1,20})/gi,
+    /I hate\s+([^,.!?\n]{1,20})/gi,
   ])
 
   return results.map((value) => `不喜欢${value}`)
@@ -176,9 +189,10 @@ function extractAvoidancePhrases(text: string): string[] {
 
 function extractRitualPhrases(text: string): string[] {
   return extractPhrases(text, [
-    /(?:我一般|我通常|我习惯|我经常)([^，。！？,.!?\n]{1,24})/g,
-    /(?:我每天)([^，。！？,.!?\n]{1,24})/g,
+    /(?:我一般会|我通常|我习惯|我经常)([^，。！？、,.!?\n]{1,24})/gu,
+    /(?:我每天)([^，。！？、,.!?\n]{1,24})/gu,
     /I usually\s+([^,.!?\n]{1,24})/gi,
+    /I often\s+([^,.!?\n]{1,24})/gi,
   ])
 }
 
@@ -225,9 +239,14 @@ function buildRecentTopic(context: CompanionChatContext): string | null {
   const base = activityLabels[context.activityLabel]
   if (!base) return null
 
-  const sceneLabel = context.sceneLabel && context.sceneLabel !== 'unknown'
-    ? context.sceneLabel
-    : null
+  const sceneLabel = context.sceneLabel && context.sceneLabel !== 'unknown' ? context.sceneLabel : null
+  const screenSummary = context.screenSummary?.trim() || null
+
+  if (screenSummary) {
+    return sceneLabel
+      ? `${base}（${sceneLabel}）：${screenSummary.slice(0, 24)}`
+      : `${base}：${screenSummary.slice(0, 24)}`
+  }
 
   if (context.windowTitle && context.windowTitle !== 'unknown') {
     return sceneLabel

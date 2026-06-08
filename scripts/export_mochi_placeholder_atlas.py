@@ -16,7 +16,6 @@ ATLAS_H = CELL_H * ROWS
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "public" / "pets" / "mochi" / "sprite-atlas.png"
-LEGACY_OUTPUT = ROOT / "public" / "pets" / "catgirl" / "sprite-atlas.png"
 
 PALETTE = {
     "outline": "#84b9e6",
@@ -112,9 +111,10 @@ def draw_mouth(draw: ImageDraw.ImageDraw, x: int, y: int, mood: str = "soft") ->
     if mood == "happy":
         px(draw, x - 2, y, PALETTE["outline_dark"])
         px(draw, x - 1, y + 1, PALETTE["outline_dark"])
-        px(draw, x, y, PALETTE["outline_dark"])
+        px(draw, x, y + 2, PALETTE["outline_dark"])
         px(draw, x + 1, y + 1, PALETTE["outline_dark"])
         px(draw, x + 2, y, PALETTE["outline_dark"])
+        px(draw, x, y + 1, PALETTE["blush"])
         return
     if mood == "chat":
         px(draw, x - 2, y, PALETTE["outline_dark"])
@@ -122,12 +122,14 @@ def draw_mouth(draw: ImageDraw.ImageDraw, x: int, y: int, mood: str = "soft") ->
         px(draw, x, y + 2, PALETTE["outline_dark"])
         px(draw, x + 1, y + 1, PALETTE["outline_dark"])
         px(draw, x + 2, y, PALETTE["outline_dark"])
+        px(draw, x, y + 1, PALETTE["eye_shine"])
         return
     if mood == "o":
         px(draw, x, y, PALETTE["outline_dark"])
         px(draw, x - 1, y + 1, PALETTE["outline_dark"])
         px(draw, x + 1, y + 1, PALETTE["outline_dark"])
         px(draw, x, y + 2, PALETTE["outline_dark"])
+        px(draw, x, y + 1, PALETTE["blush"])
         return
     if mood == "flat":
         rect(draw, x - 1, y, x + 1, y, PALETTE["outline_dark"])
@@ -459,28 +461,187 @@ def coding_frames() -> list[dict]:
 
 def watching_frames() -> list[dict]:
     return [
-        {"head_tilt": -2, "left_ear_drop": 5, "right_ear_drop": 3, "eye_shift_left": 1, "eye_shift_right": 1, "mouth": "w", "cheek_boost": True, "body_shift": -1, "head_widen": 1, "face_drop": 1, "loaf_mode": True, "loaf_drop": 1},
-        {"head_tilt": -1, "left_paw_up": 1, "left_ear_drop": 6, "right_ear_drop": 4, "eye_shift_left": 1, "eye_shift_right": 1, "mouth": "chat", "cheek_boost": True, "head_widen": 1, "face_drop": 1, "loaf_mode": True, "loaf_drop": 2},
-        {"head_tilt": 0, "blink": True, "left_ear_drop": 6, "right_ear_drop": 6, "music": True, "mouth": "flat", "float_bob": 0, "loaf_mode": True, "loaf_drop": 2, "loaf_width": 1, "head_widen": 1, "face_drop": 2},
-        {"head_tilt": 2, "left_ear_drop": 4, "right_ear_drop": 6, "eye_shift_left": -1, "eye_shift_right": -1, "mouth": "w", "cheek_boost": True, "body_shift": 1, "head_widen": 1, "face_drop": 1, "loaf_mode": True, "loaf_drop": 1},
+        {
+            "head_tilt": -2,
+            "left_ear_drop": 6,
+            "right_ear_drop": 3,
+            "left_ear_out": 1,
+            "eye_shift_left": 1,
+            "eye_shift_right": 1,
+            "eye_style": "half",
+            "mouth": "flat",
+            "cheek_boost": True,
+            "body_shift": -1,
+            "head_widen": 1,
+            "face_drop": 1,
+            "loaf_mode": True,
+            "loaf_drop": 2,
+            "loaf_width": 1,
+        },
+        {
+            "head_tilt": -1,
+            "left_paw_up": 2,
+            "right_paw_up": 1,
+            "left_ear_drop": 5,
+            "right_ear_drop": 4,
+            "eye_shift_left": 1,
+            "eye_shift_right": 1,
+            "mouth": "w",
+            "cheek_boost": True,
+            "music": True,
+            "head_widen": 1,
+            "face_drop": 1,
+            "loaf_mode": True,
+            "loaf_drop": 2,
+            "loaf_width": 1,
+        },
+        {
+            "head_tilt": 0,
+            "blink": True,
+            "left_ear_drop": 6,
+            "right_ear_drop": 5,
+            "music": True,
+            "mouth": "flat",
+            "float_bob": 0,
+            "loaf_mode": True,
+            "loaf_drop": 3,
+            "loaf_width": 2,
+            "head_widen": 1,
+            "face_drop": 2,
+        },
+        {
+            "head_tilt": 2,
+            "left_ear_drop": 3,
+            "right_ear_drop": 6,
+            "right_ear_out": 1,
+            "eye_shift_left": -1,
+            "eye_shift_right": -1,
+            "mouth": "w",
+            "cheek_boost": True,
+            "body_shift": 1,
+            "head_widen": 1,
+            "face_drop": 1,
+            "loaf_mode": True,
+            "loaf_drop": 1,
+            "loaf_width": 1,
+        },
     ]
 
 
 def chatting_frames() -> list[dict]:
     return [
-        {"float_bob": -1, "left_paw_up": 4, "right_paw_up": 1, "left_ear_drop": 2, "right_ear_drop": 5, "mouth": "chat", "cheek_boost": True, "head_widen": 1, "face_drop": 1, "body_width": -1},
-        {"float_bob": 0, "left_paw_up": 5, "right_paw_up": 2, "left_ear_drop": 2, "right_ear_drop": 4, "heart": True, "mouth": "happy", "cheek_boost": True, "head_widen": 1, "face_drop": 1, "body_width": -1},
-        {"float_bob": -1, "blink": True, "left_paw_up": 4, "right_paw_up": 4, "left_ear_drop": 3, "right_ear_drop": 3, "mouth": "chat", "cheek_boost": True, "head_widen": 1, "face_drop": 1, "body_width": -1},
-        {"float_bob": 0, "left_paw_up": 2, "right_paw_up": 2, "left_ear_drop": 3, "right_ear_drop": 3, "mouth": "w", "cheek_boost": True, "head_widen": 1, "face_drop": 1, "body_width": -1},
+        {
+            "float_bob": -1,
+            "x_shift": -1,
+            "left_paw_up": 5,
+            "right_paw_up": 2,
+            "left_ear_drop": 2,
+            "right_ear_drop": 5,
+            "mouth": "chat",
+            "cheek_boost": True,
+            "head_widen": 1,
+            "face_drop": 1,
+            "body_width": -1,
+        },
+        {
+            "float_bob": 0,
+            "x_shift": 1,
+            "left_paw_up": 3,
+            "right_paw_up": 5,
+            "left_ear_drop": 2,
+            "right_ear_drop": 3,
+            "heart": True,
+            "mouth": "happy",
+            "cheek_boost": True,
+            "head_widen": 1,
+            "face_drop": 1,
+            "body_width": -1,
+        },
+        {
+            "float_bob": -2,
+            "blink": True,
+            "left_paw_up": 5,
+            "right_paw_up": 5,
+            "left_ear_drop": 2,
+            "right_ear_drop": 2,
+            "mouth": "chat",
+            "cheek_boost": True,
+            "head_widen": 1,
+            "face_drop": 1,
+            "body_width": -1,
+        },
+        {
+            "float_bob": 0,
+            "left_paw_up": 2,
+            "right_paw_up": 2,
+            "left_ear_drop": 3,
+            "right_ear_drop": 3,
+            "mouth": "w",
+            "cheek_boost": True,
+            "head_widen": 1,
+            "face_drop": 1,
+            "body_width": -1,
+        },
     ]
 
 
 def gaming_frames() -> list[dict]:
     return [
-        {"float_bob": -1, "left_paw_up": 2, "right_paw_up": 4, "left_ear_drop": 2, "right_ear_drop": 5, "mouth": "o", "eye_style": "wide", "head_widen": 1, "face_drop": 1, "body_width": -1},
-        {"float_bob": -2, "x_shift": 1, "left_paw_up": 3, "right_paw_up": 5, "left_ear_drop": 1, "right_ear_drop": 4, "signal": True, "mouth": "o", "eye_style": "wide", "head_widen": 1, "face_drop": 1, "body_width": -1},
-        {"float_bob": -1, "x_shift": -1, "left_paw_up": 5, "right_paw_up": 2, "left_ear_drop": 4, "right_ear_drop": 1, "mouth": "happy", "eye_style": "wide", "head_widen": 1, "face_drop": 1, "body_width": -1},
-        {"float_bob": 0, "left_paw_up": 2, "right_paw_up": 2, "left_ear_drop": 4, "right_ear_drop": 4, "mouth": "flat", "eye_style": "half", "head_widen": 1, "face_drop": 1, "body_width": -1},
+        {
+            "float_bob": -1,
+            "head_tilt": -1,
+            "left_paw_up": 2,
+            "right_paw_up": 4,
+            "left_ear_drop": 2,
+            "right_ear_drop": 5,
+            "mouth": "o",
+            "eye_style": "wide",
+            "head_widen": 1,
+            "face_drop": 1,
+            "body_width": -1,
+        },
+        {
+            "float_bob": -2,
+            "x_shift": 1,
+            "head_tilt": 1,
+            "left_paw_up": 4,
+            "right_paw_up": 5,
+            "left_ear_drop": 1,
+            "right_ear_drop": 4,
+            "signal": True,
+            "mouth": "o",
+            "eye_style": "wide",
+            "head_widen": 1,
+            "face_drop": 1,
+            "body_width": -1,
+        },
+        {
+            "float_bob": -1,
+            "x_shift": -1,
+            "head_tilt": -1,
+            "left_paw_up": 5,
+            "right_paw_up": 3,
+            "left_ear_drop": 4,
+            "right_ear_drop": 1,
+            "mouth": "happy",
+            "eye_style": "wide",
+            "cheek_boost": True,
+            "head_widen": 1,
+            "face_drop": 1,
+            "body_width": -1,
+        },
+        {
+            "float_bob": 0,
+            "left_paw_up": 2,
+            "right_paw_up": 2,
+            "left_ear_drop": 4,
+            "right_ear_drop": 4,
+            "mouth": "flat",
+            "eye_style": "half",
+            "head_widen": 1,
+            "face_drop": 1,
+            "body_width": -1,
+        },
     ]
 
 
@@ -504,10 +665,64 @@ def happy_frames() -> list[dict]:
 
 def excited_frames() -> list[dict]:
     return [
-        {"mouth": "happy", "float_bob": -2, "left_paw_up": 5, "right_paw_up": 5, "left_ear_drop": 0, "right_ear_drop": 1, "signal": True, "eye_style": "wide", "cheek_boost": True, "head_widen": 1, "face_drop": 1, "body_width": -1},
-        {"mouth": "o", "float_bob": -3, "left_paw_up": 7, "right_paw_up": 7, "left_ear_drop": -1, "right_ear_drop": -1, "eye_style": "wide", "cheek_boost": True, "head_widen": 1, "face_drop": 1, "body_width": -1},
-        {"mouth": "happy", "float_bob": -3, "x_shift": 1, "left_paw_up": 6, "right_paw_up": 6, "left_ear_drop": 0, "right_ear_drop": 1, "heart": True, "eye_style": "wide", "cheek_boost": True, "head_widen": 1, "face_drop": 1, "body_width": -1},
-        {"mouth": "happy", "float_bob": -1, "x_shift": -1, "left_paw_up": 4, "right_paw_up": 5, "left_ear_drop": 1, "right_ear_drop": 1, "cheek_boost": True, "head_widen": 1, "face_drop": 1, "body_width": -1},
+        {
+            "mouth": "happy",
+            "float_bob": -2,
+            "left_paw_up": 5,
+            "right_paw_up": 5,
+            "left_ear_drop": 0,
+            "right_ear_drop": 1,
+            "left_ear_out": 1,
+            "signal": True,
+            "eye_style": "wide",
+            "cheek_boost": True,
+            "head_widen": 1,
+            "face_drop": 1,
+            "body_width": -1,
+        },
+        {
+            "mouth": "o",
+            "float_bob": -4,
+            "left_paw_up": 8,
+            "right_paw_up": 8,
+            "left_ear_drop": -1,
+            "right_ear_drop": -1,
+            "left_ear_out": 1,
+            "right_ear_out": 1,
+            "eye_style": "wide",
+            "cheek_boost": True,
+            "head_widen": 1,
+            "face_drop": 1,
+            "body_width": -1,
+        },
+        {
+            "mouth": "happy",
+            "float_bob": -3,
+            "x_shift": 1,
+            "left_paw_up": 7,
+            "right_paw_up": 6,
+            "left_ear_drop": 0,
+            "right_ear_drop": 1,
+            "heart": True,
+            "eye_style": "wide",
+            "cheek_boost": True,
+            "head_widen": 1,
+            "face_drop": 1,
+            "body_width": -1,
+        },
+        {
+            "mouth": "happy",
+            "float_bob": -1,
+            "x_shift": -1,
+            "left_paw_up": 4,
+            "right_paw_up": 5,
+            "left_ear_drop": 1,
+            "right_ear_drop": 1,
+            "cheek_boost": True,
+            "head_widen": 1,
+            "face_drop": 1,
+            "body_width": -1,
+        },
     ]
 
 
@@ -607,12 +822,9 @@ def build_atlas() -> Image.Image:
 
 def main() -> None:
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    LEGACY_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     atlas = build_atlas()
     atlas.save(OUTPUT)
-    atlas.save(LEGACY_OUTPUT)
     print(f"wrote {OUTPUT}")
-    print(f"mirrored {LEGACY_OUTPUT}")
 
 
 if __name__ == "__main__":

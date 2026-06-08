@@ -40,7 +40,7 @@ export class ChatClient {
     onError: ErrorCallback,
   ) {
     if (!this.config.enabled || !this.config.apiKey) {
-      onError(new Error('AI not configured. Set API key in settings.'))
+      onError(new Error('还没有完成 AI 对话配置。去陪伴设置里填好 API Key 之后，我就能继续陪你聊天了。'))
       return
     }
 
@@ -114,6 +114,15 @@ export class ChatClient {
 
   getCompanionMemory() {
     return this.memory.getCompanionMemory()
+  }
+
+  rememberFileAnalysis(
+    fileName: string,
+    briefSummary: string,
+    detailedAnalysis?: string | null,
+    sceneId?: string | null,
+  ) {
+    this.memory.rememberFileAnalysis(fileName, briefSummary, detailedAnalysis, sceneId)
   }
 
   getActivePluginRequestId(): string | null {

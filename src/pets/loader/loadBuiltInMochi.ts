@@ -17,6 +17,7 @@ import type {
   PetStatesConfig,
 } from '../../shared/types/petPackage'
 import { buildPetPackageFromFiles } from './loadPetPackageFromFiles'
+import { resolveBuiltInPetAssetBasePath } from './resolveBuiltInPetAssetBasePath'
 
 export function loadBuiltInMochiPackage(): BuiltInPetPackage {
   return buildPetPackageFromFiles({
@@ -28,6 +29,6 @@ export function loadBuiltInMochiPackage(): BuiltInPetPackage {
     productionProfile: productionProfileJson as PetProductionProfile,
     assetStatus: assetStatusJson as PetAssetStatus,
     personality: personalityJson as Record<string, unknown>,
-    assetBasePath: '/pets/mochi',
+    assetBasePath: resolveBuiltInPetAssetBasePath('mochi'),
   })
 }

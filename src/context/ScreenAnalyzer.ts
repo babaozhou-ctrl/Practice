@@ -27,8 +27,11 @@ export class ScreenAnalyzer {
   }
 
   async captureScreenshot(): Promise<string | null> {
-    // Placeholder for Phase 2
-    return null
+    try {
+      return (await window.electronAPI?.capturePrimaryScreen?.()) ?? null
+    } catch {
+      return null
+    }
   }
 
   async analyzeWithOCR(imageData: string): Promise<string> {

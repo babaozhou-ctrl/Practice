@@ -33,11 +33,11 @@ const autoRegisteredPluginProviderIds = new Set<string>()
 registerCapabilityProvider({
   descriptor: {
     id: 'builtin.ai-chat.deepseek',
-    label: 'DeepSeek Companion Chat',
+    label: 'DeepSeek 陪伴对话',
     capability: 'aiChat',
     kind: 'builtin',
     availability: 'active',
-    description: 'Streaming companion chat and AI-backed document summaries through a unified provider contract.',
+    description: '用于陪伴对话和文件总结的内置 AI 接入。',
   },
   aiChatProvider,
 })
@@ -45,11 +45,11 @@ registerCapabilityProvider({
 registerCapabilityProvider({
   descriptor: {
     id: 'builtin.file-analysis.default',
-    label: 'Built-in File Analyzer',
+    label: '内置文件分析',
     capability: 'fileAnalysis',
     kind: 'builtin',
     availability: 'active',
-    description: 'Reads text-like files and prepares a lightweight summary for companion chat.',
+    description: '负责读取常见文本、代码和文档内容，并生成一版轻量整理。',
   },
   fileAnalysisProvider: createBuiltinFileAnalysisProvider(),
 })
@@ -57,15 +57,15 @@ registerCapabilityProvider({
 registerCapabilityProvider({
   descriptor: {
     id: 'builtin.screen-perception.placeholder',
-    label: 'Built-in Screen Perception Placeholder',
+    label: '内置屏幕感知',
     capability: 'screenPerception',
     kind: 'builtin',
     availability: 'active',
-    description: 'Placeholder screen-perception backend reserved for future OCR and vision flows.',
+    description: '当前用于屏幕感知链路的内置接入，后续会继续补强 OCR 和视觉能力。',
   },
   screenPerceptionProvider: {
     id: 'builtin.screen-perception.placeholder',
-    label: 'Built-in Screen Perception Placeholder',
+    label: '内置屏幕感知',
     captureScreenshot() {
       return screenAnalyzer.captureScreenshot()
     },
@@ -88,13 +88,13 @@ export function registerCapabilityProvider(registration: CapabilityProviderRegis
   }
 
   if (descriptor.capability === 'aiChat' && !registration.aiChatProvider) {
-    throw new Error(`Provider ${descriptor.id} is missing an aiChatProvider implementation.`)
+    throw new Error(`能力提供器 ${descriptor.id} 缺少 AI 对话实现。`)
   }
   if (descriptor.capability === 'fileAnalysis' && !registration.fileAnalysisProvider) {
-    throw new Error(`Provider ${descriptor.id} is missing a fileAnalysisProvider implementation.`)
+    throw new Error(`能力提供器 ${descriptor.id} 缺少文件分析实现。`)
   }
   if (descriptor.capability === 'screenPerception' && !registration.screenPerceptionProvider) {
-    throw new Error(`Provider ${descriptor.id} is missing a screenPerceptionProvider implementation.`)
+    throw new Error(`能力提供器 ${descriptor.id} 缺少屏幕感知实现。`)
   }
 
   registrations.set(descriptor.id, {
@@ -142,9 +142,7 @@ export function listProviderDescriptors(
   options: { includeDiscovered?: boolean } = {},
 ): ProviderDescriptor[] {
   const active = Array.from(registrations.values()).map((registration) => registration.descriptor)
-  const discovered = options.includeDiscovered
-    ? Array.from(discoveredProviderDescriptors.values())
-    : []
+  const discovered = options.includeDiscovered ? Array.from(discoveredProviderDescriptors.values()) : []
 
   return [...active, ...discovered]
     .filter((descriptor) => !capability || descriptor.capability === capability)
@@ -184,7 +182,7 @@ export function isRegisteredProvider(capability: PluginCapabilityProvider, provi
 export function getDefaultProviderId(capability: PluginCapabilityProvider): string {
   const descriptor = listProviderDescriptors(capability)[0]
   if (!descriptor) {
-    throw new Error(`No registered providers found for capability "${capability}".`)
+    throw new Error(`当前没有找到可用的 ${capability} 能力接入。`)
   }
   return descriptor.id
 }
@@ -203,7 +201,7 @@ export function resolveFileAnalysisProvider(providerId?: string): FileAnalysisPr
   const normalizedId = normalizeProviderId('fileAnalysis', providerId)
   const registration = registrations.get(normalizedId)
   if (!registration?.fileAnalysisProvider) {
-    throw new Error(`No file analysis provider registered for id "${normalizedId}".`)
+    throw new Error(`没有找到可用的文件分析接入：${normalizedId}`)
   }
   return registration.fileAnalysisProvider
 }
@@ -212,7 +210,7 @@ export function resolveAIChatProvider(providerId?: string): AIChatProvider {
   const normalizedId = normalizeProviderId('aiChat', providerId)
   const registration = registrations.get(normalizedId)
   if (!registration?.aiChatProvider) {
-    throw new Error(`No AI chat provider registered for id "${normalizedId}".`)
+    throw new Error(`没有找到可用的 AI 对话接入：${normalizedId}`)
   }
   return registration.aiChatProvider
 }
@@ -221,7 +219,7 @@ export function resolveScreenPerceptionProvider(providerId?: string): ScreenPerc
   const normalizedId = normalizeProviderId('screenPerception', providerId)
   const registration = registrations.get(normalizedId)
   if (!registration?.screenPerceptionProvider) {
-    throw new Error(`No screen perception provider registered for id "${normalizedId}".`)
+    throw new Error(`没有找到可用的屏幕感知接入：${normalizedId}`)
   }
   return registration.screenPerceptionProvider
 }
@@ -229,7 +227,7 @@ export function resolveScreenPerceptionProvider(providerId?: string): ScreenPerc
 function createBuiltinFileAnalysisProvider(): FileAnalysisProvider {
   return {
     id: 'builtin.file-analysis.default',
-    label: 'Built-in File Analyzer',
+    label: '内置文件分析',
     readFile(file) {
       return fileAnalyzer.readFile(file)
     },
@@ -258,8 +256,8 @@ function tryActivateDiscoveredPluginProvider(
         kind: 'plugin',
         availability: 'active',
         description:
-          `${candidate.pluginName} is connected as a selectable file-analysis provider. ` +
-          'This phase routes file extraction through the built-in reader, while summary generation can already be delegated to the plugin runtime.',
+          `${candidate.pluginName} 已经接进文件分析选择里。` +
+          '现阶段文件读取仍优先走内置读取器，但总结生成已经可以交给插件侧处理。',
       },
       fileAnalysisProvider: {
         id: candidate.providerId,
@@ -298,8 +296,8 @@ function tryActivateDiscoveredPluginProvider(
         kind: 'plugin',
         availability: 'active',
         description:
-          `${candidate.pluginName} is connected as a selectable chat provider. ` +
-          'This phase already delegates streaming chat to the plugin runtime, while document summaries still fall back to the built-in DeepSeek provider.',
+          `${candidate.pluginName} 已经接进 AI 对话选择里。` +
+          '现阶段流式对话已经能走插件侧，文件总结在可用时也会优先交给插件处理。',
       },
       aiChatProvider: {
         id: candidate.providerId,
@@ -310,31 +308,125 @@ function tryActivateDiscoveredPluginProvider(
           }
 
           try {
-            return await window.electronAPI.runPluginAIChat({
-              requestId: request.requestId,
-              providerId: candidate.providerId,
-              config: request.config,
-              systemPrompt: request.systemPrompt,
-              messages: request.messages,
-            }, callbacks.onChunk)
+            return await window.electronAPI.runPluginAIChat(
+              {
+                requestId: request.requestId,
+                providerId: candidate.providerId,
+                config: request.config,
+                systemPrompt: request.systemPrompt,
+                messages: request.messages,
+              },
+              callbacks.onChunk,
+            )
           } catch {
             return aiChatProvider.streamChat(request, callbacks)
           }
         },
         async summarizeDocument(request) {
-          return aiChatProvider.summarizeDocument(request)
-        },
-        async healthCheck(config) {
-          if (!config.enabled) {
-            return {
-              ok: false,
-              message: 'AI chat is disabled.',
-            }
+          if (!window.electronAPI?.runPluginAISummary) {
+            return aiChatProvider.summarizeDocument(request)
           }
 
-          return {
-            ok: true,
-            message: `${candidate.label} is available through the plugin runtime.`,
+          try {
+            return await window.electronAPI.runPluginAISummary({
+              providerId: candidate.providerId,
+              config: request.config,
+              fileName: request.fileName,
+              content: request.content,
+            })
+          } catch {
+            return aiChatProvider.summarizeDocument(request)
+          }
+        },
+        async healthCheck(config) {
+          if (!window.electronAPI?.runPluginAIHealthCheck) {
+            return aiChatProvider.healthCheck(config)
+          }
+
+          try {
+            return await window.electronAPI.runPluginAIHealthCheck({
+              providerId: candidate.providerId,
+              config,
+            })
+          } catch {
+            return aiChatProvider.healthCheck(config)
+          }
+        },
+      },
+    })
+
+    autoRegisteredPluginProviderIds.add(candidate.providerId)
+    return true
+  }
+
+  if (candidate.runtimeBinding === 'screenPerception') {
+    registerCapabilityProvider({
+      descriptor: {
+        id: candidate.providerId,
+        label: candidate.label,
+        capability: 'screenPerception',
+        kind: 'plugin',
+        availability: 'active',
+        description:
+          `${candidate.pluginName} 已经接进屏幕感知选择里。` +
+          '屏幕捕捉和分析在可用时会优先走插件侧，内置接入继续作为兜底。',
+      },
+      screenPerceptionProvider: {
+        id: candidate.providerId,
+        label: candidate.label,
+        async captureScreenshot() {
+          if (!window.electronAPI?.runPluginScreenCapture) {
+            return screenAnalyzer.captureScreenshot()
+          }
+
+          try {
+            return await window.electronAPI.runPluginScreenCapture({
+              providerId: candidate.providerId,
+            })
+          } catch {
+            return screenAnalyzer.captureScreenshot()
+          }
+        },
+        async analyzeWithOCR(imageData) {
+          if (!window.electronAPI?.runPluginScreenOCR) {
+            return screenAnalyzer.analyzeWithOCR(imageData)
+          }
+
+          try {
+            return await window.electronAPI.runPluginScreenOCR({
+              providerId: candidate.providerId,
+              imageData,
+            })
+          } catch {
+            return screenAnalyzer.analyzeWithOCR(imageData)
+          }
+        },
+        async analyzeWithLocalVision(imageData) {
+          if (!window.electronAPI?.runPluginScreenLocalVision) {
+            return screenAnalyzer.analyzeWithLocalVision(imageData)
+          }
+
+          try {
+            return await window.electronAPI.runPluginScreenLocalVision({
+              providerId: candidate.providerId,
+              imageData,
+            })
+          } catch {
+            return screenAnalyzer.analyzeWithLocalVision(imageData)
+          }
+        },
+        async analyzeWithCloudVision(imageData) {
+          if (!window.electronAPI?.runPluginScreenCloudVision) {
+            return screenAnalyzer.analyzeWithCloudVision(imageData)
+          }
+
+          try {
+            return await window.electronAPI.runPluginScreenCloudVision({
+              providerId: candidate.providerId,
+              imageData,
+            })
+          } catch {
+            return screenAnalyzer.analyzeWithCloudVision(imageData)
           }
         },
       },
@@ -361,7 +453,7 @@ function deriveProviderCandidatesFromPlugin(
       label: provider.label,
       description:
         provider.description ??
-        `${plugin.name} 声明了一个 ${provider.capability} provider 候选，但还没有真正注册可执行实现。`,
+        `${plugin.name} 里已经放了一个候选接入项，但现在还不能直接启用。`,
     }))
   }
 
@@ -374,9 +466,30 @@ function deriveProviderCandidatesFromPlugin(
       declaredProviderId: item.capability,
       manifestCapability: item.capability,
       runtimeBinding: item.runtimeBinding,
-      label: `${plugin.name} (${item.runtimeBinding})`,
-      description: `${plugin.name} 声明了 ${item.capability}，已经能和当前 ${item.runtimeBinding} provider 契约对齐，但还没有真正注册成可执行实现。`,
+      label: `${plugin.name}（${renderManifestCapabilityLabel(item.capability)}）`,
+      description: `${plugin.name} 已经声明了这项能力，也能对上当前能力链路，但现在还没有真正接成可用实现。`,
     }))
+}
+
+function renderManifestCapabilityLabel(capability: string): string {
+  switch (capability) {
+    case 'ai-provider':
+      return 'AI 对话'
+    case 'document-analysis':
+      return '文件分析'
+    case 'screen-perception':
+      return '屏幕感知'
+    case 'work-mode':
+      return '工作节奏'
+    case 'pet-behavior':
+      return '宠物行为'
+    case 'ui-extension':
+      return '界面扩展'
+    case 'context-classifier':
+      return '上下文识别'
+    default:
+      return capability
+  }
 }
 
 function isReadyProviderCapability(

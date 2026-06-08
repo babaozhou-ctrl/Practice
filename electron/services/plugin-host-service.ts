@@ -1,6 +1,7 @@
-import { pathToFileURL } from 'url'
+import { app } from 'electron'
 import { readdir, readFile, stat } from 'fs/promises'
 import { dirname, join, resolve } from 'path'
+import { pathToFileURL } from 'url'
 import type { AIConfig, ChatMessage } from '../../src/types/chat'
 
 export type PluginRuntimeStatus = 'not_loaded' | 'loaded' | 'load_failed'
@@ -63,6 +64,23 @@ interface PluginAIChatRequest {
   emitChunk?: (chunk: string) => void
 }
 
+interface PluginAISummaryRequest {
+  providerId: string
+  config: AIConfig
+  fileName: string
+  content: string
+}
+
+interface PluginAIHealthCheckRequest {
+  providerId: string
+  config: AIConfig
+}
+
+interface PluginScreenPerceptionRequest {
+  providerId: string
+  imageData?: string
+}
+
 interface PluginFileAnalysisContext {
   providerId: string
   pluginId: string
@@ -109,9 +127,17 @@ interface PluginAIChatApi {
   ) => Promise<{ ok: boolean; message: string }> | { ok: boolean; message: string }
 }
 
+interface PluginScreenPerceptionApi {
+  captureScreenshot?: () => Promise<string | null> | string | null
+  analyzeWithOCR?: (imageData: string) => Promise<string> | string
+  analyzeWithLocalVision?: (imageData: string) => Promise<string> | string
+  analyzeWithCloudVision?: (imageData: string) => Promise<string> | string
+}
+
 interface PluginProvidersApi {
   aiChat?: Record<string, PluginAIChatApi | undefined>
   fileAnalysis?: Record<string, PluginFileAnalysisApi | undefined>
+  screenPerception?: Record<string, PluginScreenPerceptionApi | undefined>
 }
 
 interface PluginModuleShape {
@@ -128,18 +154,24 @@ interface ActiveAIChatRequestRecord {
   cancelled: boolean
 }
 
-const PLUGINS_DIR = resolve(process.cwd(), 'plugins')
 const SUPPORTED_PLUGIN_API_VERSIONS = new Set(['1.0.0'])
 const loadedPlugins = new Map<string, LoadedPluginRecord>()
 const activeAIChatRequests = new Map<string, ActiveAIChatRequestRecord>()
 const PLUGIN_AI_CHAT_TIMEOUT_MS = 20_000
 const PLUGIN_FILE_ANALYSIS_TIMEOUT_MS = 12_000
+const PLUGIN_SCREEN_TIMEOUT_MS = 8_000
+
+function resolveRuntimePluginsDir(): string {
+  if (app.isPackaged) {
+    return join(process.resourcesPath, 'plugins')
+  }
+
+  return resolve(process.cwd(), 'plugins')
+}
 
 export async function listLocalPluginManifests(): Promise<PluginDiscoveryRecord[]> {
-  let entries: Awaited<ReturnType<typeof readdir>> = []
-  try {
-    entries = await readdir(PLUGINS_DIR, { withFileTypes: true })
-  } catch {
+  const pluginDirs = await listRuntimePluginDirectories()
+  if (pluginDirs.length === 0) {
     loadedPlugins.clear()
     return []
   }
@@ -147,14 +179,10 @@ export async function listLocalPluginManifests(): Promise<PluginDiscoveryRecord[
   const discovered: PluginDiscoveryRecord[] = []
   const nextLoadedPlugins = new Map<string, LoadedPluginRecord>()
 
-  for (const entry of entries) {
-    if (!entry.isDirectory()) {
-      continue
-    }
-
-    const pluginDir = join(PLUGINS_DIR, entry.name)
+  for (const pluginDir of pluginDirs) {
+    const directoryName = pluginDir.split(/[\\/]/).pop() || pluginDir
     const manifestPath = join(pluginDir, 'manifest.json')
-    const manifestRecord = await loadPluginManifestRecord(entry.name, manifestPath)
+    const manifestRecord = await loadPluginManifestRecord(directoryName, manifestPath)
 
     if (manifestRecord.status !== 'valid') {
       discovered.push(manifestRecord)
@@ -186,19 +214,43 @@ export async function listLocalPluginManifests(): Promise<PluginDiscoveryRecord[
   })
 }
 
+async function listRuntimePluginDirectories(): Promise<string[]> {
+  const candidateRoots = app.isPackaged
+    ? [join(app.getAppPath(), 'plugins'), join(process.resourcesPath, 'plugins')]
+    : [resolveRuntimePluginsDir()]
+
+  const uniqueRoots = Array.from(new Set(candidateRoots.map((root) => resolve(root))))
+  const pluginDirs: string[] = []
+
+  for (const root of uniqueRoots) {
+    try {
+      const entries = await readdir(root, { withFileTypes: true })
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          pluginDirs.push(join(root, entry.name))
+        }
+      }
+    } catch {
+      // Ignore missing roots so dev builds and packaged builds can share the same lookup flow.
+    }
+  }
+
+  return pluginDirs
+}
+
 export async function runPluginFileAnalysis(
   request: PluginFileAnalysisRequest,
 ): Promise<string> {
   const loadedPlugin = findLoadedPluginByProviderId(request.providerId)
   if (!loadedPlugin) {
-    throw new Error(`未找到 provider=${request.providerId} 对应的已加载插件。`)
+    throw new Error(`没有找到和 ${request.providerId} 对应的已加载插件。`)
   }
 
   const providerKey = getDeclaredProviderId(request.providerId)
   const pluginProviders = getPluginProviders(loadedPlugin.module)
   const fileAnalysisProvider = pluginProviders.fileAnalysis?.[providerKey]
   if (!fileAnalysisProvider?.summarize) {
-    throw new Error(`插件 ${loadedPlugin.discovery.name} 没有实现 fileAnalysis provider "${providerKey}" 的 summarize。`)
+    throw new Error(`插件 ${loadedPlugin.discovery.name} 没有实现文件分析接入 "${providerKey}" 的 summarize。`)
   }
 
   const result = await withTimeout(
@@ -227,14 +279,14 @@ export async function runPluginAIChat(
 ): Promise<string> {
   const loadedPlugin = findLoadedPluginByProviderId(request.providerId)
   if (!loadedPlugin) {
-    throw new Error(`未找到 provider=${request.providerId} 对应的已加载插件。`)
+    throw new Error(`没有找到和 ${request.providerId} 对应的已加载插件。`)
   }
 
   const providerKey = getDeclaredProviderId(request.providerId)
   const pluginProviders = getPluginProviders(loadedPlugin.module)
   const aiChatProvider = pluginProviders.aiChat?.[providerKey]
   if (!aiChatProvider?.streamChat) {
-    throw new Error(`插件 ${loadedPlugin.discovery.name} 没有实现 aiChat provider "${providerKey}" 的 streamChat。`)
+    throw new Error(`插件 ${loadedPlugin.discovery.name} 没有实现 AI 对话接入 "${providerKey}" 的 streamChat。`)
   }
 
   const activeRequest: ActiveAIChatRequestRecord = {
@@ -289,7 +341,7 @@ export async function runPluginAIChat(
     )
 
     if (control.isCancelled()) {
-      const cancelError = new Error('Plugin AI chat request was cancelled.')
+      const cancelError = new Error('这次插件对话已经被取消了。')
       cancelError.name = 'AbortError'
       throw cancelError
     }
@@ -303,6 +355,132 @@ export async function runPluginAIChat(
   } finally {
     activeAIChatRequests.delete(request.requestId)
   }
+}
+
+export async function runPluginAISummary(
+  request: PluginAISummaryRequest,
+): Promise<string> {
+  const loadedPlugin = findLoadedPluginByProviderId(request.providerId)
+  if (!loadedPlugin) {
+    throw new Error(`没有找到和 ${request.providerId} 对应的已加载插件。`)
+  }
+
+  const providerKey = getDeclaredProviderId(request.providerId)
+  const pluginProviders = getPluginProviders(loadedPlugin.module)
+  const aiChatProvider = pluginProviders.aiChat?.[providerKey]
+  if (!aiChatProvider?.summarizeDocument) {
+    throw new Error(`插件 ${loadedPlugin.discovery.name} 没有实现 AI 对话接入 "${providerKey}" 的 summarizeDocument。`)
+  }
+
+  const result = await withTimeout(
+    Promise.resolve(
+      aiChatProvider.summarizeDocument(request.fileName, request.content, {
+        requestId: `plugin-ai-summary:${Date.now()}`,
+        providerId: request.providerId,
+        pluginId: loadedPlugin.discovery.id,
+        pluginName: loadedPlugin.discovery.name,
+        config: request.config,
+        systemPrompt: '',
+        messages: [],
+      }),
+    ),
+    PLUGIN_FILE_ANALYSIS_TIMEOUT_MS,
+    `插件 ${loadedPlugin.discovery.name} 的文档总结执行超时。`,
+  )
+
+  const normalized = typeof result === 'string' ? result.trim() : ''
+  if (!normalized) {
+    throw new Error(`插件 ${loadedPlugin.discovery.name} 返回了空的文档总结。`)
+  }
+
+  return normalized
+}
+
+export async function runPluginAIHealthCheck(
+  request: PluginAIHealthCheckRequest,
+): Promise<{ ok: boolean; message: string }> {
+  const loadedPlugin = findLoadedPluginByProviderId(request.providerId)
+  if (!loadedPlugin) {
+    throw new Error(`没有找到和 ${request.providerId} 对应的已加载插件。`)
+  }
+
+  const providerKey = getDeclaredProviderId(request.providerId)
+  const pluginProviders = getPluginProviders(loadedPlugin.module)
+  const aiChatProvider = pluginProviders.aiChat?.[providerKey]
+  if (!aiChatProvider?.healthCheck) {
+    return {
+      ok: true,
+      message: `插件 ${loadedPlugin.discovery.name} 已加载，但未提供独立健康检查。`,
+    }
+  }
+
+  return withTimeout(
+    Promise.resolve(aiChatProvider.healthCheck(request.config)),
+    PLUGIN_SCREEN_TIMEOUT_MS,
+    `插件 ${loadedPlugin.discovery.name} 的健康检查执行超时。`,
+  )
+}
+
+export async function runPluginScreenCapture(
+  request: PluginScreenPerceptionRequest,
+): Promise<string | null> {
+  const screenProvider = getPluginScreenPerceptionProvider(request.providerId)
+  if (!screenProvider.captureScreenshot) {
+    throw new Error(`插件 ${request.providerId} 还没有实现截图能力。`)
+  }
+
+  const result = await withTimeout(
+    Promise.resolve(screenProvider.captureScreenshot()),
+    PLUGIN_SCREEN_TIMEOUT_MS,
+    `插件 ${request.providerId} 的截图执行超时了。`,
+  )
+
+  return typeof result === 'string' ? result : null
+}
+
+export async function runPluginScreenOCR(
+  request: PluginScreenPerceptionRequest,
+): Promise<string> {
+  const screenProvider = getPluginScreenPerceptionProvider(request.providerId)
+  if (!screenProvider.analyzeWithOCR) {
+    throw new Error(`插件 ${request.providerId} 还没有实现 OCR 分析。`)
+  }
+
+  return withTimeout(
+    Promise.resolve(screenProvider.analyzeWithOCR(request.imageData ?? '')),
+    PLUGIN_SCREEN_TIMEOUT_MS,
+    `插件 ${request.providerId} 的 OCR 分析执行超时了。`,
+  )
+}
+
+export async function runPluginScreenLocalVision(
+  request: PluginScreenPerceptionRequest,
+): Promise<string> {
+  const screenProvider = getPluginScreenPerceptionProvider(request.providerId)
+  if (!screenProvider.analyzeWithLocalVision) {
+    throw new Error(`插件 ${request.providerId} 还没有实现本地视觉分析。`)
+  }
+
+  return withTimeout(
+    Promise.resolve(screenProvider.analyzeWithLocalVision(request.imageData ?? '')),
+    PLUGIN_SCREEN_TIMEOUT_MS,
+    `插件 ${request.providerId} 的本地视觉分析执行超时了。`,
+  )
+}
+
+export async function runPluginScreenCloudVision(
+  request: PluginScreenPerceptionRequest,
+): Promise<string> {
+  const screenProvider = getPluginScreenPerceptionProvider(request.providerId)
+  if (!screenProvider.analyzeWithCloudVision) {
+    throw new Error(`插件 ${request.providerId} 还没有实现云端视觉分析。`)
+  }
+
+  return withTimeout(
+    Promise.resolve(screenProvider.analyzeWithCloudVision(request.imageData ?? '')),
+    PLUGIN_SCREEN_TIMEOUT_MS,
+    `插件 ${request.providerId} 的云端视觉分析执行超时了。`,
+  )
 }
 
 export function cancelPluginAIChat(requestId: string): boolean {
@@ -322,8 +500,8 @@ async function loadPluginManifestRecord(
   const base: PluginDiscoveryRecord = {
     id: `invalid.${directoryName}`,
     name: directoryName,
-    version: 'unknown',
-    entry: 'unknown',
+    version: '未声明',
+    entry: '未声明',
     capabilities: [],
     permissions: [],
     apiVersion: null,
@@ -360,8 +538,8 @@ async function loadPluginManifestRecord(
   return {
     id: typeof manifest.id === 'string' && manifest.id.trim() ? manifest.id.trim() : base.id,
     name: typeof manifest.name === 'string' && manifest.name.trim() ? manifest.name.trim() : directoryName,
-    version: typeof manifest.version === 'string' && manifest.version.trim() ? manifest.version.trim() : 'unknown',
-    entry: typeof manifest.entry === 'string' && manifest.entry.trim() ? manifest.entry.trim() : 'unknown',
+    version: typeof manifest.version === 'string' && manifest.version.trim() ? manifest.version.trim() : '未声明',
+    entry: typeof manifest.entry === 'string' && manifest.entry.trim() ? manifest.entry.trim() : '未声明',
     capabilities: Array.isArray(manifest.capabilities) ? manifest.capabilities.filter(isNonEmptyString) : [],
     permissions: Array.isArray(manifest.permissions) ? manifest.permissions.filter(isNonEmptyString) : [],
     apiVersion: typeof manifest.apiVersion === 'string' && manifest.apiVersion.trim() ? manifest.apiVersion.trim() : null,
@@ -428,12 +606,12 @@ async function validatePluginManifest(
     const providerIds = new Set<string>()
     for (const provider of manifest.providers) {
       if (!isPluginManifestProviderRecord(provider)) {
-        errors.push('plugins.providers 里存在结构不完整的 provider 声明。')
+        errors.push('providers 列表里存在结构不完整的接入声明。')
         continue
       }
 
       if (providerIds.has(provider.id.trim())) {
-        errors.push(`plugins.providers 里存在重复的 provider id：${provider.id}`)
+        errors.push(`providers 列表里存在重复的接入 id：${provider.id}`)
       }
       providerIds.add(provider.id.trim())
 
@@ -443,7 +621,7 @@ async function validatePluginManifest(
         !manifest.capabilities.includes(provider.manifestCapability)
       ) {
         errors.push(
-          `provider "${provider.id}" 声明了 manifestCapability=${provider.manifestCapability}，但插件 capabilities 里没有它。`,
+          `接入 "${provider.id}" 声明了 manifestCapability=${provider.manifestCapability}，但插件 capabilities 里没有它。`,
         )
       }
     }
@@ -526,6 +704,22 @@ function getPluginProviders(module: PluginModuleShape): PluginProvidersApi {
   return {}
 }
 
+function getPluginScreenPerceptionProvider(providerId: string): PluginScreenPerceptionApi {
+  const loadedPlugin = findLoadedPluginByProviderId(providerId)
+  if (!loadedPlugin) {
+    throw new Error(`没有找到和 ${providerId} 对应的已加载插件。`)
+  }
+
+  const providerKey = getDeclaredProviderId(providerId)
+  const pluginProviders = getPluginProviders(loadedPlugin.module)
+  const screenProvider = pluginProviders.screenPerception?.[providerKey]
+  if (!screenProvider) {
+    throw new Error(`插件 ${loadedPlugin.discovery.name} 没有实现屏幕感知接入 "${providerKey}"。`)
+  }
+
+  return screenProvider
+}
+
 function normalizePluginModule(module: PluginModuleShape): PluginModuleShape {
   return module ?? {}
 }
@@ -541,22 +735,38 @@ function validatePluginRuntimeContracts(
     if (provider.capability === 'fileAnalysis') {
       const runtimeProvider = providers.fileAnalysis?.[provider.id]
       if (!runtimeProvider) {
-        errors.push(`插件未导出 fileAnalysis provider "${provider.id}"。`)
+        errors.push(`插件没有导出文件分析接入 "${provider.id}"。`)
         continue
       }
       if (typeof runtimeProvider.summarize !== 'function') {
-        errors.push(`fileAnalysis provider "${provider.id}" 缺少 summarize 函数。`)
+        errors.push(`文件分析接入 "${provider.id}" 缺少 summarize 函数。`)
       }
     }
 
     if (provider.capability === 'aiChat') {
       const runtimeProvider = providers.aiChat?.[provider.id]
       if (!runtimeProvider) {
-        errors.push(`插件未导出 aiChat provider "${provider.id}"。`)
+        errors.push(`插件没有导出 AI 对话接入 "${provider.id}"。`)
         continue
       }
       if (typeof runtimeProvider.streamChat !== 'function') {
-        errors.push(`aiChat provider "${provider.id}" 缺少 streamChat 函数。`)
+        errors.push(`AI 对话接入 "${provider.id}" 缺少 streamChat 函数。`)
+      }
+    }
+
+    if (provider.capability === 'screenPerception') {
+      const runtimeProvider = providers.screenPerception?.[provider.id]
+      if (!runtimeProvider) {
+        errors.push(`插件没有导出屏幕感知接入 "${provider.id}"。`)
+        continue
+      }
+      if (
+        typeof runtimeProvider.captureScreenshot !== 'function' &&
+        typeof runtimeProvider.analyzeWithOCR !== 'function' &&
+        typeof runtimeProvider.analyzeWithLocalVision !== 'function' &&
+        typeof runtimeProvider.analyzeWithCloudVision !== 'function'
+      ) {
+        errors.push(`屏幕感知接入 "${provider.id}" 至少要实现一个分析或截图函数。`)
       }
     }
   }

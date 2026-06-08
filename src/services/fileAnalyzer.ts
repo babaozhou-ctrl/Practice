@@ -30,7 +30,7 @@ export class FileAnalyzer {
         if (file.type.startsWith('text/') || this.isSourceCode(ext)) {
           return await this.readTextFile(file)
         }
-        return `[Unsupported file type: .${ext}]`
+        return `这个文件类型我现在还读不太好：${ext ?? 'unknown'}`
     }
   }
 
@@ -47,7 +47,7 @@ export class FileAnalyzer {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = () => resolve(reader.result as string)
-      reader.onerror = () => reject(new Error('Failed to read text file'))
+      reader.onerror = () => reject(new Error('读取文本内容时出了点问题。'))
       reader.readAsText(file)
     })
   }
@@ -62,7 +62,7 @@ export class FileAnalyzer {
 
   private async readDocumentViaElectron(file: File): Promise<string> {
     if (!window.electronAPI?.extractDocumentText) {
-      return `[Document file: ${file.name} — desktop document extraction is unavailable in this environment]`
+      return `我已经接住《${file.name}》了，不过当前这份环境还不能把这类文档里的正文完整读出来。`
     }
 
     try {
@@ -75,18 +75,20 @@ export class FileAnalyzer {
 
       const normalized = extracted.trim()
       if (!normalized) {
-        return `[Document file: ${file.name} — no readable text was found]`
+        return `我看过《${file.name}》了，但这次还没能从里面提取到可读文字。`
       }
 
       return normalized
     } catch (error: any) {
-      return `[Document file: ${file.name} — extraction failed: ${error?.message ?? String(error)}]`
+      return `我试着读《${file.name}》的时候卡了一下，所以这次只能先陪你看文件名和基础信息。${
+        error?.message ? ` ${error.message}` : ''
+      }`
     }
   }
 
   summarize(request: FileSummaryRequest): string {
     const lines = request.content.split('\n')
-    const wordCount = request.content.split(/\s+/).length
+    const wordCount = request.content.split(/\s+/).filter(Boolean).length
     const lineCount = lines.length
     const preview = lines.slice(0, 10).join('\n').substring(0, 500)
 

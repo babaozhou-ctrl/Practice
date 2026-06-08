@@ -29,7 +29,11 @@ function isLateNightScene(snapshot: CompanionSnapshot, now: number): boolean {
 }
 
 function isWatchTogetherScene(snapshot: CompanionSnapshot): boolean {
-  return snapshot.scene.id === 'watch_together' || snapshot.activity === 'watching_video'
+  return (
+    snapshot.scene.id === 'watch_together' ||
+    snapshot.activity === 'watching_video' ||
+    snapshot.screenContext.domain === 'video'
+  )
 }
 
 function isIdlePresenceScene(snapshot: CompanionSnapshot): boolean {
@@ -40,10 +44,16 @@ function isIdlePresenceScene(snapshot: CompanionSnapshot): boolean {
   )
 }
 
-function getWatchTopic(snapshot: CompanionSnapshot): string | null {
-  const recentTopic = snapshot.memory?.recentTopics?.[0]?.trim()
-  const activeTitle = snapshot.activeWindow?.title?.trim()
-  return recentTopic || activeTitle || null
+function getSharedAttention(snapshot: CompanionSnapshot): string | null {
+  const recentFile = snapshot.memory?.recentFileAnalyses?.[0]
+
+  return (
+    snapshot.screenContext.shortSummary?.trim() ||
+    (recentFile ? `刚刚一起看过的《${recentFile.fileName}》` : null) ||
+    snapshot.memory?.recentTopics?.[0]?.trim() ||
+    snapshot.activeWindow?.title?.trim() ||
+    null
+  )
 }
 
 function getProductiveTitle(snapshot: CompanionSnapshot): string {
@@ -51,9 +61,9 @@ function getProductiveTitle(snapshot: CompanionSnapshot): string {
     case 'deep_focus':
       return '这段专注已经很深了'
     case 'reading_nook':
-      return '安静读了挺久了'
+      return '你安静看了挺久'
     case 'soft_browsing':
-      return '看了挺久了'
+      return '这会儿看得有点久了'
     default:
       return '今天已经很努力了'
   }
@@ -87,19 +97,31 @@ function buildFallbackContent(
   now = Date.now(),
 ): CompanionActionPayload | null {
   const memory = snapshot.memory
-  const preferredName = memory?.preferredName?.trim() || '我'
-  const watchTopic = getWatchTopic(snapshot)
+  const preferredName = memory?.preferredName?.trim() || '你'
+  const sharedAttention = getSharedAttention(snapshot)
 
   if (workMode.enabled && workMode.isFocusActive && workMode.msRemaining !== null && workMode.msRemaining <= 2 * 60_000) {
     return {
       id: `focus-ending-${snapshot.timestamp}-${Math.round(workMode.msRemaining / 1000)}`,
-      title: '专注快收尾了',
+      title: '这一轮快收尾了',
       message,
       source: 'work-mode',
       actions: [
-        createAction('focus-finish-strong', '再陪我收个尾', '我这轮专注快结束了，请继续陪我把最后一点内容收干净，帮我判断现在最值得先完成的事。'),
-        createAction('focus-start-break', '开始休息', '我准备开始休息了，陪我做一个轻一点的收尾，然后提醒我怎么把注意力放下来。'),
-        createAction('focus-next-step', '帮我整理下一步', '请根据我刚才这段专注状态，帮我整理一个自然、轻量的下一步顺序，让我不用硬切换。'),
+        createAction(
+          'focus-finish-strong',
+          '陪我收个尾',
+          '我这一轮专注快结束了。请继续陪我把最后一点内容收干净，帮我判断现在最值得先完成的事。',
+        ),
+        createAction(
+          'focus-start-break',
+          '陪我去休息',
+          '我准备开始休息了。陪我做一个轻一点的收尾，然后提醒我怎么把注意力慢慢放下来。',
+        ),
+        createAction(
+          'focus-next-step',
+          '帮我顺一下',
+          `请根据我刚才这段专注状态${sharedAttention ? `，尤其是眼前这块“${sharedAttention}”` : ''}，帮我整理一个自然、轻量的下一步顺序，让我不用硬切换。`,
+        ),
       ],
     }
   }
@@ -111,8 +133,16 @@ function buildFallbackContent(
       message,
       source: 'work-mode',
       actions: [
-        createAction('break-return-gently', '轻一点回到专注', '休息差不多结束了。请陪我温柔一点回到专注，不要一下子变得很紧绷。'),
-        createAction('break-decide-first-step', '帮我决定先做什么', '我要回到工作里了。请帮我决定重启时第一步做什么，尽量让我容易重新进入状态。'),
+        createAction(
+          'break-return-gently',
+          '轻一点回去',
+          '休息差不多结束了。请陪我温柔一点回到专注，不要一下子变得很紧绷。',
+        ),
+        createAction(
+          'break-decide-first-step',
+          '帮我定第一步',
+          '我要回到工作里了。请帮我决定重启时第一步做什么，尽量让我容易重新进入状态。',
+        ),
       ],
     }
   }
@@ -120,12 +150,20 @@ function buildFallbackContent(
   if (workMode.enabled && workMode.overworkLevel === 'firm') {
     return {
       id: `overwork-firm-${snapshot.timestamp}`,
-      title: '该认真歇一下了',
+      title: '这次真的该歇一会儿了',
       message,
       source: 'work-mode',
       actions: [
-        createAction('overwork-wrap-up', '先帮我收尾', '我已经有点过劳了。请帮我做一个尽量轻的收尾，只保留今晚一定要结束的点。'),
-        createAction('overwork-pause-reminder', '提醒我暂停', '我现在需要停一下。请用温和但坚定的方式提醒我为什么应该先休息，并帮我放下手头的内容。'),
+        createAction(
+          'overwork-wrap-up',
+          '帮我轻点收尾',
+          '我已经有点过劳了。请帮我做一个尽量轻的收尾，只保留今晚一定要结束的点。',
+        ),
+        createAction(
+          'overwork-pause-reminder',
+          '提醒我停一下',
+          '我现在需要停一停。请用温和但坚定的方式提醒我为什么该先休息，并帮我放下手头的内容。',
+        ),
       ],
     }
   }
@@ -137,8 +175,16 @@ function buildFallbackContent(
       message,
       source: 'work-mode',
       actions: [
-        createAction('overwork-gentle-wrap', '先帮我收个口', '我有点撑太久了。请帮我把当前这段工作收个口，让我能比较自然地停下来。'),
-        createAction('overwork-gentle-break', '提醒我休息一下', '请提醒我认真休息一下，但语气轻一点，像陪伴而不是说教。'),
+        createAction(
+          'overwork-gentle-wrap',
+          '先帮我收个口',
+          '我有点绷太久了。请帮我把当前这段工作收个口，让我能比较自然地停下来。',
+        ),
+        createAction(
+          'overwork-gentle-break',
+          '提醒我歇会儿',
+          '请提醒我认真休息一下，但语气轻一点，像陪伴而不是说教。',
+        ),
       ],
     }
   }
@@ -155,8 +201,16 @@ function buildFallbackContent(
       message,
       source: 'proactive',
       actions: [
-        createAction('productive-check-progress', '帮我看看进度', '我今天已经专注挺久了。请陪我快速看一下现在的进度感，帮我判断接下来是继续冲还是适合缓一缓。'),
-        createAction('productive-soft-plan', '整理轻一点的后续', '请根据我现在这段投入状态，帮我整理一个轻一点的后续安排，不要太工具化。'),
+        createAction(
+          'productive-check-progress',
+          '陪我看看进度',
+          '我今天已经专注挺久了。请陪我快速看一眼现在的进度感，帮我判断接下来是继续冲还是适合缓一缓。',
+        ),
+        createAction(
+          'productive-soft-plan',
+          '帮我理轻一点',
+          `请根据我现在这段投入状态${sharedAttention ? `，尤其是眼前这部分“${sharedAttention}”` : ''}，帮我整理一个轻一点的后续安排，不要太工具化。`,
+        ),
       ],
     }
   }
@@ -168,20 +222,32 @@ function buildFallbackContent(
       message,
       source: 'proactive',
       actions: [
-        createAction('late-night-soft-wrap', '帮我温柔收尾', '有点晚了。请陪我做一个温柔的收尾，把今晚的内容放到一个能安心停下的位置。'),
-        createAction('late-night-save-for-tomorrow', '只留明天继续的点', '请帮我只保留明天最值得继续的点，用很轻的方式整理出来，让我现在能安心休息。'),
+        createAction(
+          'late-night-soft-wrap',
+          '陪我温柔收尾',
+          '有点晚了。请陪我做一个温柔的收尾，把今晚的内容放到一个能安心停下的位置。',
+        ),
+        createAction(
+          'late-night-save-for-tomorrow',
+          '只留明天继续的点',
+          `请帮我只保留明天最值得继续的点${sharedAttention ? `，尤其是和“${sharedAttention}”有关的部分` : ''}，用很轻的方式整理出来，让我现在能安心休息。`,
+        ),
       ],
     }
   }
 
-  if (isWatchTogetherScene(snapshot) && watchTopic) {
+  if (isWatchTogetherScene(snapshot) && sharedAttention) {
     return {
       id: `watch-together-${snapshot.timestamp}`,
-      title: '一起看着呢',
+      title: '像在一起看呢',
       message,
       source: 'proactive',
       actions: [
-        createAction('watch-highlight', '聊聊刚才那段', `我们刚才像是在一起看“${watchTopic}”。请陪我用自然一点的方式聊聊最值得继续说的点。`),
+        createAction(
+          'watch-highlight',
+          '聊聊刚才那段',
+          `我们刚才像是在一起看“${sharedAttention}”。请陪我用自然一点的方式聊聊最值得继续说的点。`,
+        ),
       ],
     }
   }
@@ -189,11 +255,17 @@ function buildFallbackContent(
   if (isIdlePresenceScene(snapshot)) {
     return {
       id: `gentle-idle-${snapshot.timestamp}`,
-      title: '静静陪着',
+      title: '安静陪着你',
       message,
       source: 'proactive',
       actions: [
-        createAction('idle-soft-checkin', `${preferredName}在想什么`, '我现在有点安静。你可以像陪伴角色一样，轻一点地问问我现在在想什么或想做什么。'),
+        createAction(
+          'idle-soft-checkin',
+          `${preferredName}在想什么`,
+          sharedAttention
+            ? `我现在有点安静，就陪你待在“${sharedAttention}”旁边。你可以像和陪伴角色说话一样，轻一点地问问我现在在想什么，或者想继续做什么。`
+            : '我现在有点安静。你可以像和陪伴角色说话一样，轻一点地问问我现在在想什么，或者想继续做什么。',
+        ),
       ],
     }
   }
@@ -210,7 +282,7 @@ export function buildCompanionActionPayload(
 ): CompanionActionPayload | null {
   const content = petPackage.companionContent?.proactive
   const memory = snapshot.memory
-  const preferredName = memory?.preferredName?.trim() || '我'
+  const preferredName = memory?.preferredName?.trim() || '你'
 
   if (workMode.enabled && workMode.isFocusActive && workMode.msRemaining !== null && workMode.msRemaining <= 2 * 60_000) {
     return (

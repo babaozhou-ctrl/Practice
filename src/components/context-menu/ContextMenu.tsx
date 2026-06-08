@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react'
 import { usePetStore } from '../../store/petStore'
 import { useContextStore } from '../../store/contextStore'
 
-const ITEMS = ['Cyberpunk', 'Midnight', 'Daydream', 'Neon', 'Classic']
+const ITEMS = ['霓虹夜色', '午夜柔光', '白日幻梦', '糖霜霓彩', '经典配色']
 
 const ContextMenu: React.FC = () => {
   const {
@@ -31,9 +31,9 @@ const ContextMenu: React.FC = () => {
   if (!isContextMenuOpen) return null
 
   const items = [
-    { label: 'Open Chat', action: () => { toggleChat(); setContextMenu(false) } },
+    { label: '和 bb7 说说话', action: () => { toggleChat(); setContextMenu(false) } },
     {
-      label: `Click-Through: ${usePetStore.getState().isClickThrough ? 'on' : 'off'}`,
+      label: `窗口穿透：${usePetStore.getState().isClickThrough ? '开启' : '关闭'}`,
       action: () => {
         setClickThrough(!usePetStore.getState().isClickThrough)
         window.electronAPI?.toggleClickThrough?.()
@@ -42,7 +42,7 @@ const ContextMenu: React.FC = () => {
     },
     { type: 'div' as const },
     {
-      label: `Palette: ${ITEMS[skinIndex]}`,
+      label: `配色：${ITEMS[skinIndex]}`,
       action: () => {
         setSkinIndex((skinIndex + 1) % ITEMS.length)
         setContextMenu(false)
@@ -50,7 +50,7 @@ const ContextMenu: React.FC = () => {
     },
     { type: 'div' as const },
     {
-      label: `Monitor: ${isScreenMonitoring ? 'on' : 'off'}`,
+      label: `屏幕感知：${isScreenMonitoring ? '开启' : '关闭'}`,
       action: () => {
         useContextStore.getState().setScreenMonitoring(!isScreenMonitoring)
         setContextMenu(false)
@@ -58,7 +58,7 @@ const ContextMenu: React.FC = () => {
     },
     { type: 'div' as const },
     {
-      label: 'Quit',
+      label: '退出 Deep Pet',
       action: () => { window.electronAPI?.quitApp?.() },
       color: 'rgba(255, 150, 150, 0.8)',
     },

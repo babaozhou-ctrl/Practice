@@ -1,6 +1,7 @@
-import type { CompanionActivity, CompanionEmotion, InteractionMode } from './types'
 import type { ActiveWindowInfo } from '../../types/context'
 import type { WorkModeSignals } from '../../types/workMode'
+import type { ScreenContextSignals } from './ScreenPerceptionSemantics'
+import type { CompanionActivity, CompanionEmotion, InteractionMode } from './types'
 
 export type CompanionSceneId =
   | 'away'
@@ -30,6 +31,7 @@ export interface ResolveCompanionSceneInput {
   emotion: CompanionEmotion
   mode: InteractionMode
   activeWindow: ActiveWindowInfo | null
+  screenContext?: ScreenContextSignals | null
   workMode?: WorkModeSignals | null
   now?: number
 }
@@ -43,44 +45,30 @@ export function resolveCompanionScene(
   const idleMs = input.activeWindow?.idleMs ?? 0
   const lateNight = isLateNight(now)
   const focusMinutes = Math.floor((input.workMode?.phaseElapsedMs ?? 0) / 60_000)
+  const screenContext = input.screenContext ?? null
   const flags = new Set<string>()
 
-  if (lateNight) {
-    flags.add('late_night')
-  }
-  if (input.workMode?.enabled) {
-    flags.add('work_mode')
-  }
-  if (input.workMode?.isFocusActive) {
-    flags.add('focus_session')
-  }
-  if (input.workMode?.isBreakActive) {
-    flags.add('break_window')
-  }
-  if (input.mode === 'focus_guardian') {
-    flags.add('quiet_company')
-  }
-  if (input.emotion === 'sleepy') {
-    flags.add('low_energy')
+  if (lateNight) flags.add('late_night')
+  if (input.workMode?.enabled) flags.add('work_mode')
+  if (input.workMode?.isFocusActive) flags.add('focus_session')
+  if (input.workMode?.isBreakActive) flags.add('break_window')
+  if (input.mode === 'focus_guardian') flags.add('quiet_company')
+  if (input.emotion === 'sleepy') flags.add('low_energy')
+  if (screenContext?.domain && screenContext.domain !== 'none') {
+    flags.add(`screen_${screenContext.domain}`)
   }
 
   if (idleMs >= AWAY_IDLE_MS) {
     return createScene('away', '暂时离开', 'low', 'silent_guard', flags)
   }
 
-  if (
-    lateNight &&
-    ['coding', 'reading', 'browsing', 'idle', 'other'].includes(input.activity)
-  ) {
+  if (lateNight && ['coding', 'reading', 'browsing', 'idle', 'other'].includes(input.activity)) {
     flags.add('wind_down')
     return createScene('late_night_wind_down', '深夜收尾', 'low', 'hushed_warm', flags)
   }
 
   if (input.activity === 'coding') {
-    if (
-      input.workMode?.isFocusActive &&
-      (focusMinutes >= 20 || input.workMode.totalFocusMsToday >= 75 * 60_000)
-    ) {
+    if (input.workMode?.isFocusActive && (focusMinutes >= 20 || input.workMode.totalFocusMsToday >= 75 * 60_000)) {
       flags.add('deep_work')
       return createScene('deep_focus', '沉浸编程', 'steady', 'soft_focus', flags)
     }
@@ -90,6 +78,21 @@ export function resolveCompanionScene(
   }
 
   if (input.activity === 'reading') {
+    flags.add('reading_flow')
+    return createScene('reading_nook', '安静阅读', 'low', 'quiet_observing', flags)
+  }
+
+  if (screenContext?.domain === 'video' && input.activity !== 'gaming') {
+    flags.add('co_viewing')
+    return createScene('watch_together', '一起看内容', 'steady', 'shared_reaction', flags)
+  }
+
+  if (screenContext?.domain === 'social' && input.activity !== 'gaming') {
+    flags.add('social_presence')
+    return createScene('social_corner', '聊天陪伴', 'bright', 'warm_social', flags)
+  }
+
+  if (screenContext?.domain === 'reading' && input.activity === 'browsing') {
     flags.add('reading_flow')
     return createScene('reading_nook', '安静阅读', 'low', 'quiet_observing', flags)
   }

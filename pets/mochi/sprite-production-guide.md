@@ -8,6 +8,8 @@ This is no longer a humanoid prototype direction. The target is a soft long-eare
 
 Primary source files for the current direction:
 
+- `public/pets/mochi/sprite-atlas.png`
+- `public/pets/mochi/preview.png`
 - [`reference-user-board-v3.png`](./reference-user-board-v3.png)
 - [`reference-user-hero-crop-v3.png`](./reference-user-hero-crop-v3.png)
 - [`reference-user-board-v2.png`](./reference-user-board-v2.png)
@@ -193,7 +195,7 @@ Avoid dark moody palettes, sharp contrast overload, and busy costume additions.
 ## Runtime Migration Plan
 
 1. Export the main atlas to `public/pets/mochi/sprite-atlas.png`.
-2. Optionally mirror to `public/pets/catgirl/sprite-atlas.png` only as a compatibility alias while older paths still exist.
+2. Regenerate `public/pets/mochi/preview.png` from the shipped atlas so settings UI and runtime stay visually aligned.
 3. Refine the current bridge atlas until it matches the user board more closely in face language, ear acting, loaf posing, and silhouette sweetness.
 4. Replace bridge frames with polished hand-authored sprite art in the same atlas layout.
 5. Keep current FSM and fallback playback behavior unchanged during visual refinement.

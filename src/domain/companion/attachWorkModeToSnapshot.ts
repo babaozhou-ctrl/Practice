@@ -16,6 +16,7 @@ export function attachWorkModeToSnapshot(
       emotion: snapshot.emotion,
       mode: snapshot.mode,
       activeWindow: snapshot.activeWindow,
+      screenContext: snapshot.screenContext,
       workMode: resolvedWorkMode,
       now: snapshot.timestamp,
     }),

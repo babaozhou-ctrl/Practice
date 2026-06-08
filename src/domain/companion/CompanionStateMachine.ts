@@ -1,7 +1,7 @@
 import { classifyActivity } from '../../context/ActivityClassifier'
 import { FSM, type FSMTransition } from '../../engine/FSM'
-import type { CompanionMemorySnapshot } from '../../types/chat'
-import type { ActiveWindowInfo } from '../../types/context'
+import type { CompanionFileAnalysisMemory, CompanionMemorySnapshot } from '../../types/chat'
+import type { ActiveWindowInfo, ScreenPerceptionSnapshot } from '../../types/context'
 import type {
   CompanionActivity,
   CompanionEmotion,
@@ -13,6 +13,7 @@ import type {
 } from './types'
 import { mapActivityType } from './types'
 import { resolveCompanionScene } from './CompanionScene'
+import { inferScreenContextSignals } from './ScreenPerceptionSemantics'
 
 type ActivityEvent =
   | 'to_idle'
@@ -54,6 +55,7 @@ const MODE_STATES: InteractionMode[] = ['quiet', 'observing', 'reactive', 'proac
 const SOFT_AWAY_IDLE_MS = 90_000
 const DEEP_AWAY_IDLE_MS = 6 * 60_000
 const RETURN_FROM_AWAY_IDLE_MS = 20_000
+const RECENT_FILE_WINDOW_MS = 40 * 60_000
 
 const ACTIVITY_TO_EVENT: Record<CompanionActivity, ActivityEvent> = {
   idle: 'to_idle',
@@ -115,6 +117,7 @@ export class CompanionStateMachine {
 
   private interruptionBudget = 100
   private activeWindow: ActiveWindowInfo | null = null
+  private screenPerception: ScreenPerceptionSnapshot | null = null
   private memory: CompanionMemorySnapshot | null = null
   private lastContextAt = Date.now()
   private lastBudgetRecoveryAt = Date.now()
@@ -131,6 +134,10 @@ export class CompanionStateMachine {
 
   setMemory(memory: CompanionMemorySnapshot | null) {
     this.memory = memory
+  }
+
+  setScreenPerception(snapshot: ScreenPerceptionSnapshot | null) {
+    this.screenPerception = snapshot
   }
 
   handleContext(info: ActiveWindowInfo, now = Date.now()): CompanionTransitionResult {
@@ -182,12 +189,8 @@ export class CompanionStateMachine {
 
     const name = this.resolveUserName()
     const pool = name
-      ? [
-          `${name}，我在呢。`,
-          `摸摸收到啦，${name}。`,
-          `这样我会更开心一点。`,
-        ]
-      : ['我在呢。', '摸摸收到啦。', '这样我会更开心一点。']
+      ? [`${name}，我在呢。`, `摸摸收到了，${name}。`, '这样我会更开心一点。']
+      : ['我在呢。', '摸摸收到了。', '这样我会更开心一点。']
 
     return {
       snapshot: this.getSnapshot(now),
@@ -221,6 +224,7 @@ export class CompanionStateMachine {
     const activity = this.activityFsm.state
     const emotion = this.emotionFsm.state
     const mode = this.modeFsm.state
+    const screenContext = inferScreenContextSignals(this.screenPerception)
 
     return {
       activity,
@@ -231,11 +235,14 @@ export class CompanionStateMachine {
         emotion,
         mode,
         activeWindow: this.activeWindow,
+        screenContext,
         now,
       }),
       transientAction: this.resolveTransientAction(now),
       interruptionBudget: Math.round(this.interruptionBudget),
       activeWindow: this.activeWindow,
+      screenPerception: this.screenPerception,
+      screenContext,
       memory: this.memory,
       timestamp: now,
     }
@@ -283,14 +290,15 @@ export class CompanionStateMachine {
     const lateNight = hour >= 23 || hour < 6
     const recentlyTapped = now - this.lastTapAt < 2000
     const userIdleMs = this.activeWindow?.idleMs ?? 0
+    const screenContext = inferScreenContextSignals(this.screenPerception)
 
     if (recentlyTapped) return 'happy'
     if (userIdleMs >= DEEP_AWAY_IDLE_MS) return 'sleepy'
     if (userIdleMs >= SOFT_AWAY_IDLE_MS && activity === 'idle') return 'sleepy'
-    if (activity === 'gaming') return 'excited'
-    if (activity === 'coding' || activity === 'reading') return 'thinking'
-    if (activity === 'chatting') return 'happy'
-    if (activity === 'watching_video') return 'thinking'
+    if (activity === 'gaming' || screenContext.domain === 'game') return 'excited'
+    if (activity === 'coding' || activity === 'reading' || screenContext.domain === 'code') return 'thinking'
+    if (activity === 'chatting' || screenContext.domain === 'social') return 'happy'
+    if (activity === 'watching_video' || screenContext.domain === 'video') return 'thinking'
     if (lateNight && (activity === 'idle' || activity === 'browsing' || activity === 'other')) {
       return 'sleepy'
     }
@@ -299,19 +307,20 @@ export class CompanionStateMachine {
 
   private deriveMode(activity: CompanionActivity, emotion: CompanionEmotion, now: number): InteractionMode {
     const userIdleMs = this.activeWindow?.idleMs ?? 0
+    const screenContext = inferScreenContextSignals(this.screenPerception)
 
     if (userIdleMs >= SOFT_AWAY_IDLE_MS) {
       return 'quiet'
     }
-    if (activity === 'coding') {
+    if (activity === 'coding' || screenContext.domain === 'code') {
       if (this.productiveSessionStartedAt && now - this.productiveSessionStartedAt > 45 * 60_000) {
         return 'proactive'
       }
       return 'focus_guardian'
     }
-    if (activity === 'gaming') return 'quiet'
-    if (activity === 'chatting') return 'reactive'
-    if (activity === 'watching_video') return 'reactive'
+    if (activity === 'gaming' || screenContext.domain === 'game') return 'quiet'
+    if (activity === 'chatting' || screenContext.domain === 'social') return 'reactive'
+    if (activity === 'watching_video' || screenContext.domain === 'video') return 'reactive'
     if (emotion === 'sleepy') return 'quiet'
     if (emotion === 'happy') return 'reactive'
     return 'observing'
@@ -419,16 +428,26 @@ export class CompanionStateMachine {
     if (now - this.lastReactionAt < 60_000) return undefined
 
     const name = this.resolveUserName()
-    const message = activity === 'coding'
-      ? (name ? `${name}，你回来啦。我继续安静陪你写。` : '你回来啦。我继续安静陪你写。')
-      : activity === 'watching_video'
-        ? (name ? `${name}，欢迎回来。我还在这儿陪你。` : '欢迎回来。我还在这儿陪你。')
-        : (name ? `${name}，欢迎回来。我在这儿。` : '欢迎回来。我在这儿。')
+    const recentFile = resolveRecentFileAnalysis(this.memory)
+    const fileHint = recentFile ? ` 我还记得我们刚刚一起看过《${trimForSpeech(recentFile.fileName, 18)}》。` : ''
+
+    const message =
+      activity === 'coding'
+        ? name
+          ? `${name}，你回来啦。我继续安静陪你写。${fileHint}`
+          : `你回来啦。我继续安静陪你写。${fileHint}`
+        : activity === 'watching_video'
+          ? name
+            ? `${name}，欢迎回来。我还在这儿陪你。${fileHint}`
+            : `欢迎回来。我还在这儿陪你。${fileHint}`
+          : name
+            ? `${name}，欢迎回来。我在这儿。${fileHint}`
+            : `欢迎回来。我在这儿。${fileHint}`
 
     this.lastReactionAt = now
     this.interruptionBudget = Math.max(0, this.interruptionBudget - 6)
     return {
-      message,
+      message: message.trim(),
       duration: 2400,
     }
   }
@@ -439,23 +458,64 @@ export class CompanionStateMachine {
   ): string | null {
     const memory = this.memory
     const name = this.resolveUserName()
+    const screenContext = inferScreenContextSignals(this.screenPerception)
+    const recentFile = resolveRecentFileAnalysis(memory)
+    const sharedAttention =
+      screenContext.shortSummary ||
+      (recentFile ? `《${recentFile.fileName}》` : null) ||
+      memory?.recentTopics?.[0] ||
+      this.activeWindow?.title?.trim() ||
+      null
 
     if (!memory) {
+      if (screenContext.domain === 'code' && sharedAttention) {
+        return `你现在像是在认真盯着“${trimForSpeech(sharedAttention, 22)}”。我会安静陪着你。`
+      }
+      if (screenContext.domain === 'video' && sharedAttention) {
+        return `这会儿像是在一起看“${trimForSpeech(sharedAttention, 22)}”。我就在旁边陪你。`
+      }
       return null
     }
 
-    if (activity === 'coding' && emotion === 'thinking' && memory.lastWindowTitle) {
-      const target = trimForSpeech(memory.lastWindowTitle, 20)
+    if (recentFile && activity === 'coding' && emotion === 'thinking') {
       return name
-        ? `${name}，你现在像是在认真盯着“${target}”。我会安静陪着你。`
-        : `你现在像是在认真盯着“${target}”。我会安静陪着你。`
+        ? `${name}，你像是在一边看着眼前的内容，一边消化刚刚一起看过的《${trimForSpeech(recentFile.fileName, 18)}》。`
+        : `你像是在一边看着眼前的内容，一边消化刚刚一起看过的《${trimForSpeech(recentFile.fileName, 18)}》。`
     }
 
-    if (activity === 'watching_video' && memory.recentTopics[0]) {
-      return `这次也像是在一起看“${trimForSpeech(memory.recentTopics[0], 22)}”。我在旁边陪你。`
+    if (
+      recentFile &&
+      (activity === 'reading' || activity === 'browsing') &&
+      (emotion === 'thinking' || emotion === 'idle')
+    ) {
+      return name
+        ? `${name}，你现在像是还顺着《${trimForSpeech(recentFile.fileName, 18)}》继续看着。我会轻一点陪着你。`
+        : `你现在像是还顺着《${trimForSpeech(recentFile.fileName, 18)}》继续看着。我会轻一点陪着你。`
     }
 
-    if (activity === 'chatting' && memory.preferredName) {
+    if (recentFile && activity === 'idle' && emotion !== 'sleepy') {
+      return name
+        ? `${name}，我还记得我们刚刚一起看过《${trimForSpeech(recentFile.fileName, 18)}》。想继续的话，我就在这儿。`
+        : `我还记得我们刚刚一起看过《${trimForSpeech(recentFile.fileName, 18)}》。想继续的话，我就在这儿。`
+    }
+
+    if (activity === 'coding' && emotion === 'thinking' && sharedAttention) {
+      return name
+        ? `${name}，你现在像是在认真盯着“${trimForSpeech(sharedAttention, 22)}”。我会安静陪着你。`
+        : `你现在像是在认真盯着“${trimForSpeech(sharedAttention, 22)}”。我会安静陪着你。`
+    }
+
+    if ((activity === 'watching_video' || screenContext.domain === 'video') && sharedAttention) {
+      return `这次也像是在一起看“${trimForSpeech(sharedAttention, 22)}”。我就在旁边陪你。`
+    }
+
+    if ((activity === 'chatting' || screenContext.domain === 'social') && sharedAttention) {
+      return name
+        ? `${name}，你像是在围着“${trimForSpeech(sharedAttention, 20)}”聊天。我轻一点陪着你。`
+        : `你像是在围着“${trimForSpeech(sharedAttention, 20)}”聊天。我轻一点陪着你。`
+    }
+
+    if ((activity === 'chatting' || screenContext.domain === 'social') && memory.preferredName) {
       return `今天也想好好陪着你，${memory.preferredName}。`
     }
 
@@ -471,7 +531,7 @@ type ReactionLibrary = Record<CompanionActivity, Partial<Record<CompanionEmotion
 
 const REACTION_LIBRARY: ReactionLibrary = {
   idle: {
-    idle: ['我在这里陪着你。', '安静一点也很好。', '想说话的时候叫我。'],
+    idle: ['我在这里陪着你。', '安静一点也很好。', '想说话的时候就叫我。'],
     sleepy: ['有点晚了，我会轻一点陪着你。', '如果你累了，我也会提醒你休息。'],
   },
   coding: {
@@ -482,11 +542,11 @@ const REACTION_LIBRARY: ReactionLibrary = {
     excited: ['我先安静看你操作。', '这一波看起来很紧张。', '你专心玩，我不打扰。'],
   },
   watching_video: {
-    thinking: ['这一段看起来很有意思。', '我也在悄悄陪你一起看。', '像是在陪你追更。'],
-    idle: ['这一段看起来很有意思。', '我也在悄悄陪你一起看。', '像是在陪你追更。'],
+    thinking: ['这一段看起来很有意思。', '我也在悄悄陪你一起看。', '像是在陪你追点什么。'],
+    idle: ['这一段看起来很有意思。', '我也在悄悄陪你一起看。', '像是在陪你追点什么。'],
   },
   chatting: {
-    happy: ['今天好像聊得很热闹。', '你看起来心情不错。', '我在旁边陪你。'],
+    happy: ['今天好像聊得很热闹。', '你看起来心情还不错。', '我在旁边陪你。'],
   },
   browsing: {
     idle: ['找到感兴趣的东西了吗？', '慢慢看，我在。', '今天的桌面气氛很安静。'],
@@ -495,7 +555,7 @@ const REACTION_LIBRARY: ReactionLibrary = {
     thinking: ['我会轻一点，不打扰你读。', '这一段看起来很认真。', '需要休息时我提醒你。'],
   },
   other: {
-    idle: ['我在看着你忙碌。', '今天也一起待在桌面上吧。', '我会一直在。'],
+    idle: ['我看着你忙。', '今天也一起待在桌面上吧。', '我会一直在。'],
     sleepy: ['夜已经有点深了，我会安静陪着你。'],
   },
 }
@@ -504,12 +564,29 @@ function randomFrom(items: string[]): string {
   return items[Math.floor(Math.random() * items.length)]
 }
 
+function resolveRecentFileAnalysis(memory: CompanionMemorySnapshot | null): CompanionFileAnalysisMemory | null {
+  if (!memory?.recentFileAnalyses?.length) {
+    return null
+  }
+
+  const recent = memory.recentFileAnalyses[0]
+  if (!recent?.fileName) {
+    return null
+  }
+
+  if (Date.now() - recent.capturedAt > RECENT_FILE_WINDOW_MS) {
+    return null
+  }
+
+  return recent
+}
+
 function trimForSpeech(value: string, maxLength: number): string {
   const normalized = value.trim()
   if (normalized.length <= maxLength) {
     return normalized
   }
-  return `${normalized.slice(0, maxLength)}…`
+  return `${normalized.slice(0, maxLength).trim()}...`
 }
 
 function isLateNight(now: number): boolean {

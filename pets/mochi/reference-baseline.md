@@ -9,6 +9,16 @@ The current Mochi sprite shipped in `public/pets/mochi/sprite-atlas.png` is now 
 - Change policy: do not change Mochi's core silhouette, proportions, or face design unless the user explicitly requests a new art direction in the future
 - This file now describes the locked production direction, not an open exploration target
 
+## Runtime Truth
+
+For actual app display, the authoritative asset is:
+
+1. `public/pets/mochi/sprite-atlas.png`
+2. `public/pets/mochi/preview.png`, generated from the current atlas for settings-card use only
+
+The reference boards remain the upstream art-direction source, but they are not the runtime asset shown on desktop.
+If the app display, preview card, and reference board ever disagree, fix the shipped atlas and regenerate the preview instead of introducing another parallel appearance file.
+
 ## Canonical Visual Sources
 
 Mochi now follows this priority order:

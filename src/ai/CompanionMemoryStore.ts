@@ -1,4 +1,4 @@
-import type { CompanionMemorySnapshot } from '../types/chat'
+import type { CompanionFileAnalysisMemory, CompanionMemorySnapshot } from '../types/chat'
 
 export const COMPANION_MEMORY_STORAGE_KEY = 'deep-pet.companion-memory.v1'
 
@@ -11,6 +11,7 @@ export const EMPTY_COMPANION_MEMORY: CompanionMemorySnapshot = {
   avoidances: [],
   rituals: [],
   recentTopics: [],
+  recentFileAnalyses: [],
   lastActivity: null,
   lastScene: null,
   lastWindowTitle: null,
@@ -26,6 +27,7 @@ export function cloneCompanionMemory(memory: CompanionMemorySnapshot): Companion
     avoidances: [...memory.avoidances],
     rituals: [...memory.rituals],
     recentTopics: [...memory.recentTopics],
+    recentFileAnalyses: memory.recentFileAnalyses.map(cloneFileAnalysisMemory),
     lastActivity: memory.lastActivity,
     lastScene: memory.lastScene,
     lastWindowTitle: memory.lastWindowTitle,
@@ -58,7 +60,7 @@ export function writeCompanionMemory(memory: CompanionMemorySnapshot): Companion
       window.localStorage.setItem(COMPANION_MEMORY_STORAGE_KEY, JSON.stringify(normalized))
     }
   } catch {
-    // ignore storage failures and still notify in-memory listeners
+    // Ignore storage failures and still notify in-memory listeners.
   }
 
   notifyCompanionMemory(normalized)
@@ -132,6 +134,41 @@ export function captureCompanionRuntimeContext(
   })
 }
 
+export function captureCompanionFileAnalysis(
+  fileName: string,
+  briefSummary: string,
+  detailedAnalysis: string | null | undefined,
+  sceneId: string | null | undefined,
+): CompanionMemorySnapshot {
+  return updateCompanionMemory((memory) => {
+    const next = cloneCompanionMemory(memory)
+    const normalized = normalizeFileAnalysisMemory({
+      fileName,
+      briefSummary,
+      detailedAnalysis: normalizeOptionalString(detailedAnalysis, 1200),
+      sceneId: normalizeOptionalString(sceneId, 40),
+      capturedAt: Date.now(),
+    })
+
+    if (!normalized) {
+      return next
+    }
+
+    const existingIndex = next.recentFileAnalyses.findIndex((entry) => entry.fileName === normalized.fileName)
+    if (existingIndex >= 0) {
+      next.recentFileAnalyses.splice(existingIndex, 1)
+    }
+    next.recentFileAnalyses.unshift(normalized)
+    if (next.recentFileAnalyses.length > 4) {
+      next.recentFileAnalyses.length = 4
+    }
+
+    pushUnique(next.recentTopics, buildFileTopicLabel(normalized.fileName, normalized.briefSummary), 6)
+    next.updatedAt = Date.now()
+    return next
+  })
+}
+
 function normalizeCompanionMemory(
   memory: Partial<CompanionMemorySnapshot> | CompanionMemorySnapshot,
 ): CompanionMemorySnapshot {
@@ -141,6 +178,7 @@ function normalizeCompanionMemory(
     avoidances: normalizeStringList(memory.avoidances, 6, 32),
     rituals: normalizeStringList(memory.rituals, 6, 40),
     recentTopics: normalizeStringList(memory.recentTopics, 6, 48),
+    recentFileAnalyses: normalizeFileAnalysisList(memory.recentFileAnalyses, 4),
     lastActivity: normalizeOptionalString(memory.lastActivity, 24),
     lastScene: normalizeOptionalString(memory.lastScene, 40),
     lastWindowTitle: normalizeOptionalString(memory.lastWindowTitle, 80),
@@ -162,6 +200,52 @@ function normalizeStringList(value: unknown, maxItems: number, maxLength: number
     }
   }
   return items
+}
+
+function normalizeFileAnalysisList(value: unknown, maxItems: number): CompanionFileAnalysisMemory[] {
+  if (!Array.isArray(value)) return []
+
+  const items: CompanionFileAnalysisMemory[] = []
+  for (const item of value) {
+    const normalized = normalizeFileAnalysisMemory(item)
+    if (normalized && !items.some((entry) => entry.fileName === normalized.fileName)) {
+      items.push(normalized)
+    }
+    if (items.length >= maxItems) {
+      break
+    }
+  }
+  return items
+}
+
+function normalizeFileAnalysisMemory(value: unknown): CompanionFileAnalysisMemory | null {
+  if (!value || typeof value !== 'object') return null
+
+  const candidate = value as Partial<CompanionFileAnalysisMemory> & Partial<{ summary: string }>
+  const fileName = normalizeOptionalString(candidate.fileName, 80)
+  const briefSummary =
+    normalizeOptionalString(candidate.briefSummary, 320) ??
+    normalizeOptionalString(candidate.summary, 320)
+
+  if (!fileName || !briefSummary) return null
+
+  return {
+    fileName,
+    briefSummary,
+    detailedAnalysis: normalizeOptionalString(candidate.detailedAnalysis, 1200),
+    sceneId: normalizeOptionalString(candidate.sceneId, 40),
+    capturedAt: typeof candidate.capturedAt === 'number' ? candidate.capturedAt : Date.now(),
+  }
+}
+
+function cloneFileAnalysisMemory(memory: CompanionFileAnalysisMemory): CompanionFileAnalysisMemory {
+  return {
+    fileName: memory.fileName,
+    briefSummary: memory.briefSummary,
+    detailedAnalysis: memory.detailedAnalysis ?? null,
+    sceneId: memory.sceneId,
+    capturedAt: memory.capturedAt,
+  }
 }
 
 function normalizeOptionalString(value: unknown, maxLength: number): string | null {
@@ -199,13 +283,13 @@ function buildRecentTopic(
   windowTitle: string | null | undefined,
 ): string | null {
   const activityLabels: Record<string, string> = {
-    coding: '\u6700\u8fd1\u5728\u5199\u4ee3\u7801',
-    gaming: '\u6700\u8fd1\u5728\u6253\u6e38\u620f',
-    watching_video: '\u6700\u8fd1\u5728\u770b\u89c6\u9891',
-    chatting: '\u6700\u8fd1\u5728\u804a\u5929',
-    browsing: '\u6700\u8fd1\u5728\u6d4f\u89c8\u5185\u5bb9',
-    reading: '\u6700\u8fd1\u5728\u9605\u8bfb',
-    idle: '\u6700\u8fd1\u5728\u5b89\u9759\u5f85\u7740',
+    coding: '最近在写代码',
+    gaming: '最近在打游戏',
+    watching_video: '最近在看视频',
+    chatting: '最近在聊天',
+    browsing: '最近在浏览内容',
+    reading: '最近在阅读',
+    idle: '最近在安静待着',
   }
 
   const base = activityLabels[activity]
@@ -214,9 +298,7 @@ function buildRecentTopic(
   const sceneLabel = buildSceneLabel(sceneId)
   const title = sanitizeWindowTitle(windowTitle)
   if (title) {
-    return sceneLabel
-      ? `${base}（${sceneLabel}）：${title.slice(0, 24)}`
-      : `${base}\uff1a${title.slice(0, 28)}`
+    return sceneLabel ? `${base}（${sceneLabel}）：${title.slice(0, 24)}` : `${base}：${title.slice(0, 28)}`
   }
 
   return sceneLabel ? `${base}（${sceneLabel}）` : base
@@ -240,6 +322,11 @@ function buildSceneLabel(sceneId: string | null | undefined): string | null {
   }
 
   return labels[sceneId] ?? null
+}
+
+function buildFileTopicLabel(fileName: string, summary: string): string {
+  const compactSummary = summary.replace(/\s+/g, ' ').trim().slice(0, 26)
+  return compactSummary ? `刚一起看过《${fileName}》：${compactSummary}` : `刚一起看过《${fileName}》`
 }
 
 function notifyCompanionMemory(memory: CompanionMemorySnapshot) {

@@ -25,6 +25,12 @@ export interface PixiPetRuntimeOptions {
   baseScale?: number
 }
 
+export interface PixiPetStateSequenceStep {
+  state: AnimationState
+  holdMs?: number | null
+  clipName?: string | null
+}
+
 export class PixiPetRuntime {
   private readonly mount: HTMLElement
   private textureSet: RuntimeTextureSet
@@ -66,6 +72,9 @@ export class PixiPetRuntime {
   private displayedScaleY = 1
   private displayedRotation = 0
   private lowDistractionMode = false
+  private stateSequenceToken = 0
+  private stateSequenceTimers: number[] = []
+  private stateSequenceActiveUntil = 0
 
   constructor(options: PixiPetRuntimeOptions) {
     const PIXI = getPixi()
@@ -168,7 +177,65 @@ export class PixiPetRuntime {
     }, holdMs)
   }
 
+  playStateSequence(steps: PixiPetStateSequenceStep[]) {
+    if (!steps.length) {
+      this.clearStateSequence()
+      return
+    }
+
+    this.clearStateSequence(false)
+    this.stateSequenceToken += 1
+    const token = this.stateSequenceToken
+    const hasIndefiniteHold = steps.some((step) => step.holdMs == null)
+    const totalDuration = hasIndefiniteHold
+      ? Number.POSITIVE_INFINITY
+      : steps.reduce((sum, step) => sum + Math.max(0, step.holdMs ?? 0), 0)
+    this.stateSequenceActiveUntil = hasIndefiniteHold ? Number.POSITIVE_INFINITY : Date.now() + totalDuration
+
+    let elapsed = 0
+    for (const [index, step] of steps.entries()) {
+      const runStep = () => {
+        if (token !== this.stateSequenceToken) return
+        this.setState(step.state, step.clipName ?? undefined)
+
+        if (index === steps.length - 1 && step.holdMs != null) {
+          const finishTimer = window.setTimeout(() => {
+            if (token !== this.stateSequenceToken) return
+            this.stateSequenceActiveUntil = 0
+            this.resumePresentationPlayback()
+          }, Math.max(0, step.holdMs))
+          this.stateSequenceTimers.push(finishTimer)
+        }
+      }
+
+      const timer = window.setTimeout(runStep, elapsed)
+      this.stateSequenceTimers.push(timer)
+      if (step.holdMs == null) {
+        break
+      }
+      elapsed += Math.max(0, step.holdMs)
+    }
+  }
+
+  clearStateSequence(resumePresentation = true) {
+    this.stateSequenceToken += 1
+    this.stateSequenceActiveUntil = 0
+    for (const timer of this.stateSequenceTimers) {
+      window.clearTimeout(timer)
+    }
+    this.stateSequenceTimers = []
+
+    if (resumePresentation) {
+      this.resumePresentationPlayback()
+    }
+  }
+
   applyPresentation(presentation: ResolvedPetPresentation) {
+    if (this.isStateSequenceActive()) {
+      this.presentation = presentation
+      return
+    }
+
     const previousPresentation = this.presentation
     if (
       previousPresentation &&
@@ -220,6 +287,7 @@ export class PixiPetRuntime {
   }
 
   destroy() {
+    this.clearStateSequence(false)
     this.app.destroy(true, { children: true })
   }
 
@@ -241,6 +309,11 @@ export class PixiPetRuntime {
 
   private update(deltaMs: number) {
     this.globalElapsedMs += deltaMs
+
+    if (!this.isStateSequenceActive() && this.stateSequenceActiveUntil !== 0) {
+      this.stateSequenceActiveUntil = 0
+      this.resumePresentationPlayback()
+    }
 
     const playback = this.resolvePlaybackSource(this.currentState, this.currentClipName ?? undefined)
     const textures = playback?.textures
@@ -527,6 +600,25 @@ export class PixiPetRuntime {
       this.transitionSprite.alpha = 0
       this.petSprite.alpha = 1
     }
+  }
+
+  private isStateSequenceActive() {
+    return this.stateSequenceActiveUntil > Date.now()
+  }
+
+  private resumePresentationPlayback() {
+    if (!this.presentation) {
+      return
+    }
+
+    this.activatePlayback(
+      this.presentation.animationState,
+      this.presentation.clipName,
+      this.presentation.loop,
+      this.presentation.motionProfile,
+      this.presentation.microMotions,
+      this.presentation.fallback,
+    )
   }
 }
 

@@ -57,7 +57,7 @@ const VIDEO_TITLE_KEYWORDS = [
 ]
 
 const READING_TITLE_KEYWORDS = [
-  'pdf', '.pdf', 'ebook', 'epub', '.epub', 'kindle',
+  'pdf', '.pdf', 'ebook', '.epub', 'kindle',
   'readwise', 'reader', '文档', '论文', '手册', '指南',
   'notion', '语雀', '飞书文档', 'docs', 'documentation',
 ]

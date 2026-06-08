@@ -2,6 +2,7 @@
   "name": "deep-pet",
   "version": "0.1.0",
   "description": "A pixel desktop companion focused on animation, presence, and low-noise interaction",
+  "author": "babaozhou-ctrl",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
@@ -34,12 +35,14 @@
   "build": {
     "appId": "com.deep.pet",
     "productName": "Deep Pet",
+    "electronDist": "C:/Users/22734/AppData/Local/electron/Cache/9d52d289307a654855bb61f40a54e0b7898cd525432a5eed13c306a897e673ef",
     "directories": {
       "output": "release"
     },
     "files": [
       "dist/**",
       "dist-electron/**",
+      "plugins/**",
       "build/icon.*",
       "package.json"
     ],
@@ -49,6 +52,7 @@
     },
     "win": {
       "icon": "build/icon.ico",
+      "signAndEditExecutable": false,
       "target": [
         {
           "target": "nsis",

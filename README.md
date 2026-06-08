@@ -1,52 +1,47 @@
 # Deep Pet
 
-Deep Pet 是一个面向长时间驻留桌面的 AI 陪伴宠物项目。
+Deep Pet 是一个桌面陪伴宠物项目，目标不是做一个会动的小挂件，而是做出一个能长时间安静待在桌面、又真的有陪伴感的角色。
 
-它的目标不是做一个会动的小挂件，也不是把聊天框贴到透明窗口里，而是做出一个真正像“生活在桌面里的陪伴角色”的产品：安静、柔和、有情绪、有上下文感知，能在合适的时候陪你说话，也能在大多数时候只是自然地待在旁边。
+它应该像一个“住在桌面里的伙伴”：
 
-当前默认内置宠物是 **Mochi**。它是一只低打扰、重氛围、偏 cozy 像素风的桌面陪伴角色，也是当前整个项目的动画和产品气质基准。
+- 平时不吵不闹，安静待着
+- 会根据你当前在做什么改变状态和反应
+- 能聊天，也能记住一些上下文
+- 偶尔会主动互动，但不会一直打断你
+- 动画和气质更接近游戏角色，而不是网页浮层
 
-## 项目方向
+当前内置角色统一为 **bb7**。它是这个仓库现在的默认陪伴角色，也是现阶段产品气质、动画方向和交互语言的基准。
 
-Deep Pet 当前优先追求这些事情：
+## 当前重点
 
-- 陪伴感先于功能堆积
-- 动画体验先于“能跑就行”
-- 上下文感知先于高频打扰
-- 产品气质先于炫技式 UI
-- 可扩展架构先于一次性 Demo
+这个项目现在优先追求的是：
 
-我们希望它最终具备这些特征：
+- 陪伴感高于功能堆积
+- 动画体验高于“先跑起来再说”
+- 长时间驻留的舒适感高于高频提醒
+- 清晰可扩展的架构高于一次性 Demo
 
-- 长时间驻留桌面也不烦人
-- 会根据用户当前行为切换状态和反应
-- 有自己的情绪、节奏和说话方式
-- 更像陪伴角色，而不是普通 AI 助手
-- 可以被持续扩展为宠物包、插件和社区生态
+## 当前已经具备的能力
 
-## 当前已经完成到哪里
-
-当前仓库已经具备这些基础能力：
+当前仓库已经跑通了这些主链能力：
 
 - 透明无边框桌宠窗口
 - 基于 PixiJS 的独立渲染运行时
-- 平滑拖拽与低干扰的桌面驻留体验
-- 有限状态机驱动的情绪/场景状态切换
-- coding / gaming / watching_video / chatting / idle 等上下文行为骨架
-- 陪伴式聊天面板与轻量主动互动
-- PDF / DOCX / TXT / 代码文件的分析入口
-- 番茄钟、专注、休息、防过劳提醒等工作模式基础
-- 模块化宠物包加载
-- 自定义宠物导入
-- 完整宠物包导入链路
-- 宠物包模板与导入规范文档
+- 平滑拖拽与低打扰桌面驻留
+- FSM 驱动的情绪与场景状态切换
+- coding / gaming / watching_video / chatting / idle 等上下文骨架
+- 陪伴式聊天面板
+- 文件投喂与桌面短总结
+- 长期记忆与主动轻互动的基础链路
+- 专注 / 休息 / 防过劳提醒的工作模式基础能力
+- 模块化宠物包导入与内置宠物切换
 
-已经落地但仍在继续打磨的重点：
+还在继续打磨的重点包括：
 
-- 动画细节密度
-- 宠物包生态与社区扩展体验
-- 长期记忆和更稳定的陪伴人格
-- 对外展示素材与发布体验
+- 动画细节密度和状态切换质感
+- 首次使用体验和整体产品收口
+- 更稳定的长期记忆与上下文承接
+- 对外展示素材和发布体验
 
 ## 技术栈
 
@@ -114,7 +109,7 @@ npm run build
 npm run dist
 ```
 
-如果本轮改动涉及 Mochi 的 sprite / atlas，请额外运行：
+如果本轮改动涉及 bb7 的 sprite / atlas：
 
 ```bash
 npm run qa:mochi
@@ -122,22 +117,22 @@ npm run qa:mochi
 
 ## 自定义宠物包
 
-仓库现在支持两种导入路径：
+仓库现在支持两种接入路径。
 
 1. 完整宠物包导入
 
-- 适合真正要长期维护和分享的宠物包
+- 适合长期维护和分享的宠物包
 - 支持 `manifest.json`、`animations.json`、`states.json`
 - 支持 `personality.json`、`companion-content.json`
 - 支持 atlas 与本地资源加载
 
 2. 旧版 sprite 导入
 
-- 适合快速验证一份 sprite sheet
+- 适合快速验证单个 sprite sheet
 - 只需要旧格式 JSON 配置和 PNG
-- 系统会自动补默认 personality 与 companion-content
+- 系统会补默认的 personality 和 companion-content
 
-如果你准备自己做宠物包，建议从这些内容开始看：
+如果你准备自己做宠物包，建议先看：
 
 - [docs/specs/pet-package-template.md](./docs/specs/pet-package-template.md)
 - [src/pets/README.md](./src/pets/README.md)
@@ -145,9 +140,9 @@ npm run qa:mochi
 
 ## 设计与架构文档
 
-核心设计说明都放在 `docs/specs/` 里，避免把 README 写成过长的技术清单。
+核心设计说明放在 `docs/specs/` 里，避免把 README 写成过长的技术清单。
 
-建议优先阅读：
+建议优先看：
 
 - [docs/specs/product-architecture.md](./docs/specs/product-architecture.md)
 - [docs/specs/runtime-modules.md](./docs/specs/runtime-modules.md)
@@ -156,15 +151,15 @@ npm run qa:mochi
 - [docs/specs/release-and-packaging.md](./docs/specs/release-and-packaging.md)
 - [docs/specs/github-publishing-checklist.md](./docs/specs/github-publishing-checklist.md)
 
-## 当前限制
+## 当前边界
 
-当前项目已经不是最早期的桌宠原型，但距离最终想要的“产品级 AI Companion”还有一段路：
+这个项目已经不再是最早期的桌宠原型，但离“产品级 AI Companion”还有一段路。
 
 - 对外展示素材还不完整
-- 社区宠物包生态才刚开始搭骨架
-- 插件系统还没有完全开放
-- AI provider 的扩展和长期记忆还在继续深化
-- 顶层产品体验还会继续做去 Demo 感打磨
+- 社区宠物包生态还在搭骨架
+- 插件系统暂时还没有完全开放
+- AI provider 扩展和长期记忆仍在继续深化
+- 顶层产品体验还会继续做去 Demo 感收口
 
 ## 协作说明
 
@@ -172,7 +167,7 @@ npm run qa:mochi
 
 - [CONTRIBUTING.md](./CONTRIBUTING.md)
 
-如果你准备补截图、动图或仓库展示素材，可以先看：
+如果你准备补截图、动图或仓库展示素材，也可以先看：
 
 - [media/README.md](./media/README.md)
 

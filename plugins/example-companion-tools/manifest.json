@@ -1,24 +1,31 @@
 {
   "id": "example-companion-tools",
-  "name": "Example Companion Tools",
+  "name": "示例陪伴工具",
   "version": "0.1.0",
   "entry": "index.js",
-  "capabilities": ["work-mode", "document-analysis", "ai-provider"],
-  "permissions": ["fs.read.user-selected", "ai.provider.invoke"],
+  "capabilities": ["work-mode", "document-analysis", "ai-provider", "screen-perception"],
+  "permissions": ["fs.read.user-selected", "ai.provider.invoke", "screen.read.summary"],
   "providers": [
     {
       "id": "cozy-chat",
       "capability": "aiChat",
       "manifestCapability": "ai-provider",
-      "label": "Example Cozy Chat",
-      "description": "A warm companion-style chat provider exposed by this plugin manifest."
+      "label": "示例温柔对话",
+      "description": "一个偏陪伴气质的示例对话接入，用来演示插件如何接进 bb7 的聊天能力。"
     },
     {
       "id": "notes-file-analyzer",
       "capability": "fileAnalysis",
       "manifestCapability": "document-analysis",
-      "label": "Example Notes File Analyzer",
-      "description": "A future file-analysis provider candidate exposed by this plugin manifest."
+      "label": "示例文件陪读",
+      "description": "一个轻量的示例文件分析接入，用来演示插件如何参与文件投喂和总结。"
+    },
+    {
+      "id": "soft-screen-observer",
+      "capability": "screenPerception",
+      "manifestCapability": "screen-perception",
+      "label": "示例屏幕观察",
+      "description": "一个轻量的示例屏幕感知接入，用来演示插件如何参与上下文观察。"
     }
   ],
   "apiVersion": "1.0.0"

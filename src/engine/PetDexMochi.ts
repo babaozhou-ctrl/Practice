@@ -9,8 +9,8 @@ export function createPetDexMochi(): PetDexRenderer {
 }
 
 export const mochiPetJson = {
-  id: 'mascot.mochi',
-  displayName: 'Mochi',
+  id: 'mascot.bb7',
+  displayName: 'bb7',
   description: 'A soft floppy-ear pixel companion.',
   spritesheetPath: 'spritesheet.png',
 }

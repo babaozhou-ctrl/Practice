@@ -29,7 +29,7 @@ async function streamSseResponse(
 ): Promise<string> {
   const reader = response.body?.getReader()
   if (!reader) {
-    throw new Error('AI provider returned no response body.')
+    throw new Error('对话服务没有返回可读取的内容。')
   }
 
   const decoder = new TextDecoder()
@@ -76,13 +76,13 @@ async function readErrorMessage(response: Response): Promise<string> {
   try {
     return await response.text()
   } catch {
-    return 'Unknown provider error'
+    return '未知服务错误'
   }
 }
 
 export class DeepSeekChatProvider implements AIChatProvider {
   readonly id = 'builtin.ai-chat.deepseek'
-  readonly label = 'DeepSeek Chat Provider'
+  readonly label = 'DeepSeek 对话'
 
   async streamChat(
     request: AIChatStreamRequest,
@@ -91,7 +91,7 @@ export class DeepSeekChatProvider implements AIChatProvider {
     const { config, systemPrompt, messages, signal } = request
 
     if (!config.enabled || !config.apiKey) {
-      throw new Error('AI not configured. Set API key in settings.')
+      throw new Error('还没有完成 AI 对话配置，请先在设置里填好 API Key。')
     }
 
     const response = await fetch(config.endpoint, {
@@ -106,7 +106,7 @@ export class DeepSeekChatProvider implements AIChatProvider {
 
     if (!response.ok) {
       const errText = await readErrorMessage(response)
-      throw new Error(`API error ${response.status}: ${errText}`)
+      throw new Error(`对话服务请求失败（${response.status}）：${errText}`)
     }
 
     return streamSseResponse(response, callbacks)
@@ -116,16 +116,17 @@ export class DeepSeekChatProvider implements AIChatProvider {
     const { config, fileName, content } = request
 
     if (!config.enabled || !config.apiKey) {
-      return `已读取文件 ${fileName}，但当前没有启用 AI，总结暂时使用本地预览。`
+      return `已经读完《${fileName}》，但当前没有启用 AI，总结先使用本地预览结果。`
     }
 
     const prompt = [
-      '你是桌面陪伴宠物应用中的文档理解模块。',
-      '请用简洁、温暖、伴随式的语气总结用户拖入的文件内容。',
-      '输出必须包含：',
-      '1. 一句话总结',
-      '2. 3-5 条重点',
-      '3. 如果是代码或技术文档，再补一条“建议接下来关注什么”',
+      '你是桌面陪伴宠物应用里的文档理解模块。',
+      '请用自然、温和、有陪伴感的中文，帮用户整理刚刚“投喂”给 companion 的文件内容。',
+      '不要写成客服口吻、报告体，避免模板化 AI 腔，也不要过分热情。',
+      '输出尽量包含以下三部分：',
+      '1. 一句话总览',
+      '2. 3 到 5 条值得注意的重点',
+      '3. 如果是代码、技术文档或工作材料，再补一小段“接下来最值得看什么”',
       '',
       `文件名：${fileName}`,
       '文件内容：',
@@ -149,34 +150,31 @@ export class DeepSeekChatProvider implements AIChatProvider {
 
     if (!response.ok) {
       const errText = await readErrorMessage(response)
-      throw new Error(`Document summary failed ${response.status}: ${errText}`)
+      throw new Error(`文件总结请求失败（${response.status}）：${errText}`)
     }
 
     const json = await response.json()
-    return (
-      json.choices?.[0]?.message?.content?.trim() ||
-      `已读取文件 ${fileName}，但模型没有返回有效总结。`
-    )
+    return json.choices?.[0]?.message?.content?.trim() || `已经读完《${fileName}》，但模型没有返回有效总结。`
   }
 
   async healthCheck(config: AIConfig): Promise<AIProviderHealthStatus> {
     if (!config.enabled) {
       return {
         ok: false,
-        message: 'AI chat is disabled.',
+        message: 'AI 对话还没有开启。',
       }
     }
 
     if (!config.apiKey) {
       return {
         ok: false,
-        message: 'API key is missing.',
+        message: '还没有填写 API Key。',
       }
     }
 
     return {
       ok: true,
-      message: `Ready to call ${config.model}.`,
+      message: `已经可以连接 ${config.model}。`,
     }
   }
 }

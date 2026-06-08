@@ -20,37 +20,37 @@ const KNOWN_CAPABILITIES: Record<PluginManifestCapability, Omit<PluginCapability
   'ai-provider': {
     runtimeBinding: 'aiChat',
     status: 'ready',
-    summary: '可以对齐到现有 AI provider 抽象。',
+    summary: '已经可以接到现有的 AI 对话能力接口。',
   },
   'document-analysis': {
     runtimeBinding: 'fileAnalysis',
     status: 'ready',
-    summary: '可以对齐到现有文件分析 provider 抽象。',
+    summary: '已经可以接到现有的文件分析能力接口。',
   },
   'screen-perception': {
     runtimeBinding: 'screenPerception',
     status: 'ready',
-    summary: '可以对齐到现有 screen perception provider 抽象。',
+    summary: '已经可以接到现有的屏幕感知能力接口。',
   },
   'work-mode': {
     runtimeBinding: null,
     status: 'planned',
-    summary: '架构方向已预留，但当前还没有正式的 work-mode 插件执行入口。',
+    summary: '架构方向已经预留，但现在还没有正式接入工作节奏插件。',
   },
   'pet-behavior': {
     runtimeBinding: null,
     status: 'planned',
-    summary: '后续会接到 companion behavior / proactive policy 扩展点。',
+    summary: '后续会接到陪伴行为和主动互动的扩展点。',
   },
   'ui-extension': {
     runtimeBinding: null,
     status: 'planned',
-    summary: '后续会接到独立 UI 扩展区域，而不是直接侵入核心面板。',
+    summary: '后续会接到独立的界面扩展区域，不会直接挤进核心面板。',
   },
   'context-classifier': {
     runtimeBinding: null,
     status: 'planned',
-    summary: '后续会接到 context classifier pipeline。',
+    summary: '后续会接到上下文识别链路。',
   },
 }
 
@@ -62,7 +62,7 @@ export function describePluginCapabilities(capabilities: string[]): PluginCapabi
         capability,
         runtimeBinding: null,
         status: 'unknown',
-        summary: '当前运行时还不认识这个 capability，需要补映射或扩展契约。',
+        summary: '当前还识别不了这项能力，需要后续补上映射。',
       }
     }
 

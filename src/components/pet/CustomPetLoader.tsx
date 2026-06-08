@@ -44,7 +44,7 @@ const CustomPetLoader: React.FC<Props> = ({ onClose }) => {
       refreshCatalog()
       selectPet(payload.id)
       setCustomPet(null)
-      setMessage(`已导入 "${payload.name}"，现在已经切换为当前陪伴宠物。`)
+      setMessage(`已导入“${payload.name}”，现在已经切换为当前陪伴宠物。`)
       setStatus('loaded')
     } catch (err) {
       const nextMessage = err instanceof Error ? err.message : '导入失败。'
@@ -120,7 +120,7 @@ const CustomPetLoader: React.FC<Props> = ({ onClose }) => {
         </h3>
 
         <p style={{ margin: '0 0 16px', fontSize: '12px', lineHeight: 1.6, color: 'rgba(244,243,239,0.68)' }}>
-          支持两种方式：完整宠物包 `manifest.json + atlas/config`，或旧版 `config.json + sprite sheet.png`。
+          可以导入完整宠物包，也可以导入旧版 sprite 配置。完整包会更完整地保留角色自己的样子、动画和性格。
         </p>
 
         <input
@@ -139,17 +139,17 @@ const CustomPetLoader: React.FC<Props> = ({ onClose }) => {
           {status === 'idle' && (
             <div>
               <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '8px' }}>
-                拖入宠物包文件，或点击选择
+                把宠物包拖进来，或点击选择文件
               </div>
               <div style={{ fontSize: '12px', lineHeight: 1.6, color: 'rgba(244,243,239,0.56)' }}>
-                推荐直接拖入一个宠物包目录中的全部文件。
+                最省心的方式，是把同一个宠物目录里的文件一起拖进来。
               </div>
             </div>
           )}
 
           {status === 'loading' && (
             <div style={{ fontSize: '13px', lineHeight: 1.7 }}>
-              {message || '正在导入宠物包...'}
+              {message || '正在把新伙伴接进来...'}
             </div>
           )}
 
@@ -167,7 +167,7 @@ const CustomPetLoader: React.FC<Props> = ({ onClose }) => {
         </div>
 
         <p style={{ margin: '14px 0 18px', fontSize: '11px', lineHeight: 1.7, color: 'rgba(244,243,239,0.46)' }}>
-          完整宠物包会保留自己的动画、personality、companion-content 与 atlas 资源。旧版导入则会自动生成默认陪伴人格与互动模板。
+          完整宠物包会保留自己的动画、personality、companion-content 和 atlas 资源。旧版导入也能使用，只是会先套用一套默认陪伴人格和互动内容。
         </p>
 
         <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
@@ -199,7 +199,7 @@ async function buildImportPayload(
   const manifestFile = files.find((file) => file.name.toLowerCase() === 'manifest.json')
 
   if (manifestFile) {
-    setMessage('正在解析完整宠物包...')
+    setMessage('正在整理完整宠物包...')
     return buildImportedPetPayloadFromPackageFiles(
       files.map((file) => ({
         name: file.name,
@@ -213,10 +213,10 @@ async function buildImportPayload(
   const pngFile = files.find((file) => file.name.toLowerCase().endsWith('.png'))
 
   if (!jsonFile || !pngFile) {
-    throw new Error('需要提供完整宠物包文件，或至少一份旧版 JSON 配置和 PNG sprite sheet。')
+    throw new Error('需要提供完整宠物包文件，或者至少一份旧版 JSON 配置和 PNG sprite sheet。')
   }
 
-  setMessage('正在解析旧版 sprite 宠物...')
+  setMessage('正在整理旧版 sprite 宠物...')
   const config: PetAssetConfig = parsePetConfig(await jsonFile.text())
   const frames = await loadSpriteSheet(pngFile, config)
   const sprite = buildSpriteFromFrames(frames, config)

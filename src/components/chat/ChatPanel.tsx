@@ -2,14 +2,17 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ChatClient } from '../../ai/ChatClient'
 import { subscribeCompanionAction } from '../../ai/CompanionActionBridge'
 import { buildCompanionChatContext } from '../../ai/CompanionContextAdapter'
-import { buildChatReplyUtterance, buildFileAnalysisUtterance } from '../../ai/CompanionDesktopSummary'
+import { buildChatReplyUtterance } from '../../ai/CompanionDesktopSummary'
+import { emitCompanionFeedAnalysis, readCompanionFeedAnalyses, subscribeCompanionFeedAnalysis } from '../../ai/CompanionFeedBridge'
 import { emitCompanionUtterance } from '../../ai/CompanionUtteranceBridge'
-import { resolveAIChatProvider, resolveFileAnalysisProvider } from '../../plugins/PluginCapabilityRegistry'
 import { usePluginProviderStore } from '../../plugins/PluginProviderStore'
+import { resolveSelectedPetPackage } from '../../pets/resolveSelectedPetPackage'
+import { subscribeSelectedPet } from '../../pets/PetSelectionStore'
+import { analyzeFileForCompanionFeed, buildFeedAnalysisPromptForScene } from '../../services/companionFeedAnalysis'
+import { useChatStore } from '../../store/chatStore'
 import { useContextStore } from '../../store/contextStore'
 import { useSelectedPetCapabilityStore } from '../../store/selectedPetCapabilityStore'
-import { useChatStore } from '../../store/chatStore'
-import type { ChatMessage, ChatMessageAction, CompanionChatContext } from '../../types/chat'
+import type { ChatMessage, CompanionChatContext } from '../../types/chat'
 import MessageBubble from './MessageBubble'
 
 interface Props {
@@ -20,377 +23,39 @@ const FILE_ACCEPT =
   '.txt,.md,.json,.xml,.yaml,.yml,.toml,.csv,.pdf,.docx,.js,.ts,.jsx,.tsx,.py,.rs,.go,.java,.cpp,.c,.cs,.sql'
 
 const MAX_COMPANION_ACTION_HISTORY = 24
+const MAX_FEED_ANALYSIS_HISTORY = 24
 
-function buildPromptFromSections(...sections: string[]): string {
-  return sections.join('\n')
-}
-
-function getFileAnalysisSummaryIntro(context: CompanionChatContext, fileName: string): string {
-  switch (context.sceneId) {
-    case 'deep_focus':
-      return `我现在还在深度专注里，陪我用最稳的方式看《${fileName}》。`
-    case 'steady_focus':
-      return `我现在在工作状态里，陪我高效但别太生硬地看《${fileName}》。`
-    case 'reading_nook':
-      return `我们像并排读东西一样，一起看看《${fileName}》。`
-    case 'watch_together':
-      return `我们像一起看内容一样，顺着《${fileName}》继续聊。`
-    case 'social_corner':
-      return `我现在偏向聊天陪伴的状态，陪我把《${fileName}》理成自然一点的说法。`
-    case 'play_session':
-      return `我现在不想被太打断，请很轻地帮我扫一眼《${fileName}》。`
-    case 'late_night_wind_down':
-      return `已经有点晚了，陪我轻一点地看《${fileName}》，别把气氛拉得太紧。`
-    case 'quiet_idle':
-    case 'ambient_presence':
-      return `我们就安静一点，一起看看《${fileName}》。`
-    case 'soft_browsing':
-      return `我现在是在轻度浏览，陪我自然一点地看看《${fileName}》。`
-    default:
-      return `请陪我一起看看这个文件《${fileName}》。`
-  }
-}
-
-function buildAnalysisPromptForScene(
-  fileName: string,
-  summary: string,
-  context: CompanionChatContext,
-): string {
-  const sceneInstruction =
-    context.sceneId === 'deep_focus' || context.sceneId === 'steady_focus'
-      ? '先用克制、清楚、低打扰的语气帮我讲重点，不要像生硬的工具汇报。'
-      : context.sceneId === 'late_night_wind_down'
-        ? '先用更安静、更柔和的陪伴语气帮我讲重点，不要太亮也不要太硬。'
-        : context.sceneId === 'watch_together'
-          ? '先像一起看内容一样帮我讲重点，可以有一点轻微反应，但别变成正式报告。'
-          : '先用陪伴式的语气帮我讲重点，不要像生硬的工具汇报。'
-
-  return buildPromptFromSections(
-    getFileAnalysisSummaryIntro(context, fileName),
+function buildFeedMessageContent(fileName: string, briefSummary: string, detailedAnalysis: string) {
+  return [
+    `我先帮你把《${fileName}》顺了一遍。`,
     '',
-    sceneInstruction,
+    `先给你桌面上那种几句话的小结：${briefSummary}`,
     '',
-    '已提取摘要：',
-    summary,
-    '',
-    '如果你觉得有必要，也可以提醒我下一步最值得继续看的部分。',
-  )
-}
-
-function buildFollowUpActionsForScene(
-  fileName: string,
-  summary: string,
-  context: CompanionChatContext,
-  buildAnalysisPrompt: (fileName: string, summary: string, context: CompanionChatContext) => string,
-): ChatMessageAction[] {
-  const baseFillAction: ChatMessageAction = {
-    id: 'fill-input',
-    label: '先放到输入框',
-    prompt: buildAnalysisPrompt(fileName, summary, context),
-    fillOnly: true,
-  }
-
-  switch (context.sceneId) {
-    case 'deep_focus':
-    case 'steady_focus':
-      return [
-        {
-          id: 'extract-actionable',
-          label: '只讲要点',
-          prompt: buildPromptFromSections(
-            `我现在还在专注状态里，我们继续看《${fileName}》。`,
-            '',
-            '请用很克制的方式，只告诉我最关键的结论、风险或可执行信息，尽量少打断我的专注。',
-            '',
-            '摘要：',
-            summary,
-          ),
-        },
-        {
-          id: 'connect-to-work',
-          label: '结合当前工作',
-          prompt: buildPromptFromSections(
-            `请结合我当前这段专注状态，陪我继续看《${fileName}》。`,
-            '',
-            '帮我判断这份内容和我手头事情最可能相关的地方，并告诉我先看哪一段最省时间。',
-            '',
-            '摘要：',
-            summary,
-          ),
-        },
-        {
-          id: 'turn-into-checklist',
-          label: '整理执行顺序',
-          prompt: buildPromptFromSections(
-            `请继续陪我处理《${fileName}》。`,
-            '',
-            '把我接下来可以做的动作整理成一个轻量顺序，语气温和一点，但别太啰嗦。',
-            '',
-            '摘要：',
-            summary,
-          ),
-        },
-        baseFillAction,
-      ]
-    case 'watch_together':
-      return [
-        {
-          id: 'co-watch',
-          label: '一起聊亮点',
-          prompt: buildPromptFromSections(
-            `我们像一起看内容一样继续聊《${fileName}》。`,
-            '',
-            '请用轻一点、像在一起讨论的语气，告诉我这里面最有意思或最值得注意的地方。',
-            '',
-            '摘要：',
-            summary,
-          ),
-        },
-        {
-          id: 'spot-controversy',
-          label: '看看哪里最有料',
-          prompt: buildPromptFromSections(
-            `请继续陪我看《${fileName}》。`,
-            '',
-            '帮我找出最值得吐槽、讨论或者进一步确认的部分，但不要太吵。',
-            '',
-            '摘要：',
-            summary,
-          ),
-        },
-        {
-          id: 'gentle-recap',
-          label: '温柔复述',
-          prompt: buildPromptFromSections(
-            `请你陪我把《${fileName}》顺一遍。`,
-            '',
-            '用更自然一点、像坐在旁边轻声解释的方式，帮我复述重点。',
-            '',
-            '摘要：',
-            summary,
-          ),
-        },
-        baseFillAction,
-      ]
-    case 'social_corner':
-      return [
-        {
-          id: 'social-summary',
-          label: '帮我讲给别人听',
-          prompt: buildPromptFromSections(
-            `请陪我一起看《${fileName}》。`,
-            '',
-            '把它整理成适合讲给别人听的版本，要自然、暖一点，不要像机器总结。',
-            '',
-            '摘要：',
-            summary,
-          ),
-        },
-        {
-          id: 'soft-highlight',
-          label: '先挑最值得说的',
-          prompt: buildPromptFromSections(
-            `请继续陪我看《${fileName}》。`,
-            '',
-            '帮我挑出最值得马上提起的重点，像你在旁边轻轻提醒我一样。',
-            '',
-            '摘要：',
-            summary,
-          ),
-        },
-        {
-          id: 'prepare-response',
-          label: '整理一句回应',
-          prompt: buildPromptFromSections(
-            `我现在可能会把《${fileName}》里的内容继续聊下去。`,
-            '',
-            '请根据摘要帮我整理一个自然一点的回应或说法，不要太正式。',
-            '',
-            '摘要：',
-            summary,
-          ),
-        },
-        baseFillAction,
-      ]
-    case 'play_session':
-      return [
-        {
-          id: 'quickest-need',
-          label: '只说最重要的',
-          prompt: buildPromptFromSections(
-            `我现在不太想被打断，请非常简短地帮我看《${fileName}》。`,
-            '',
-            '只告诉我最关键的一件事，或者值不值得我稍后再回来细看。',
-            '',
-            '摘要：',
-            summary,
-          ),
-        },
-        {
-          id: 'save-for-later',
-          label: '留个稍后回看点',
-          prompt: buildPromptFromSections(
-            `我现在先玩着，请帮我给《${fileName}》留一个稍后继续看的切入口。`,
-            '',
-            '告诉我晚点回来时最该从哪里接着看，尽量短。',
-            '',
-            '摘要：',
-            summary,
-          ),
-        },
-        baseFillAction,
-      ]
-    case 'late_night_wind_down':
-      return [
-        {
-          id: 'soft-wrap',
-          label: '温柔讲重点',
-          prompt: buildPromptFromSections(
-            `已经有点晚了，我们轻一点继续看《${fileName}》。`,
-            '',
-            '请用更安静、更柔和的语气告诉我最重要的内容，让我不用一下子紧起来。',
-            '',
-            '摘要：',
-            summary,
-          ),
-        },
-        {
-          id: 'save-for-tomorrow',
-          label: '留到明天继续',
-          prompt: buildPromptFromSections(
-            `请陪我给《${fileName}》做一个能安心停下来的收尾。`,
-            '',
-            '帮我只保留明天最值得继续看的部分，用很轻的方式整理出来。',
-            '',
-            '摘要：',
-            summary,
-          ),
-        },
-        {
-          id: 'night-reassure',
-          label: '轻一点提醒我',
-          prompt: buildPromptFromSections(
-            `我现在在深夜收尾。`,
-            '',
-            `请结合《${fileName}》的摘要，温柔一点帮我判断今晚还值不值得继续细看，还是更适合先放下。`,
-            '',
-            '摘要：',
-            summary,
-          ),
-        },
-        baseFillAction,
-      ]
-    case 'reading_nook':
-    case 'quiet_idle':
-    case 'ambient_presence':
-    case 'soft_browsing':
-      return [
-        {
-          id: 'explain-gently',
-          label: '先讲重点',
-          prompt: buildPromptFromSections(
-            `我们继续看《${fileName}》。`,
-            '',
-            '请你像陪我一起读一样，用温和一点的语气告诉我最重要的三件事。',
-            '',
-            '摘要：',
-            summary,
-          ),
-        },
-        {
-          id: 'find-worth-reading',
-          label: '标出必看部分',
-          prompt: buildPromptFromSections(
-            `请继续陪我看《${fileName}》。`,
-            '',
-            '帮我从这个摘要里挑出最值得继续细看的部分，并告诉我为什么。',
-            '',
-            '摘要：',
-            summary,
-          ),
-        },
-        {
-          id: 'turn-into-plan',
-          label: '整理下一步',
-          prompt: buildPromptFromSections(
-            `我们拿《${fileName}》继续往下走。`,
-            '',
-            '请把我接下来可以做的事情整理成一个很轻的阅读或处理顺序，不要太工具化。',
-            '',
-            '摘要：',
-            summary,
-          ),
-        },
-        baseFillAction,
-      ]
-    default:
-      return [
-        {
-          id: 'explain-gently',
-          label: '先讲重点',
-          prompt: buildPromptFromSections(
-            `我们继续看《${fileName}》。`,
-            '',
-            '请你像陪我一起读一样，用温和一点的语气告诉我最重要的三件事。',
-            '',
-            '摘要：',
-            summary,
-          ),
-        },
-        {
-          id: 'find-worth-reading',
-          label: '标出必看部分',
-          prompt: buildPromptFromSections(
-            `请继续陪我看《${fileName}》。`,
-            '',
-            '帮我从这个摘要里挑出最值得继续细看的部分，并告诉我为什么。',
-            '',
-            '摘要：',
-            summary,
-          ),
-        },
-        {
-          id: 'turn-into-plan',
-          label: '整理下一步',
-          prompt: buildPromptFromSections(
-            `我们拿《${fileName}》继续往下走。`,
-            '',
-            '请把我接下来可以做的事情整理成一个很轻的阅读或处理顺序，不要太工具化。',
-            '',
-            '摘要：',
-            summary,
-          ),
-        },
-        baseFillAction,
-      ]
-  }
+    '如果你想继续往下看，我把更完整的整理也放在这里了：',
+    detailedAnalysis,
+  ].join('\n')
 }
 
 const ChatPanel: React.FC<Props> = ({ onClose }) => {
-  const {
-    messages,
-    config,
-    addMessage,
-    appendToLastMessage,
-    setStreaming,
-    isStreaming,
-  } = useChatStore()
+  const { messages, config, addMessage, appendToLastMessage, setStreaming, isStreaming } = useChatStore()
   const activity = useContextStore((state) => state.activity)
   const windowTitle = useContextStore((state) => state.activeWindow.title)
   const windowProcess = useContextStore((state) => state.activeWindow.process)
+  const screenPerception = useContextStore((state) => state.screenPerception)
   const canAnalyzeFiles = useSelectedPetCapabilityStore((state) => state.fileAnalysis)
   const aiChatProviderId = usePluginProviderStore((state) => state.aiChatProviderId)
-  const fileAnalysisProviderId = usePluginProviderStore((state) => state.fileAnalysisProviderId)
 
   const [input, setInput] = useState('')
   const [visible, setVisible] = useState(false)
   const [isFileDragActive, setIsFileDragActive] = useState(false)
   const [dragDepth, setDragDepth] = useState(0)
   const [client] = useState(() => new ChatClient(config, aiChatProviderId))
+  const [petName, setPetName] = useState(() => resolveSelectedPetPackage().manifest.name || 'bb7')
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const recentCompanionActionIdsRef = useRef<string[]>([])
+  const recentFeedAnalysisIdsRef = useRef<string[]>([])
 
   useEffect(() => {
     client.updateConfig(config)
@@ -413,15 +78,21 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
   }, [])
 
   useEffect(() => {
+    return subscribeSelectedPet(() => {
+      setPetName(resolveSelectedPetPackage().manifest.name || 'bb7')
+    })
+  }, [])
+
+  useEffect(() => {
     return subscribeCompanionAction((payload) => {
       if (recentCompanionActionIdsRef.current.includes(payload.id)) {
         return
       }
 
-      recentCompanionActionIdsRef.current = [
-        payload.id,
-        ...recentCompanionActionIdsRef.current,
-      ].slice(0, MAX_COMPANION_ACTION_HISTORY)
+      recentCompanionActionIdsRef.current = [payload.id, ...recentCompanionActionIdsRef.current].slice(
+        0,
+        MAX_COMPANION_ACTION_HISTORY,
+      )
 
       addMessage({
         id: `companion-action-${payload.id}`,
@@ -432,6 +103,58 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
       })
     })
   }, [addMessage])
+
+  useEffect(() => {
+    for (const payload of readCompanionFeedAnalyses()) {
+      if (recentFeedAnalysisIdsRef.current.includes(payload.id)) {
+        continue
+      }
+
+      recentFeedAnalysisIdsRef.current = [payload.id, ...recentFeedAnalysisIdsRef.current].slice(
+        0,
+        MAX_FEED_ANALYSIS_HISTORY,
+      )
+
+      addMessage({
+        id: `feed-analysis-history-${payload.id}`,
+        role: 'system',
+        content: buildFeedMessageContent(payload.fileName, payload.briefSummary, payload.detailedAnalysis),
+        timestamp: payload.createdAt,
+        actions: payload.actions,
+      })
+    }
+
+    return subscribeCompanionFeedAnalysis((payload) => {
+      if (recentFeedAnalysisIdsRef.current.includes(payload.id)) {
+        return
+      }
+
+      recentFeedAnalysisIdsRef.current = [payload.id, ...recentFeedAnalysisIdsRef.current].slice(
+        0,
+        MAX_FEED_ANALYSIS_HISTORY,
+      )
+
+      addMessage({
+        id: `feed-analysis-${payload.id}`,
+        role: 'system',
+        content: buildFeedMessageContent(payload.fileName, payload.briefSummary, payload.detailedAnalysis),
+        timestamp: payload.createdAt,
+        actions: payload.actions,
+      })
+
+      setInput(buildFeedAnalysisPromptForScene(payload.fileName, payload.detailedAnalysis, payload.context))
+    })
+  }, [addMessage])
+
+  const buildContext = useCallback((): CompanionChatContext => {
+    return buildCompanionChatContext(
+      activity,
+      windowTitle,
+      windowProcess,
+      screenPerception?.summary ?? null,
+      screenPerception?.source ?? null,
+    )
+  }, [activity, screenPerception?.source, screenPerception?.summary, windowProcess, windowTitle])
 
   const isFileDragPayload = useCallback((dataTransfer?: DataTransfer | null) => {
     if (!dataTransfer) return false
@@ -452,7 +175,7 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
       })
       setStreaming(true)
 
-      const context = buildCompanionChatContext(activity, windowTitle, windowProcess)
+      const context = buildContext()
       addMessage({
         id: `resp-${Date.now()}`,
         role: 'assistant',
@@ -475,21 +198,12 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
           setStreaming(false)
         },
         (err) => {
-          appendToLastMessage(`[Error: ${err.message}]`)
+          appendToLastMessage(`刚才这句话我没能顺利接住。${err.message}`)
           setStreaming(false)
         },
       )
     },
-    [
-      activity,
-      addMessage,
-      appendToLastMessage,
-      client,
-      isStreaming,
-      setStreaming,
-      windowProcess,
-      windowTitle,
-    ],
+    [addMessage, appendToLastMessage, buildContext, client, isStreaming, setStreaming],
   )
 
   const sendMessage = useCallback(async () => {
@@ -507,25 +221,6 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
       void sendMessage()
     }
   }
-
-  const buildAnalysisPrompt = useCallback((
-    fileName: string,
-    summary: string,
-    context: CompanionChatContext,
-  ) => {
-    return buildAnalysisPromptForScene(fileName, summary, context)
-  }, [])
-
-  const buildFollowUpActions = useCallback(
-    (
-      fileName: string,
-      summary: string,
-      context: CompanionChatContext,
-    ): ChatMessageAction[] => {
-      return buildFollowUpActionsForScene(fileName, summary, context, buildAnalysisPrompt)
-    },
-    [buildAnalysisPrompt],
-  )
 
   const handleMessageActionSelect = useCallback(
     async (message: ChatMessage, actionId: string) => {
@@ -546,76 +241,55 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
     async (file: File | null | undefined) => {
       if (!file || !canAnalyzeFiles || isStreaming) return
 
-      const aiChatProvider = resolveAIChatProvider(aiChatProviderId)
-      const fileAnalysisProvider = resolveFileAnalysisProvider(fileAnalysisProviderId)
-      const context = buildCompanionChatContext(activity, windowTitle, windowProcess)
-
       addMessage({
         id: `file-${Date.now()}`,
         role: 'system',
-        content: `正在整理文件《${file.name}》……`,
+        content: `把《${file.name}》交给我吧，我先看一遍。`,
         timestamp: Date.now(),
       })
 
       try {
-        const content = await fileAnalysisProvider.readFile(file)
-        const localSummary = await fileAnalysisProvider.summarize({
-          fileName: file.name,
-          content,
+        const result = await analyzeFileForCompanionFeed(file, {
+          activity,
+          windowTitle,
+          windowProcess,
+          screenSummary: screenPerception?.summary ?? null,
+          screenSource: screenPerception?.source ?? null,
         })
-        let summary = localSummary
 
-        if (config.enabled && config.apiKey) {
-          try {
-            summary = await aiChatProvider.summarizeDocument({
-              config,
-              fileName: file.name,
-              content,
-            })
-          } catch (error: any) {
-            addMessage({
-              id: `file-ai-fallback-${Date.now()}`,
-              role: 'system',
-              content: `云端总结暂时不可用，先给你本地摘要。${error.message}`,
-              timestamp: Date.now(),
-            })
-          }
-        }
-
-        addMessage({
-          id: `file-summary-${Date.now()}`,
-          role: 'system',
-          content: `我先帮你把《${file.name}》理了一遍。你可以直接点下面的方式，我们一起继续往下看。\n\n${summary}`,
-          timestamp: Date.now(),
-          actions: buildFollowUpActions(file.name, summary, context),
+        emitCompanionFeedAnalysis({
+          id: `chat-feed-${Date.now()}`,
+          fileName: result.fileName,
+          briefSummary: result.briefSummary,
+          detailedAnalysis: result.detailedAnalysis,
+          context: result.context,
+          actions: result.actions,
+          desktopUtterance: result.desktopUtterance,
+          createdAt: Date.now(),
         })
 
         emitCompanionUtterance({
           source: 'file-analysis',
-          message: buildFileAnalysisUtterance(file.name, summary, context.sceneId),
+          message: result.desktopUtterance,
           duration: 3200,
         })
-
-        setInput(buildAnalysisPrompt(file.name, summary, context))
       } catch (error: any) {
         addMessage({
           id: `file-error-${Date.now()}`,
           role: 'system',
-          content: `文件分析失败：${error.message}`,
+          content: `这次没能顺利看完《${file.name}》。${error?.message ?? String(error)}`,
           timestamp: Date.now(),
         })
       }
     },
     [
-      addMessage,
-      aiChatProviderId,
-      buildAnalysisPrompt,
-      buildFollowUpActions,
-      canAnalyzeFiles,
-      config,
-      fileAnalysisProviderId,
-      isStreaming,
       activity,
+      addMessage,
+      canAnalyzeFiles,
+      client,
+      isStreaming,
+      screenPerception?.source,
+      screenPerception?.summary,
       windowProcess,
       windowTitle,
     ],
@@ -713,6 +387,17 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
       fontSize: '14px',
       fontWeight: 600,
       letterSpacing: '0.3px',
+    },
+    titleWrap: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '2px',
+      minWidth: 0,
+    },
+    titleHint: {
+      fontSize: '11px',
+      color: 'rgba(104, 132, 157, 0.7)',
+      fontWeight: 500,
     },
     closeBtn: {
       background: 'none',
@@ -821,20 +506,30 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
     >
       {isFileDragActive && dragDepth > 0 && (
         <div style={styles.dropOverlay}>
-          <strong>把文件拖到这里</strong>
+          <strong>把文件交给我</strong>
           <div style={styles.dropHint}>
-            支持 PDF、DOCX、TXT、Markdown 和常见代码文件。Mochi 会先整理摘要，再陪你一起往下看。
+            支持 PDF、DOCX、TXT、Markdown 和常见代码文件。{petName}
+            会先帮你顺一遍，再陪你继续往下看。
           </div>
         </div>
       )}
       <div style={styles.header}>
-        <span>Mochi</span>
+        <div style={styles.titleWrap}>
+          <span>{petName}</span>
+          <span style={styles.titleHint}>在这里陪你待一会儿</span>
+        </div>
         <button onClick={onClose} style={styles.closeBtn}>
-          x
+          ×
         </button>
       </div>
       <div style={styles.msgs}>
-        {messages.length === 0 && <div style={styles.empty}>Mochi 在等你开口，也可以直接拖一个文件进来。</div>}
+        {messages.length === 0 && (
+          <div style={styles.empty}>
+            我在这儿，慢慢说也可以。
+            <br />
+            想聊天就和我说一句，想投喂文件也可以直接拖进来。
+          </div>
+        )}
         {messages.map((message) => (
           <MessageBubble
             key={message.id}
@@ -848,7 +543,7 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
       </div>
       {canAnalyzeFiles && (
         <div style={styles.capabilityHint}>
-          可以点 <strong>File</strong>，也可以把文件直接拖进这个面板。
+          可以点 <strong>投喂</strong>，也可以把文件直接拖进这个面板。
         </div>
       )}
       <div style={styles.inputRow}>
@@ -870,7 +565,7 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
               style={styles.utilityBtn}
               disabled={isStreaming}
             >
-              File
+              投喂
             </button>
           </>
         )}
@@ -878,16 +573,16 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="想和 Mochi 说点什么？"
+          placeholder={`想和 ${petName} 说点什么？`}
           rows={1}
           style={styles.input}
         />
         <button onClick={() => void sendMessage()} style={styles.sendBtn} disabled={isStreaming}>
-          {isStreaming ? '思考中' : '发送'}
+          {isStreaming ? '回应中' : '发给它'}
         </button>
         {isStreaming && (
           <button type="button" onClick={stopStreaming} style={styles.utilityBtn}>
-            Stop
+            先停一下
           </button>
         )}
       </div>

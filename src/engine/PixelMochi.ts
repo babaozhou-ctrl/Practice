@@ -279,7 +279,7 @@ function makeExcited(): FrameData[] {
 
 const PALETTES = [
   {
-    name: 'Mochi Default',
+    name: 'bb7 Default',
     body: '#fbfdff',
     highlight: '#d8edff',
     shadow: '#6da9dc',
@@ -331,9 +331,4 @@ export function createMochiSprite(): Sprite {
   ]
 
   return new Sprite(createSpriteDefinition(15, 17, 4, PALETTES, clips))
-}
-
-// Legacy alias kept only for older demo/runtime imports.
-export function createCatgirlSprite(): Sprite {
-  return createMochiSprite()
 }

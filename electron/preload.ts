@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { PluginAIChatExecutionRequest } from '../src/plugins/types'
+import type { AIConfig } from '../src/types/chat'
 
 contextBridge.exposeInMainWorld('electronAPI', {
   movePet: (x: number, y: number) => ipcRenderer.send('pet:moved', x, y),
@@ -10,13 +11,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onShowSettings: (callback: () => void) => {
     ipcRenderer.on('ui:show-settings', () => callback())
   },
+  onShowChat: (callback: () => void) => {
+    ipcRenderer.on('ui:show-chat', () => callback())
+  },
   quitApp: () => ipcRenderer.send('app:quit'),
   getActiveWindow: (): Promise<{ title: string; process: string; idleMs?: number }> =>
     ipcRenderer.invoke('context:get-active-window'),
+  capturePrimaryScreen: (): Promise<string | null> =>
+    ipcRenderer.invoke('screen:capture-primary'),
   extractDocumentText: (payload: { fileName: string; mimeType?: string; buffer: ArrayBuffer | Uint8Array }) =>
     ipcRenderer.invoke('documents:extract-text', payload),
   runPluginFileAnalysis: (payload: { providerId: string; fileName: string; content: string }) =>
     ipcRenderer.invoke('plugins:run-file-analysis', payload),
+  runPluginAISummary: (payload: { providerId: string; config: AIConfig; fileName: string; content: string }) =>
+    ipcRenderer.invoke('plugins:run-ai-summary', payload),
+  runPluginScreenCapture: (payload: { providerId: string }) =>
+    ipcRenderer.invoke('plugins:run-screen-capture', payload),
+  runPluginScreenOCR: (payload: { providerId: string; imageData: string }) =>
+    ipcRenderer.invoke('plugins:run-screen-ocr', payload),
+  runPluginScreenLocalVision: (payload: { providerId: string; imageData: string }) =>
+    ipcRenderer.invoke('plugins:run-screen-local-vision', payload),
+  runPluginScreenCloudVision: (payload: { providerId: string; imageData: string }) =>
+    ipcRenderer.invoke('plugins:run-screen-cloud-vision', payload),
   runPluginAIChat: async (
     payload: PluginAIChatExecutionRequest,
     onChunk?: (chunk: string) => void,
@@ -44,6 +60,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   cancelPluginAIChat: (requestId: string) =>
     ipcRenderer.invoke('plugins:cancel-ai-chat', { requestId }),
+  runPluginAIHealthCheck: (payload: { providerId: string; config: AIConfig }) =>
+    ipcRenderer.invoke('plugins:run-ai-health-check', payload),
   onSpeech: (callback: (msg: string, dur: number) => void) => {
     ipcRenderer.on('speech:show', (_event, msg, dur) => callback(msg, dur))
   },

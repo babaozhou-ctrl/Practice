@@ -55,8 +55,12 @@ export class ProactiveInteractionScheduler {
     const name = memory?.preferredName?.trim() || null
     const ritual = memory?.rituals[0]?.trim() || null
     const recentTopic = memory?.recentTopics[0]?.trim() || null
+    const recentFile = resolveRecentFile(snapshot)
     const activeTitle = snapshot.activeWindow?.title?.trim() || null
     const sceneId = snapshot.scene.id
+    const screenShort = snapshot.screenContext.shortSummary
+    const screenDomain = snapshot.screenContext.domain
+    const sharedAttention = resolveSharedAttention(snapshot)
 
     const baseContextKey = [
       sceneId,
@@ -65,6 +69,10 @@ export class ProactiveInteractionScheduler {
       snapshot.mode,
       recentTopic ? trimForSpeech(recentTopic, 18) : '',
       activeTitle ? trimForSpeech(activeTitle, 18) : '',
+      screenShort ? trimForSpeech(screenShort, 18) : '',
+      sharedAttention ? trimForSpeech(sharedAttention, 18) : '',
+      recentFile ? trimForSpeech(recentFile.fileName, 18) : '',
+      screenDomain,
     ].join('|')
 
     const shouldSkipForRepeat = (category: string) =>
@@ -77,9 +85,9 @@ export class ProactiveInteractionScheduler {
         contextKey: `focus-ending|${baseContextKey}`,
         intent: {
           message: name
-            ? `${name}，这一轮专注快收尾了。再稳一小会儿，我们就去休息。`
-            : '这一轮专注快收尾了。再稳一小会儿，我们就去休息。',
-          duration: 3600,
+            ? `${name}，这一轮快收尾了。我们再稳一会儿，就去休息。`
+            : '这一轮快收尾了。我们再稳一会儿，就去休息。',
+          duration: 3400,
         },
       }
     }
@@ -90,9 +98,9 @@ export class ProactiveInteractionScheduler {
         contextKey: `break-ending|${baseContextKey}`,
         intent: {
           message: name
-            ? `${name}，休息差不多了。等你准备好，我们再慢慢回到专注里。`
-            : '休息差不多了。等你准备好，我们再慢慢回到专注里。',
-          duration: 3600,
+            ? `${name}，休息差不多了。等你准备好，我们慢慢回到节奏里。`
+            : '休息差不多了。等你准备好，我们慢慢回到节奏里。',
+          duration: 3400,
         },
       }
     }
@@ -105,7 +113,7 @@ export class ProactiveInteractionScheduler {
           message: name
             ? `${name}，你今天已经撑很久了。这次我想认真提醒你，先停一下也没关系。`
             : '你今天已经撑很久了。这次我想认真提醒你，先停一下也没关系。',
-          duration: 4600,
+          duration: 4200,
         },
       }
     }
@@ -116,15 +124,36 @@ export class ProactiveInteractionScheduler {
         contextKey: `overwork-gentle|${baseContextKey}`,
         intent: {
           message: name
-            ? `${name}，你今天已经很努力了。下一个空档里，我们认真休息一下吧。`
-            : '你今天已经很努力了。下一个空档里，我们认真休息一下吧。',
-          duration: 4000,
+            ? `${name}，你今天已经很努力了。下一个空档里，我们认真歇一会儿吧。`
+            : '你今天已经很努力了。下一个空档里，我们认真歇一会儿吧。',
+          duration: 3800,
         },
       }
     }
 
     if (lowDistractionMode) {
       return null
+    }
+
+    if (
+      recentFile &&
+      ['reading_nook', 'soft_browsing', 'quiet_idle', 'ambient_presence'].includes(sceneId) &&
+      signals.timeSinceLastContextMs > 3 * 60_000
+    ) {
+      if (shouldSkipForRepeat('recent-file-checkin')) {
+        return null
+      }
+
+      return {
+        category: 'recent-file-checkin',
+        contextKey: `recent-file-checkin|${baseContextKey}`,
+        intent: {
+          message: name
+            ? `${name}，我还记得我们刚一起看过《${trimForSpeech(recentFile.fileName, 20)}》。如果你想继续，我可以接着陪你顺下去。`
+            : `我还记得我们刚一起看过《${trimForSpeech(recentFile.fileName, 20)}》。如果你想继续，我可以接着陪你顺下去。`,
+          duration: 3600,
+        },
+      }
     }
 
     if (signals.productiveSessionMs >= 52 * 60_000 && isProductiveScene(snapshot)) {
@@ -137,9 +166,23 @@ export class ProactiveInteractionScheduler {
           contextKey: `productive-ritual|${baseContextKey}`,
           intent: {
             message: name
-              ? `${name}，你已经专注挺久了。要不要按你平时“${trimForSpeech(ritual, 18)}”的节奏休息一下？`
-              : `你已经专注挺久了。要不要按你平时“${trimForSpeech(ritual, 18)}”的节奏休息一下？`,
-            duration: 4200,
+              ? `${name}，你已经专注挺久了。要不要按你平时“${trimForSpeech(ritual, 18)}”的节奏缓一缓？`
+              : `你已经专注挺久了。要不要按你平时“${trimForSpeech(ritual, 18)}”的节奏缓一缓？`,
+            duration: 3800,
+          },
+        }
+      }
+
+      if (sharedAttention && screenDomain === 'code') {
+        if (shouldSkipForRepeat('productive-screen-code')) {
+          return null
+        }
+        return {
+          category: 'productive-screen-code',
+          contextKey: `productive-screen-code|${baseContextKey}`,
+          intent: {
+            message: `你已经盯着“${trimForSpeech(sharedAttention, 22)}”挺久了。要不要先动一动，再回来把它收干净？`,
+            duration: 3800,
           },
         }
       }
@@ -153,9 +196,9 @@ export class ProactiveInteractionScheduler {
           contextKey: `productive-topic|${baseContextKey}`,
           intent: {
             message: name
-              ? `${name}，这阵子你一直在忙“${trimForSpeech(recentTopic, 20)}”。起来活动一下，我继续陪你收尾。`
-              : `这阵子你一直在忙“${trimForSpeech(recentTopic, 20)}”。起来活动一下，我继续陪你收尾。`,
-            duration: 4200,
+              ? `${name}，这阵子你一直在忙“${trimForSpeech(recentTopic, 20)}”。起身松一下，我继续陪你收尾。`
+              : `这阵子你一直在忙“${trimForSpeech(recentTopic, 20)}”。起身松一下，我继续陪你收尾。`,
+            duration: 3800,
           },
         }
       }
@@ -169,14 +212,17 @@ export class ProactiveInteractionScheduler {
         contextKey: `productive-default|${baseContextKey}`,
         intent: {
           message: name
-            ? `${name}，你已经专注很久了，要不要起来活动一下？`
-            : '你已经专注很久了，要不要起来活动一下？',
-          duration: 4000,
+            ? `${name}，你已经专注很久了。要不要起来活动一下？`
+            : '你已经专注很久了。要不要起来活动一下？',
+          duration: 3600,
         },
       }
     }
 
-    if (sceneId === 'late_night_wind_down' || (lateNight && ['coding', 'browsing', 'idle', 'other', 'reading'].includes(snapshot.activity))) {
+    if (
+      sceneId === 'late_night_wind_down' ||
+      (lateNight && ['coding', 'browsing', 'idle', 'other', 'reading'].includes(snapshot.activity))
+    ) {
       if (ritual) {
         if (shouldSkipForRepeat('late-night-ritual')) {
           return null
@@ -186,9 +232,23 @@ export class ProactiveInteractionScheduler {
           contextKey: `late-night-ritual|${baseContextKey}`,
           intent: {
             message: name
-              ? `${name}，已经有点晚了。如果你准备按“${trimForSpeech(ritual, 18)}”慢慢收尾，我会轻一点陪着你。`
-              : `已经有点晚了。如果你准备按“${trimForSpeech(ritual, 18)}”慢慢收尾，我会轻一点陪着你。`,
-            duration: 4200,
+              ? `${name}，已经有点晚了。如果你准备按“${trimForSpeech(ritual, 18)}”的节奏慢慢收尾，我会轻一点陪着你。`
+              : `已经有点晚了。如果你准备按“${trimForSpeech(ritual, 18)}”的节奏慢慢收尾，我会轻一点陪着你。`,
+            duration: 4000,
+          },
+        }
+      }
+
+      if (sharedAttention) {
+        if (shouldSkipForRepeat('late-night-attention')) {
+          return null
+        }
+        return {
+          category: 'late-night-attention',
+          contextKey: `late-night-attention|${baseContextKey}`,
+          intent: {
+            message: `已经有点晚了。我看到你还陪在“${trimForSpeech(sharedAttention, 20)}”这边，我们慢一点也没关系。`,
+            duration: 4000,
           },
         }
       }
@@ -204,13 +264,13 @@ export class ProactiveInteractionScheduler {
           message: name
             ? `${name}，已经有点晚了。我会轻一点陪着你，但也想提醒你别太累。`
             : '已经有点晚了。我会轻一点陪着你，但也想提醒你别太累。',
-          duration: 4200,
+          duration: 4000,
         },
       }
     }
 
     if (
-      sceneId === 'watch_together' &&
+      (sceneId === 'watch_together' || screenDomain === 'video') &&
       snapshot.mode === 'reactive' &&
       signals.timeSinceLastContextMs > 4 * 60_000
     ) {
@@ -218,15 +278,37 @@ export class ProactiveInteractionScheduler {
         return null
       }
 
-      const sharedViewTopic = recentTopic || activeTitle
+      const sharedViewTopic = sharedAttention || recentTopic || activeTitle
       return {
         category: 'watch-together',
         contextKey: `watch-together|${baseContextKey}`,
         intent: {
           message: sharedViewTopic
-            ? `这一段像是在一起看“${trimForSpeech(sharedViewTopic, 22)}”。我在旁边陪你。`
-            : '这一段像是在一起看点什么。我就在旁边陪你。',
-          duration: 3400,
+            ? `这会儿像是在一起看“${trimForSpeech(sharedViewTopic, 22)}”。我就在旁边陪你。`
+            : '这会儿像是在一起看点什么。我就在旁边陪你。',
+          duration: 3200,
+        },
+      }
+    }
+
+    if (
+      (sceneId === 'social_corner' || screenDomain === 'social') &&
+      snapshot.mode === 'reactive' &&
+      signals.timeSinceLastContextMs > 4 * 60_000
+    ) {
+      if (shouldSkipForRepeat('social-corner')) {
+        return null
+      }
+
+      const socialTopic = sharedAttention || activeTitle
+      return {
+        category: 'social-corner',
+        contextKey: `social-corner|${baseContextKey}`,
+        intent: {
+          message: socialTopic
+            ? `你像是在围着“${trimForSpeech(socialTopic, 20)}”聊天。我轻一点待在旁边，不打乱你的节奏。`
+            : '你像是在和谁聊天。我轻一点待在旁边，不打乱你的节奏。',
+          duration: 3200,
         },
       }
     }
@@ -245,10 +327,12 @@ export class ProactiveInteractionScheduler {
         category: 'gentle-check-in',
         contextKey: `gentle-check-in|${baseContextKey}`,
         intent: {
-          message: activeTitle
-            ? `桌面现在很安静，我就陪你待在“${trimForSpeech(activeTitle, 20)}”旁边。`
-            : '桌面现在很安静，我就这样陪你待着。',
-          duration: 3200,
+          message: sharedAttention
+            ? `桌面现在很安静，我就陪你待在“${trimForSpeech(sharedAttention, 20)}”旁边。`
+            : activeTitle
+              ? `桌面现在很安静，我就陪你待在“${trimForSpeech(activeTitle, 20)}”旁边。`
+              : '桌面现在很安静，我就这样陪你待着。',
+          duration: 3000,
         },
       }
     }
@@ -289,20 +373,20 @@ function getModeCooldown(
   lowDistractionMode: boolean,
 ): number {
   if (workMode.enabled && workMode.isFocusActive) {
-    return lowDistractionMode ? 22 * 60_000 : 12 * 60_000
+    return lowDistractionMode ? 24 * 60_000 : 14 * 60_000
   }
 
   switch (mode) {
     case 'quiet':
-      return lowDistractionMode ? 42 * 60_000 : 28 * 60_000
+      return lowDistractionMode ? 46 * 60_000 : 32 * 60_000
     case 'focus_guardian':
-      return lowDistractionMode ? 32 * 60_000 : 22 * 60_000
+      return lowDistractionMode ? 34 * 60_000 : 24 * 60_000
     case 'reactive':
-      return lowDistractionMode ? 28 * 60_000 : 18 * 60_000
+      return lowDistractionMode ? 30 * 60_000 : 20 * 60_000
     case 'proactive':
-      return lowDistractionMode ? 24 * 60_000 : 14 * 60_000
-    default:
       return lowDistractionMode ? 26 * 60_000 : 16 * 60_000
+    default:
+      return lowDistractionMode ? 28 * 60_000 : 18 * 60_000
   }
 }
 
@@ -323,10 +407,18 @@ function isProductiveScene(snapshot: CompanionSnapshot): boolean {
 }
 
 function isIdlePresenceScene(snapshot: CompanionSnapshot): boolean {
+  return snapshot.scene.id === 'quiet_idle' || snapshot.scene.id === 'ambient_presence' || snapshot.activity === 'idle'
+}
+
+function resolveSharedAttention(snapshot: CompanionSnapshot): string | null {
+  const recentFile = snapshot.memory?.recentFileAnalyses?.[0]
+
   return (
-    snapshot.scene.id === 'quiet_idle' ||
-    snapshot.scene.id === 'ambient_presence' ||
-    snapshot.activity === 'idle'
+    snapshot.screenContext.shortSummary?.trim() ||
+    (recentFile ? `刚刚一起看过的《${recentFile.fileName}》` : null) ||
+    snapshot.memory?.recentTopics?.[0]?.trim() ||
+    snapshot.activeWindow?.title?.trim() ||
+    null
   )
 }
 
@@ -336,4 +428,17 @@ function trimForSpeech(value: string, maxLength: number): string {
     return normalized
   }
   return `${normalized.slice(0, maxLength).trim()}...`
+}
+
+function resolveRecentFile(snapshot: CompanionSnapshot) {
+  const recent = snapshot.memory?.recentFileAnalyses?.[0]
+  if (!recent?.fileName) {
+    return null
+  }
+
+  if (Date.now() - recent.capturedAt > 40 * 60_000) {
+    return null
+  }
+
+  return recent
 }

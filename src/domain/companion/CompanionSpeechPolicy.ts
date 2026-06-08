@@ -222,7 +222,7 @@ function normalizeMessage(message: string): string {
 }
 
 function buildMessageKey(message: string): string {
-  return normalizeMessage(message).replace(/[。！？!?，,.;；、.]+$/u, '').toLowerCase()
+  return normalizeMessage(message).replace(/[。！？，?!;；、.\s]+$/u, '').toLowerCase()
 }
 
 function firstSentence(message: string): string | null {
@@ -245,7 +245,7 @@ function firstSentence(message: string): string | null {
 
 function findSoftBreak(message: string, maxChars: number): number {
   const minChars = Math.max(8, Math.floor(maxChars * 0.55))
-  const softSymbols = ['。', '，', '；', '、', '！', '？', '.', ',', ';', ':', ' ']
+  const softSymbols = ['。', '！', '？', '、', '，', '.', ',', ';', ':', ' ']
 
   for (let index = Math.min(maxChars, message.length - 1); index >= minChars; index -= 1) {
     if (softSymbols.includes(message[index])) {

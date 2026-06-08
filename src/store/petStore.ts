@@ -31,6 +31,7 @@ interface PetStore {
   setSkinIndex: (index: number) => void
   setClickThrough: (enabled: boolean) => void
   toggleChat: () => void
+  setChatOpen: (open: boolean) => void
   setContextMenu: (open: boolean, pos?: PetPosition) => void
   setShowCustomPetLoader: (show: boolean) => void
   tickStatus: () => void
@@ -62,6 +63,7 @@ export const usePetStore = create<PetStore>((set, get) => ({
   setSkinIndex: (index) => set({ skinIndex: index }),
   setClickThrough: (enabled) => set({ isClickThrough: enabled }),
   toggleChat: () => set((s) => ({ isChatOpen: !s.isChatOpen })),
+  setChatOpen: (open) => set({ isChatOpen: open }),
   setContextMenu: (open, pos) =>
     set({ isContextMenuOpen: open, contextMenuPosition: pos ?? { x: 0, y: 0 } }),
   tickStatus: () =>
