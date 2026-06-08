@@ -28,4 +28,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   listImportedPets: () => ipcRenderer.invoke('pets:list-imported'),
   saveImportedPet: (record: unknown) => ipcRenderer.invoke('pets:save-imported', record),
+  listLocalPlugins: () => ipcRenderer.invoke('plugins:list-local'),
 })

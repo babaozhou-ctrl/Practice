@@ -9,6 +9,7 @@ import type {
   PetProductionProfile,
   PetStatesConfig,
 } from './petPackage'
+import type { PluginDiscoveryRecord } from '../../plugins/runtime/types'
 
 interface ImportedPetDiskPackage {
   id: string
@@ -44,6 +45,7 @@ declare global {
       onContextUpdate?: (callback: (info: { title: string; process: string; idleMs?: number }) => void) => void
       listImportedPets?: () => Promise<ImportedPetDiskPackage[]>
       saveImportedPet?: (record: unknown) => Promise<unknown>
+      listLocalPlugins?: () => Promise<PluginDiscoveryRecord[]>
     }
   }
 }

@@ -9,6 +9,7 @@ import {
 } from './store/companionPreferencesStore'
 import { listProviderDescriptors } from './plugins/PluginCapabilityRegistry'
 import { ensurePluginProviderStoreSubscription, usePluginProviderStore } from './plugins/PluginProviderStore'
+import { useLocalPluginDiscoveryStore } from './plugins/runtime/LocalPluginDiscoveryStore'
 import { ensureSelectedPetCapabilitySubscription } from './store/selectedPetCapabilityStore'
 import { usePetStore } from './store/petStore'
 import { ensureSelectedPetStoreSubscription, useSelectedPetStore } from './store/selectedPetStore'
@@ -59,6 +60,12 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const aiProviders = listProviderDescriptors('aiChat')
   const fileProviders = listProviderDescriptors('fileAnalysis')
   const screenProviders = listProviderDescriptors('screenPerception')
+  const localPlugins = useLocalPluginDiscoveryStore((state) => state.plugins)
+  const refreshLocalPlugins = useLocalPluginDiscoveryStore((state) => state.refresh)
+
+  useEffect(() => {
+    void refreshLocalPlugins()
+  }, [refreshLocalPlugins])
 
   useEffect(() => {
     setPetId(selectedPetId)
@@ -303,6 +310,58 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             </option>
           ))}
         </select>
+
+        <div style={sectionTitle}>Local Plugins</div>
+        <div style={{ marginBottom: '12px', fontSize: '12px', color: 'rgba(104, 132, 157, 0.72)', lineHeight: 1.6 }}>
+          这里先展示本地 `plugins/` 目录里发现到的插件 manifest。当前阶段只做发现与校验，还不会执行插件代码。
+        </div>
+        <div style={{ display: 'grid', gap: '10px', marginBottom: '14px' }}>
+          {localPlugins.length === 0 && (
+            <div style={{ fontSize: '12px', color: 'rgba(104, 132, 157, 0.72)' }}>
+              当前还没有发现本地插件。
+            </div>
+          )}
+          {localPlugins.map((plugin) => (
+            <div
+              key={`${plugin.directoryName}-${plugin.id}`}
+              style={{
+                padding: '12px 14px',
+                borderRadius: '14px',
+                border: plugin.status === 'valid'
+                  ? '1px solid rgba(138, 191, 230, 0.22)'
+                  : '1px solid rgba(255, 159, 159, 0.3)',
+                background: plugin.status === 'valid'
+                  ? 'rgba(255,255,255,0.6)'
+                  : 'rgba(255, 241, 241, 0.75)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#4f6880' }}>
+                    {plugin.name}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'rgba(104, 132, 157, 0.72)' }}>
+                    {plugin.id} · v{plugin.version}
+                  </div>
+                </div>
+                <span style={pillStyle(plugin.status === 'valid', plugin.status === 'valid' ? '#8ec5ec' : '#f3a0a0', true)}>
+                  {plugin.status === 'valid' ? 'Valid' : 'Invalid'}
+                </span>
+              </div>
+              <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(92, 118, 143, 0.8)', marginBottom: '6px' }}>
+                Entry: {plugin.entry} · API: {plugin.apiVersion ?? 'unknown'}
+              </div>
+              <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(92, 118, 143, 0.8)', marginBottom: plugin.errors.length > 0 ? '6px' : 0 }}>
+                Capabilities: {plugin.capabilities.join(', ') || 'none'} · Permissions: {plugin.permissions.join(', ') || 'none'}
+              </div>
+              {plugin.errors.length > 0 && (
+                <div style={{ fontSize: '11px', lineHeight: 1.6, color: '#b86565' }}>
+                  {plugin.errors.join(' ')}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
 
         <div style={sectionTitle}>AI Chat</div>
         <div style={row}>
