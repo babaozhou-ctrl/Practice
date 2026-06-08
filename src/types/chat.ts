@@ -72,10 +72,14 @@ export interface CompanionChatContext {
   sceneId: string
   sceneLabel: string
   sceneEnergy: string
+  sceneTone: string
   windowTitle: string
   windowProcess: string
   recommendedTone: string
+  responsePacing: string
+  interruptionStyle: string
   samplePrompts: string[]
+  sceneGuidance: string[]
   contextFlags: string[]
   capabilityFlags?: string[]
 }

@@ -60,6 +60,19 @@ export function getCompanionProfile(): CompanionProfile {
 
 export function getSystemPrompt(context?: CompanionChatContext): string {
   const profile = context?.profile ?? getCompanionProfile()
+  const sceneBlock = context
+    ? [
+        '',
+        'Current scene behavior:',
+        `- Scene: ${context.sceneLabel} (${context.sceneId})`,
+        `- Scene energy: ${context.sceneEnergy}`,
+        `- Scene tone: ${context.sceneTone}`,
+        `- Recommended tone: ${context.recommendedTone}`,
+        `- Response pacing: ${context.responsePacing}`,
+        `- Interruption style: ${context.interruptionStyle}`,
+        ...context.sceneGuidance.map((line) => `- ${line}`),
+      ]
+    : []
 
   return [
     `You are ${profile.name}, ${profile.roleIdentity}.`,
@@ -94,6 +107,7 @@ export function getSystemPrompt(context?: CompanionChatContext): string {
     '',
     'Response style:',
     ...profile.responseStyle.map((line) => `- ${line}`),
+    ...sceneBlock,
   ].join('\n')
 }
 
