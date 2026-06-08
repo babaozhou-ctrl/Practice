@@ -14,6 +14,7 @@ import type {
   PersistImportedPetPayload,
 } from './ImportedPetRegistry'
 import { createImportedPetRecordFromPackage } from './packageImportBuilders'
+import { validateImportedPetPackage } from './packageValidation'
 
 export interface BrowserImportFile {
   name: string
@@ -37,7 +38,7 @@ export async function buildImportedPetPayloadFromPackageFiles(
   files: BrowserImportFile[],
 ): Promise<PersistImportedPetPayload> {
   const manifestFile = findRequiredFile(files, 'manifest.json')
-  const manifest = JSON.parse(await manifestFile.file.text()) as PetPackageManifest
+  const manifest = await readJsonFile<PetPackageManifest>(manifestFile.file, 'manifest.json')
 
   const animations = await readOptionalJson<PetAnimationConfig>(
     files,
@@ -99,6 +100,16 @@ export async function buildImportedPetPayloadFromPackageFiles(
     spriteDefinition: spriteDefinition ?? null,
   }
 
+  validateImportedPetPackage({
+    manifest,
+    animations,
+    states,
+    companionContent: companionContent ?? null,
+    productionProfile: productionProfile ?? null,
+    spriteDefinition: spriteDefinition ?? null,
+    availableRelativePaths: files.map((entry) => entry.relativePath),
+  })
+
   const assetFiles = await collectAssetFiles(files, manifest)
   return createImportedPetRecordFromPackage(rawData, {
     assetFiles,
@@ -151,7 +162,7 @@ async function readOptionalJson<T>(
     return null
   }
 
-  return JSON.parse(await fallback.file.text()) as T
+  return readJsonFile<T>(fallback.file, fallbackFileName)
 }
 
 function findRequiredFile(files: BrowserImportFile[], relativePath: string): BrowserImportFile {
@@ -195,6 +206,14 @@ function fileToBase64(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error ?? new Error(`Failed to read asset file: ${file.name}`))
     reader.readAsArrayBuffer(file)
   })
+}
+
+async function readJsonFile<T>(file: File, label: string): Promise<T> {
+  try {
+    return JSON.parse(await file.text()) as T
+  } catch {
+    throw new Error(`${label} 不是合法的 JSON，请检查逗号、引号和括号是否完整。`)
+  }
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {

@@ -104,6 +104,19 @@ pets/
 - `assets.previewImage` 建议始终提供。它不参与运行时动画，但会直接影响宠物包在设置页和未来社区库中的展示质量。
 - 如果未提供 `assets.previewImage`，导入流程会尝试基于 atlas 首帧或 `sprite-definition.json` 自动生成一张预览图，方便包在本地库里先正常展示。但自动图只适合作为兜底，正式开源包仍建议手工提供。
 
+## 当前导入器会重点检查什么
+
+- `schemaVersion` 当前必须是 `1.0.0`
+- `renderer` 当前必须是 `pixi-atlas` 或 `procedural-sprite`
+- `manifest.json` 里声明的资源文件，导入时必须真的能找到
+- `pixi-atlas` 包必须同时提供 atlas 和 `production.json`
+- `procedural-sprite` 包必须提供 `sprite-definition.json`
+- `states.json` 至少要有 `idle`，并且引用到的 clip 必须在 `animations.json` 里存在
+- `animations.json` 里的每个 clip 至少要有一帧，`fps` 需要大于 0
+- 如果你提供了 `companion-content.json`，它的各个 proactive 入口需要结构完整
+
+这样做的目的不是故意卡人，而是避免社区包导入成功后却在运行时静默退化成错误状态。
+
 ## personality.json 建议重点
 
 `personality.json` 至少应该覆盖这些字段：
