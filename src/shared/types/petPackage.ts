@@ -38,6 +38,11 @@ export interface PetPackageManifest {
 export interface PetPersonalityProfile {
   id?: string
   name?: string
+  identity?: {
+    role?: string
+    presence?: string[]
+    responseStyle?: string[]
+  }
   tone?: {
     style?: string[]
     verbosity?: string
@@ -58,6 +63,11 @@ export interface PetPersonalityProfile {
       samplePrompts?: string[]
     }
   >
+  promptDirectives?: {
+    core?: string[]
+    avoid?: string[]
+    do?: string[]
+  }
   memoryPolicy?: {
     rememberPreferences?: boolean
     rememberRituals?: boolean

@@ -27,16 +27,24 @@ export interface AIConfig {
 export interface CompanionProfile {
   id: string
   name: string
+  roleIdentity: string
+  presenceStyle: string[]
   toneStyle: string[]
   verbosity: string
   emojiUsage: string
   affectionLevel: number
+  responseStyle: string[]
   speechRules: {
     avoidAssistantTone: boolean
     preferCompanionTone: boolean
     defaultProactiveFrequency: string
     respectFocusMode: boolean
     respectGamingQuietMode: boolean
+  }
+  promptDirectives: {
+    core: string[]
+    avoid: string[]
+    do: string[]
   }
   memoryPolicy: {
     rememberPreferences: boolean

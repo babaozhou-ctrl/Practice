@@ -14,7 +14,7 @@ export function buildCompanionChatContext(
 ): CompanionChatContext {
   const profile = getCompanionProfile()
   const activityLabel = normalizeActivity(activity)
-  const contextBehavior = getContextBehavior(activityLabel)
+  const contextBehavior = resolveContextBehavior(activityLabel)
 
   return {
     profile,
@@ -29,6 +29,19 @@ export function buildCompanionChatContext(
       .filter(([, enabled]) => enabled)
       .map(([name]) => name),
   }
+}
+
+function resolveContextBehavior(activityLabel: string) {
+  const hour = new Date().getHours()
+  const isLateNight = hour >= 23 || hour < 6
+  if (isLateNight) {
+    const lateNightBehavior = getContextBehavior('late_night')
+    if (lateNightBehavior.samplePrompts.length > 0 || lateNightBehavior.tone !== 'observant_soft') {
+      return lateNightBehavior
+    }
+  }
+
+  return getContextBehavior(activityLabel)
 }
 
 export function buildCompanionPrompt(
