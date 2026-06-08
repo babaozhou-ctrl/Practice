@@ -60,6 +60,7 @@ export interface CompanionMemorySnapshot {
   rituals: string[]
   recentTopics: string[]
   lastActivity: string | null
+  lastScene: string | null
   lastWindowTitle: string | null
   updatedAt: number | null
 }
@@ -68,6 +69,9 @@ export interface CompanionChatContext {
   profile: CompanionProfile
   activity: string
   activityLabel: string
+  sceneId: string
+  sceneLabel: string
+  sceneEnergy: string
   windowTitle: string
   windowProcess: string
   recommendedTone: string

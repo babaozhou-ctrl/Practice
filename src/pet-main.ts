@@ -367,7 +367,11 @@ async function bootstrap() {
 
   window.electronAPI?.onContextUpdate?.((info: { title: string; process: string; idleMs?: number }) => {
     const result = companion.handleContext(info)
-    captureCompanionRuntimeContext(result.snapshot.activity, info.title)
+    captureCompanionRuntimeContext(
+      result.snapshot.activity,
+      result.snapshot.scene.id,
+      info.title,
+    )
     const snapshotWithWorkMode = attachWorkModeToSnapshot(result.snapshot, workModeRuntime.getSignals())
     const stabilizedSnapshot = stabilizer.stabilize(snapshotWithWorkMode)
     latestSnapshot = stabilizedSnapshot

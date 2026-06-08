@@ -87,6 +87,7 @@ export class MemoryManager {
   captureContext(context: CompanionChatContext, target?: CompanionMemorySnapshot) {
     const next = target ?? cloneCompanionMemory(readCompanionMemory())
     next.lastActivity = context.activityLabel
+    next.lastScene = context.sceneId
     next.lastWindowTitle = sanitizeWindowTitle(context.windowTitle)
 
     const topic = buildRecentTopic(context)
@@ -224,9 +225,15 @@ function buildRecentTopic(context: CompanionChatContext): string | null {
   const base = activityLabels[context.activityLabel]
   if (!base) return null
 
+  const sceneLabel = context.sceneLabel && context.sceneLabel !== 'unknown'
+    ? context.sceneLabel
+    : null
+
   if (context.windowTitle && context.windowTitle !== 'unknown') {
-    return `${base}：${context.windowTitle.slice(0, 24)}`
+    return sceneLabel
+      ? `${base}（${sceneLabel}）：${context.windowTitle.slice(0, 20)}`
+      : `${base}：${context.windowTitle.slice(0, 24)}`
   }
 
-  return base
+  return sceneLabel ? `${base}（${sceneLabel}）` : base
 }

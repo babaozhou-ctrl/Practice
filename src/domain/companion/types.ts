@@ -2,6 +2,7 @@ import type { AnimationState } from '../../types/animation'
 import type { CompanionMemorySnapshot } from '../../types/chat'
 import type { ActivityType, ActiveWindowInfo } from '../../types/context'
 import type { WorkModeSignals } from '../../types/workMode'
+import type { CompanionSceneSnapshot } from './CompanionScene'
 
 export type CompanionActivity =
   | 'idle'
@@ -55,6 +56,7 @@ export interface CompanionSnapshot {
   activity: CompanionActivity
   emotion: CompanionEmotion
   mode: InteractionMode
+  scene: CompanionSceneSnapshot
   transientAction: 'none' | 'tap_affection' | 'dragging' | 'welcome_back'
   interruptionBudget: number
   activeWindow: ActiveWindowInfo | null

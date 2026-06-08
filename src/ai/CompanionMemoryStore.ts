@@ -12,6 +12,7 @@ export const EMPTY_COMPANION_MEMORY: CompanionMemorySnapshot = {
   rituals: [],
   recentTopics: [],
   lastActivity: null,
+  lastScene: null,
   lastWindowTitle: null,
   updatedAt: null,
 }
@@ -26,6 +27,7 @@ export function cloneCompanionMemory(memory: CompanionMemorySnapshot): Companion
     rituals: [...memory.rituals],
     recentTopics: [...memory.recentTopics],
     lastActivity: memory.lastActivity,
+    lastScene: memory.lastScene,
     lastWindowTitle: memory.lastWindowTitle,
     updatedAt: memory.updatedAt,
   }
@@ -111,14 +113,16 @@ export function subscribeCompanionMemory(
 
 export function captureCompanionRuntimeContext(
   activity: string,
+  sceneId: string | null | undefined,
   windowTitle: string | null | undefined,
 ): CompanionMemorySnapshot {
   return updateCompanionMemory((memory) => {
     const next = cloneCompanionMemory(memory)
     next.lastActivity = activity || memory.lastActivity
+    next.lastScene = normalizeOptionalString(sceneId, 40) ?? memory.lastScene
     next.lastWindowTitle = sanitizeWindowTitle(windowTitle)
 
-    const topic = buildRecentTopic(activity, windowTitle)
+    const topic = buildRecentTopic(activity, sceneId, windowTitle)
     if (topic) {
       pushUnique(next.recentTopics, topic, 6)
     }
@@ -138,6 +142,7 @@ function normalizeCompanionMemory(
     rituals: normalizeStringList(memory.rituals, 6, 40),
     recentTopics: normalizeStringList(memory.recentTopics, 6, 48),
     lastActivity: normalizeOptionalString(memory.lastActivity, 24),
+    lastScene: normalizeOptionalString(memory.lastScene, 40),
     lastWindowTitle: normalizeOptionalString(memory.lastWindowTitle, 80),
     updatedAt: typeof memory.updatedAt === 'number' ? memory.updatedAt : null,
   }
@@ -188,7 +193,11 @@ function sanitizeWindowTitle(windowTitle: string | null | undefined): string | n
   return trimmed.slice(0, 80)
 }
 
-function buildRecentTopic(activity: string, windowTitle: string | null | undefined): string | null {
+function buildRecentTopic(
+  activity: string,
+  sceneId: string | null | undefined,
+  windowTitle: string | null | undefined,
+): string | null {
   const activityLabels: Record<string, string> = {
     coding: '\u6700\u8fd1\u5728\u5199\u4ee3\u7801',
     gaming: '\u6700\u8fd1\u5728\u6253\u6e38\u620f',
@@ -202,12 +211,35 @@ function buildRecentTopic(activity: string, windowTitle: string | null | undefin
   const base = activityLabels[activity]
   if (!base) return null
 
+  const sceneLabel = buildSceneLabel(sceneId)
   const title = sanitizeWindowTitle(windowTitle)
   if (title) {
-    return `${base}\uff1a${title.slice(0, 28)}`
+    return sceneLabel
+      ? `${base}（${sceneLabel}）：${title.slice(0, 24)}`
+      : `${base}\uff1a${title.slice(0, 28)}`
   }
 
-  return base
+  return sceneLabel ? `${base}（${sceneLabel}）` : base
+}
+
+function buildSceneLabel(sceneId: string | null | undefined): string | null {
+  if (!sceneId) return null
+
+  const labels: Record<string, string> = {
+    away: '暂时离开',
+    deep_focus: '沉浸专注',
+    steady_focus: '稳定工作',
+    watch_together: '一起看内容',
+    social_corner: '社交陪伴',
+    play_session: '游戏时间',
+    reading_nook: '安静阅读',
+    late_night_wind_down: '深夜收尾',
+    quiet_idle: '静静待着',
+    soft_browsing: '轻度浏览',
+    ambient_presence: '桌面陪伴',
+  }
+
+  return labels[sceneId] ?? null
 }
 
 function notifyCompanionMemory(memory: CompanionMemorySnapshot) {

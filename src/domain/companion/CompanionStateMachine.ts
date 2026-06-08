@@ -12,6 +12,7 @@ import type {
   SpeechIntent,
 } from './types'
 import { mapActivityType } from './types'
+import { resolveCompanionScene } from './CompanionScene'
 
 type ActivityEvent =
   | 'to_idle'
@@ -217,10 +218,21 @@ export class CompanionStateMachine {
   }
 
   getSnapshot(now = Date.now()): CompanionSnapshot {
+    const activity = this.activityFsm.state
+    const emotion = this.emotionFsm.state
+    const mode = this.modeFsm.state
+
     return {
-      activity: this.activityFsm.state,
-      emotion: this.emotionFsm.state,
-      mode: this.modeFsm.state,
+      activity,
+      emotion,
+      mode,
+      scene: resolveCompanionScene({
+        activity,
+        emotion,
+        mode,
+        activeWindow: this.activeWindow,
+        now,
+      }),
       transientAction: this.resolveTransientAction(now),
       interruptionBudget: Math.round(this.interruptionBudget),
       activeWindow: this.activeWindow,
