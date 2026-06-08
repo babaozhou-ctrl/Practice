@@ -2,6 +2,8 @@ import { pathToFileURL } from 'url'
 import { readdir, readFile, stat } from 'fs/promises'
 import { dirname, join, resolve } from 'path'
 
+export type PluginRuntimeStatus = 'not_loaded' | 'loaded' | 'load_failed'
+
 export interface PluginManifestRecord {
   id: string
   name: string
@@ -34,13 +36,15 @@ export interface PluginDiscoveryRecord {
   directoryName: string
   manifestPath: string
   status: 'valid' | 'invalid'
+  runtimeStatus: PluginRuntimeStatus
   errors: string[]
+  runtimeErrors: string[]
 }
 
 interface LoadedPluginRecord {
   discovery: PluginDiscoveryRecord
   entryPath: string
-  module: PluginModuleShape | null
+  module: PluginModuleShape
 }
 
 interface PluginFileAnalysisRequest {
@@ -97,26 +101,33 @@ export async function listLocalPluginManifests(): Promise<PluginDiscoveryRecord[
 
     const pluginDir = join(PLUGINS_DIR, entry.name)
     const manifestPath = join(pluginDir, 'manifest.json')
-    const record = await loadPluginManifestRecord(entry.name, manifestPath)
-    discovered.push(record)
+    const manifestRecord = await loadPluginManifestRecord(entry.name, manifestPath)
 
-    if (record.status !== 'valid') {
+    if (manifestRecord.status !== 'valid') {
+      discovered.push(manifestRecord)
       continue
     }
 
-    const entryPath = join(pluginDir, record.entry)
-    const loaded = await loadPluginModule(record, entryPath)
-    nextLoadedPlugins.set(record.id, loaded)
+    const entryPath = join(pluginDir, manifestRecord.entry)
+    const loadedRecord = await loadPluginModule(manifestRecord, entryPath)
+    discovered.push(loadedRecord.discovery)
+
+    if (loadedRecord.discovery.runtimeStatus === 'loaded') {
+      nextLoadedPlugins.set(loadedRecord.discovery.id, loadedRecord)
+    }
   }
 
   loadedPlugins.clear()
-  for (const [pluginId, loaded] of nextLoadedPlugins.entries()) {
-    loadedPlugins.set(pluginId, loaded)
+  for (const [pluginId, loadedRecord] of nextLoadedPlugins.entries()) {
+    loadedPlugins.set(pluginId, loadedRecord)
   }
 
   return discovered.sort((left, right) => {
     if (left.status !== right.status) {
       return left.status === 'valid' ? -1 : 1
+    }
+    if (left.runtimeStatus !== right.runtimeStatus) {
+      return left.runtimeStatus === 'loaded' ? -1 : 1
     }
     return left.name.localeCompare(right.name)
   })
@@ -169,7 +180,9 @@ async function loadPluginManifestRecord(
     directoryName,
     manifestPath,
     status: 'invalid',
+    runtimeStatus: 'not_loaded',
     errors: [],
+    runtimeErrors: [],
   }
 
   const manifestExists = await fileExists(manifestPath)
@@ -213,7 +226,9 @@ async function loadPluginManifestRecord(
     directoryName,
     manifestPath,
     status: errors.length > 0 ? 'invalid' : 'valid',
+    runtimeStatus: errors.length > 0 ? 'not_loaded' : 'not_loaded',
     errors,
+    runtimeErrors: [],
   }
 }
 
@@ -292,20 +307,39 @@ async function loadPluginModule(
   try {
     const moduleUrl = pathToFileURL(entryPath).href
     const imported = await import(moduleUrl)
+    const normalizedModule = normalizePluginModule(imported as PluginModuleShape)
+
+    const runtimeErrors = validatePluginRuntimeContracts(discovery, normalizedModule)
+    if (runtimeErrors.length > 0) {
+      return {
+        discovery: {
+          ...discovery,
+          runtimeStatus: 'load_failed',
+          runtimeErrors,
+        },
+        entryPath,
+        module: normalizedModule,
+      }
+    }
+
     return {
-      discovery,
+      discovery: {
+        ...discovery,
+        runtimeStatus: 'loaded',
+        runtimeErrors: [],
+      },
       entryPath,
-      module: imported as PluginModuleShape,
+      module: normalizedModule,
     }
   } catch (error: any) {
     return {
       discovery: {
         ...discovery,
-        status: 'invalid',
-        errors: [...discovery.errors, `插件入口加载失败：${error?.message ?? String(error)}`],
+        runtimeStatus: 'load_failed',
+        runtimeErrors: [`插件入口加载失败：${error?.message ?? String(error)}`],
       },
       entryPath,
-      module: null,
+      module: {},
     }
   }
 }
@@ -328,11 +362,7 @@ function getDeclaredProviderId(providerId: string): string {
   return parts[parts.length - 1] ?? providerId
 }
 
-function getPluginProviders(module: PluginModuleShape | null): PluginProvidersApi {
-  if (!module) {
-    return {}
-  }
-
+function getPluginProviders(module: PluginModuleShape): PluginProvidersApi {
   if (module.providers) {
     return module.providers
   }
@@ -342,6 +372,33 @@ function getPluginProviders(module: PluginModuleShape | null): PluginProvidersAp
   }
 
   return {}
+}
+
+function normalizePluginModule(module: PluginModuleShape): PluginModuleShape {
+  return module ?? {}
+}
+
+function validatePluginRuntimeContracts(
+  discovery: PluginDiscoveryRecord,
+  module: PluginModuleShape,
+): string[] {
+  const errors: string[] = []
+  const providers = getPluginProviders(module)
+
+  for (const provider of discovery.providers) {
+    if (provider.capability === 'fileAnalysis') {
+      const runtimeProvider = providers.fileAnalysis?.[provider.id]
+      if (!runtimeProvider) {
+        errors.push(`插件未导出 fileAnalysis provider "${provider.id}"。`)
+        continue
+      }
+      if (typeof runtimeProvider.summarize !== 'function') {
+        errors.push(`fileAnalysis provider "${provider.id}" 缺少 summarize 函数。`)
+      }
+    }
+  }
+
+  return errors
 }
 
 async function fileExists(path: string): Promise<boolean> {

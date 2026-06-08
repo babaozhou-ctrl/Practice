@@ -1,3 +1,5 @@
+export type PluginRuntimeStatus = 'not_loaded' | 'loaded' | 'load_failed'
+
 export interface PluginDiscoveryRecord {
   id: string
   name: string
@@ -11,7 +13,9 @@ export interface PluginDiscoveryRecord {
   directoryName: string
   manifestPath: string
   status: 'valid' | 'invalid'
+  runtimeStatus: PluginRuntimeStatus
   errors: string[]
+  runtimeErrors: string[]
 }
 
 export interface DiscoveredPluginProviderCandidate {

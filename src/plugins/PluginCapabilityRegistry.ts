@@ -114,7 +114,7 @@ export function reconcileDiscoveredPluginProviders(plugins: PluginDiscoveryRecor
   discoveredProviderCandidates.clear()
 
   for (const plugin of plugins) {
-    if (plugin.status !== 'valid') {
+    if (plugin.status !== 'valid' || plugin.runtimeStatus === 'load_failed') {
       continue
     }
 

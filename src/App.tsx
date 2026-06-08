@@ -364,7 +364,7 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
         <div style={sectionTitle}>Local Plugins</div>
         <div style={{ marginBottom: '12px', fontSize: '12px', color: 'rgba(104, 132, 157, 0.72)', lineHeight: 1.6 }}>
-          这里先展示本地 `plugins/` 目录里发现到的插件 manifest。当前阶段只做发现与校验，还不会执行插件代码。
+          这里展示本地 `plugins/` 目录里发现到的插件 manifest，以及它们当前是否已经通过运行时加载。
         </div>
         <div style={{ display: 'grid', gap: '10px', marginBottom: '14px' }}>
           {localPlugins.length === 0 && (
@@ -403,6 +403,9 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 Entry: {plugin.entry} · API: {plugin.apiVersion ?? 'unknown'}
               </div>
               <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(92, 118, 143, 0.8)', marginBottom: '6px' }}>
+                Runtime: {renderPluginRuntimeLabel(plugin.runtimeStatus)}
+              </div>
+              <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(92, 118, 143, 0.8)', marginBottom: '6px' }}>
                 Capabilities: {plugin.capabilities.join(', ') || 'none'} · Permissions: {plugin.permissions.join(', ') || 'none'}
               </div>
               {plugin.capabilities.length > 0 && (
@@ -436,6 +439,11 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               {plugin.errors.length > 0 && (
                 <div style={{ fontSize: '11px', lineHeight: 1.6, color: '#b86565' }}>
                   {plugin.errors.join(' ')}
+                </div>
+              )}
+              {plugin.runtimeErrors.length > 0 && (
+                <div style={{ fontSize: '11px', lineHeight: 1.6, color: '#b07a45', marginTop: plugin.errors.length > 0 ? '6px' : 0 }}>
+                  {plugin.runtimeErrors.join(' ')}
                 </div>
               )}
             </div>
@@ -759,6 +767,17 @@ function renderPhaseLabel(phase: string): string {
       return 'Paused'
     default:
       return 'Idle'
+  }
+}
+
+function renderPluginRuntimeLabel(status: 'not_loaded' | 'loaded' | 'load_failed'): string {
+  switch (status) {
+    case 'loaded':
+      return 'Loaded'
+    case 'load_failed':
+      return 'Load Failed'
+    default:
+      return 'Not Loaded'
   }
 }
 
