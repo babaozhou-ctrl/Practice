@@ -40,9 +40,30 @@ export function summarizeForCompanionSpeech(text: string, fallback: string, maxC
   return clipSentence(normalized, maxChars)
 }
 
-export function buildFileAnalysisUtterance(fileName: string, summary: string): string {
+function resolveFileAnalysisLead(fileName: string, sceneId?: string | null): string {
+  switch (sceneId) {
+    case 'deep_focus':
+    case 'steady_focus':
+      return `我轻轻帮你过了一遍《${fileName}》`
+    case 'watch_together':
+      return `我陪你先看了看《${fileName}》`
+    case 'late_night_wind_down':
+      return `这么晚我先替你顺了一遍《${fileName}》`
+    case 'quiet_idle':
+    case 'ambient_presence':
+      return `我先安静帮你看了一遍《${fileName}》`
+    default:
+      return `我先帮你看了一遍《${fileName}》`
+  }
+}
+
+export function buildFileAnalysisUtterance(
+  fileName: string,
+  summary: string,
+  sceneId?: string | null,
+): string {
   const lead = summarizeForCompanionSpeech(summary, `我先看了看《${fileName}》`, 30)
-  return `我先帮你看了一遍《${fileName}》。${lead}`
+  return `${resolveFileAnalysisLead(fileName, sceneId)}。${lead}`
 }
 
 export function buildChatReplyUtterance(reply: string): string {

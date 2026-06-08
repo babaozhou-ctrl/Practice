@@ -9,8 +9,7 @@ import { usePluginProviderStore } from '../../plugins/PluginProviderStore'
 import { useContextStore } from '../../store/contextStore'
 import { useSelectedPetCapabilityStore } from '../../store/selectedPetCapabilityStore'
 import { useChatStore } from '../../store/chatStore'
-import type { ChatMessage, ChatMessageAction } from '../../types/chat'
-import type { ActivityType } from '../../types/context'
+import type { ChatMessage, ChatMessageAction, CompanionChatContext } from '../../types/chat'
 import MessageBubble from './MessageBubble'
 
 interface Props {
@@ -21,6 +20,351 @@ const FILE_ACCEPT =
   '.txt,.md,.json,.xml,.yaml,.yml,.toml,.csv,.pdf,.docx,.js,.ts,.jsx,.tsx,.py,.rs,.go,.java,.cpp,.c,.cs,.sql'
 
 const MAX_COMPANION_ACTION_HISTORY = 24
+
+function buildPromptFromSections(...sections: string[]): string {
+  return sections.join('\n')
+}
+
+function getFileAnalysisSummaryIntro(context: CompanionChatContext, fileName: string): string {
+  switch (context.sceneId) {
+    case 'deep_focus':
+      return `我现在还在深度专注里，陪我用最稳的方式看《${fileName}》。`
+    case 'steady_focus':
+      return `我现在在工作状态里，陪我高效但别太生硬地看《${fileName}》。`
+    case 'reading_nook':
+      return `我们像并排读东西一样，一起看看《${fileName}》。`
+    case 'watch_together':
+      return `我们像一起看内容一样，顺着《${fileName}》继续聊。`
+    case 'social_corner':
+      return `我现在偏向聊天陪伴的状态，陪我把《${fileName}》理成自然一点的说法。`
+    case 'play_session':
+      return `我现在不想被太打断，请很轻地帮我扫一眼《${fileName}》。`
+    case 'late_night_wind_down':
+      return `已经有点晚了，陪我轻一点地看《${fileName}》，别把气氛拉得太紧。`
+    case 'quiet_idle':
+    case 'ambient_presence':
+      return `我们就安静一点，一起看看《${fileName}》。`
+    case 'soft_browsing':
+      return `我现在是在轻度浏览，陪我自然一点地看看《${fileName}》。`
+    default:
+      return `请陪我一起看看这个文件《${fileName}》。`
+  }
+}
+
+function buildAnalysisPromptForScene(
+  fileName: string,
+  summary: string,
+  context: CompanionChatContext,
+): string {
+  const sceneInstruction =
+    context.sceneId === 'deep_focus' || context.sceneId === 'steady_focus'
+      ? '先用克制、清楚、低打扰的语气帮我讲重点，不要像生硬的工具汇报。'
+      : context.sceneId === 'late_night_wind_down'
+        ? '先用更安静、更柔和的陪伴语气帮我讲重点，不要太亮也不要太硬。'
+        : context.sceneId === 'watch_together'
+          ? '先像一起看内容一样帮我讲重点，可以有一点轻微反应，但别变成正式报告。'
+          : '先用陪伴式的语气帮我讲重点，不要像生硬的工具汇报。'
+
+  return buildPromptFromSections(
+    getFileAnalysisSummaryIntro(context, fileName),
+    '',
+    sceneInstruction,
+    '',
+    '已提取摘要：',
+    summary,
+    '',
+    '如果你觉得有必要，也可以提醒我下一步最值得继续看的部分。',
+  )
+}
+
+function buildFollowUpActionsForScene(
+  fileName: string,
+  summary: string,
+  context: CompanionChatContext,
+  buildAnalysisPrompt: (fileName: string, summary: string, context: CompanionChatContext) => string,
+): ChatMessageAction[] {
+  const baseFillAction: ChatMessageAction = {
+    id: 'fill-input',
+    label: '先放到输入框',
+    prompt: buildAnalysisPrompt(fileName, summary, context),
+    fillOnly: true,
+  }
+
+  switch (context.sceneId) {
+    case 'deep_focus':
+    case 'steady_focus':
+      return [
+        {
+          id: 'extract-actionable',
+          label: '只讲要点',
+          prompt: buildPromptFromSections(
+            `我现在还在专注状态里，我们继续看《${fileName}》。`,
+            '',
+            '请用很克制的方式，只告诉我最关键的结论、风险或可执行信息，尽量少打断我的专注。',
+            '',
+            '摘要：',
+            summary,
+          ),
+        },
+        {
+          id: 'connect-to-work',
+          label: '结合当前工作',
+          prompt: buildPromptFromSections(
+            `请结合我当前这段专注状态，陪我继续看《${fileName}》。`,
+            '',
+            '帮我判断这份内容和我手头事情最可能相关的地方，并告诉我先看哪一段最省时间。',
+            '',
+            '摘要：',
+            summary,
+          ),
+        },
+        {
+          id: 'turn-into-checklist',
+          label: '整理执行顺序',
+          prompt: buildPromptFromSections(
+            `请继续陪我处理《${fileName}》。`,
+            '',
+            '把我接下来可以做的动作整理成一个轻量顺序，语气温和一点，但别太啰嗦。',
+            '',
+            '摘要：',
+            summary,
+          ),
+        },
+        baseFillAction,
+      ]
+    case 'watch_together':
+      return [
+        {
+          id: 'co-watch',
+          label: '一起聊亮点',
+          prompt: buildPromptFromSections(
+            `我们像一起看内容一样继续聊《${fileName}》。`,
+            '',
+            '请用轻一点、像在一起讨论的语气，告诉我这里面最有意思或最值得注意的地方。',
+            '',
+            '摘要：',
+            summary,
+          ),
+        },
+        {
+          id: 'spot-controversy',
+          label: '看看哪里最有料',
+          prompt: buildPromptFromSections(
+            `请继续陪我看《${fileName}》。`,
+            '',
+            '帮我找出最值得吐槽、讨论或者进一步确认的部分，但不要太吵。',
+            '',
+            '摘要：',
+            summary,
+          ),
+        },
+        {
+          id: 'gentle-recap',
+          label: '温柔复述',
+          prompt: buildPromptFromSections(
+            `请你陪我把《${fileName}》顺一遍。`,
+            '',
+            '用更自然一点、像坐在旁边轻声解释的方式，帮我复述重点。',
+            '',
+            '摘要：',
+            summary,
+          ),
+        },
+        baseFillAction,
+      ]
+    case 'social_corner':
+      return [
+        {
+          id: 'social-summary',
+          label: '帮我讲给别人听',
+          prompt: buildPromptFromSections(
+            `请陪我一起看《${fileName}》。`,
+            '',
+            '把它整理成适合讲给别人听的版本，要自然、暖一点，不要像机器总结。',
+            '',
+            '摘要：',
+            summary,
+          ),
+        },
+        {
+          id: 'soft-highlight',
+          label: '先挑最值得说的',
+          prompt: buildPromptFromSections(
+            `请继续陪我看《${fileName}》。`,
+            '',
+            '帮我挑出最值得马上提起的重点，像你在旁边轻轻提醒我一样。',
+            '',
+            '摘要：',
+            summary,
+          ),
+        },
+        {
+          id: 'prepare-response',
+          label: '整理一句回应',
+          prompt: buildPromptFromSections(
+            `我现在可能会把《${fileName}》里的内容继续聊下去。`,
+            '',
+            '请根据摘要帮我整理一个自然一点的回应或说法，不要太正式。',
+            '',
+            '摘要：',
+            summary,
+          ),
+        },
+        baseFillAction,
+      ]
+    case 'play_session':
+      return [
+        {
+          id: 'quickest-need',
+          label: '只说最重要的',
+          prompt: buildPromptFromSections(
+            `我现在不太想被打断，请非常简短地帮我看《${fileName}》。`,
+            '',
+            '只告诉我最关键的一件事，或者值不值得我稍后再回来细看。',
+            '',
+            '摘要：',
+            summary,
+          ),
+        },
+        {
+          id: 'save-for-later',
+          label: '留个稍后回看点',
+          prompt: buildPromptFromSections(
+            `我现在先玩着，请帮我给《${fileName}》留一个稍后继续看的切入口。`,
+            '',
+            '告诉我晚点回来时最该从哪里接着看，尽量短。',
+            '',
+            '摘要：',
+            summary,
+          ),
+        },
+        baseFillAction,
+      ]
+    case 'late_night_wind_down':
+      return [
+        {
+          id: 'soft-wrap',
+          label: '温柔讲重点',
+          prompt: buildPromptFromSections(
+            `已经有点晚了，我们轻一点继续看《${fileName}》。`,
+            '',
+            '请用更安静、更柔和的语气告诉我最重要的内容，让我不用一下子紧起来。',
+            '',
+            '摘要：',
+            summary,
+          ),
+        },
+        {
+          id: 'save-for-tomorrow',
+          label: '留到明天继续',
+          prompt: buildPromptFromSections(
+            `请陪我给《${fileName}》做一个能安心停下来的收尾。`,
+            '',
+            '帮我只保留明天最值得继续看的部分，用很轻的方式整理出来。',
+            '',
+            '摘要：',
+            summary,
+          ),
+        },
+        {
+          id: 'night-reassure',
+          label: '轻一点提醒我',
+          prompt: buildPromptFromSections(
+            `我现在在深夜收尾。`,
+            '',
+            `请结合《${fileName}》的摘要，温柔一点帮我判断今晚还值不值得继续细看，还是更适合先放下。`,
+            '',
+            '摘要：',
+            summary,
+          ),
+        },
+        baseFillAction,
+      ]
+    case 'reading_nook':
+    case 'quiet_idle':
+    case 'ambient_presence':
+    case 'soft_browsing':
+      return [
+        {
+          id: 'explain-gently',
+          label: '先讲重点',
+          prompt: buildPromptFromSections(
+            `我们继续看《${fileName}》。`,
+            '',
+            '请你像陪我一起读一样，用温和一点的语气告诉我最重要的三件事。',
+            '',
+            '摘要：',
+            summary,
+          ),
+        },
+        {
+          id: 'find-worth-reading',
+          label: '标出必看部分',
+          prompt: buildPromptFromSections(
+            `请继续陪我看《${fileName}》。`,
+            '',
+            '帮我从这个摘要里挑出最值得继续细看的部分，并告诉我为什么。',
+            '',
+            '摘要：',
+            summary,
+          ),
+        },
+        {
+          id: 'turn-into-plan',
+          label: '整理下一步',
+          prompt: buildPromptFromSections(
+            `我们拿《${fileName}》继续往下走。`,
+            '',
+            '请把我接下来可以做的事情整理成一个很轻的阅读或处理顺序，不要太工具化。',
+            '',
+            '摘要：',
+            summary,
+          ),
+        },
+        baseFillAction,
+      ]
+    default:
+      return [
+        {
+          id: 'explain-gently',
+          label: '先讲重点',
+          prompt: buildPromptFromSections(
+            `我们继续看《${fileName}》。`,
+            '',
+            '请你像陪我一起读一样，用温和一点的语气告诉我最重要的三件事。',
+            '',
+            '摘要：',
+            summary,
+          ),
+        },
+        {
+          id: 'find-worth-reading',
+          label: '标出必看部分',
+          prompt: buildPromptFromSections(
+            `请继续陪我看《${fileName}》。`,
+            '',
+            '帮我从这个摘要里挑出最值得继续细看的部分，并告诉我为什么。',
+            '',
+            '摘要：',
+            summary,
+          ),
+        },
+        {
+          id: 'turn-into-plan',
+          label: '整理下一步',
+          prompt: buildPromptFromSections(
+            `我们拿《${fileName}》继续往下走。`,
+            '',
+            '请把我接下来可以做的事情整理成一个很轻的阅读或处理顺序，不要太工具化。',
+            '',
+            '摘要：',
+            summary,
+          ),
+        },
+        baseFillAction,
+      ]
+  }
+}
 
 const ChatPanel: React.FC<Props> = ({ onClose }) => {
   const {
@@ -159,227 +503,21 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
     }
   }
 
-  const buildAnalysisPrompt = useCallback((fileName: string, summary: string) => {
-    return [
-      `请陪我一起看看这个文件《${fileName}》`,
-      '',
-      '先用陪伴式的语气帮我讲重点，不要像生硬的工具汇报。',
-      '',
-      '已提取摘要：',
-      summary,
-      '',
-      '如果你觉得有必要，也可以提醒我下一步最值得继续看的部分。',
-    ].join('\n')
+  const buildAnalysisPrompt = useCallback((
+    fileName: string,
+    summary: string,
+    context: CompanionChatContext,
+  ) => {
+    return buildAnalysisPromptForScene(fileName, summary, context)
   }, [])
 
   const buildFollowUpActions = useCallback(
     (
       fileName: string,
       summary: string,
-      currentActivity: ActivityType,
+      context: CompanionChatContext,
     ): ChatMessageAction[] => {
-      const baseFillAction: ChatMessageAction = {
-        id: 'fill-input',
-        label: '先放到输入框',
-        prompt: buildAnalysisPrompt(fileName, summary),
-        fillOnly: true,
-      }
-
-      if (currentActivity === 'CODING') {
-        return [
-          {
-            id: 'extract-actionable',
-            label: '只讲要点',
-            prompt: [
-              `我现在还在写代码，我们继续看《${fileName}》。`,
-              '',
-              '请你用很克制的方式，只告诉我最关键的结论、风险或可执行信息，尽量少打断我的专注。',
-              '',
-              '摘要：',
-              summary,
-            ].join('\n'),
-          },
-          {
-            id: 'connect-to-work',
-            label: '结合当前工作',
-            prompt: [
-              `我现在在处理工作或代码，请结合这个状态陪我看《${fileName}》。`,
-              '',
-              '帮我判断这份内容和我当前手头事情最可能相关的地方，并告诉我先看哪一段最省时间。',
-              '',
-              '摘要：',
-              summary,
-            ].join('\n'),
-          },
-          {
-            id: 'turn-into-checklist',
-            label: '整理执行顺序',
-            prompt: [
-              `请继续陪我处理《${fileName}》。`,
-              '',
-              '把我接下来可以做的动作整理成一个轻量顺序，语气温和一点，但别太啰嗦。',
-              '',
-              '摘要：',
-              summary,
-            ].join('\n'),
-          },
-          baseFillAction,
-        ]
-      }
-
-      if (currentActivity === 'WATCHING') {
-        return [
-          {
-            id: 'co-watch',
-            label: '一起聊亮点',
-            prompt: [
-              `我们像一起看内容一样继续聊《${fileName}》。`,
-              '',
-              '请用轻一点、像在一起讨论的语气，告诉我这里面最有意思或最值得注意的地方。',
-              '',
-              '摘要：',
-              summary,
-            ].join('\n'),
-          },
-          {
-            id: 'spot-controversy',
-            label: '看看哪里最有料',
-            prompt: [
-              `请继续陪我看《${fileName}》。`,
-              '',
-              '帮我找出最值得吐槽、讨论或者进一步确认的部分，但不要太吵。',
-              '',
-              '摘要：',
-              summary,
-            ].join('\n'),
-          },
-          {
-            id: 'gentle-recap',
-            label: '温柔复述',
-            prompt: [
-              `请你陪我把《${fileName}》顺一遍。`,
-              '',
-              '用更自然一点、像坐在旁边轻声解释的方式，帮我复述重点。',
-              '',
-              '摘要：',
-              summary,
-            ].join('\n'),
-          },
-          baseFillAction,
-        ]
-      }
-
-      if (currentActivity === 'CHATTING') {
-        return [
-          {
-            id: 'social-summary',
-            label: '帮我讲给别人听',
-            prompt: [
-              `请陪我一起看《${fileName}》。`,
-              '',
-              '把它整理成适合讲给别人听的版本，要自然、暖一点，不要像机器总结。',
-              '',
-              '摘要：',
-              summary,
-            ].join('\n'),
-          },
-          {
-            id: 'soft-highlight',
-            label: '先挑最值得说的',
-            prompt: [
-              `请继续陪我看《${fileName}》。`,
-              '',
-              '帮我挑出最值得马上提起的重点，像你在旁边轻轻提醒我一样。',
-              '',
-              '摘要：',
-              summary,
-            ].join('\n'),
-          },
-          {
-            id: 'prepare-response',
-            label: '整理一句回应',
-            prompt: [
-              `我现在可能会把《${fileName}》里的内容继续聊下去。`,
-              '',
-              '请根据摘要帮我整理一个自然一点的回应或说法，不要太正式。',
-              '',
-              '摘要：',
-              summary,
-            ].join('\n'),
-          },
-          baseFillAction,
-        ]
-      }
-
-      if (currentActivity === 'GAMING') {
-        return [
-          {
-            id: 'quickest-need',
-            label: '只说最重要的',
-            prompt: [
-              `我现在不太想被打断，请非常简短地帮我看《${fileName}》。`,
-              '',
-              '只告诉我最关键的一件事，或者值不值得我稍后再回来细看。',
-              '',
-              '摘要：',
-              summary,
-            ].join('\n'),
-          },
-          {
-            id: 'save-for-later',
-            label: '留个稍后回看点',
-            prompt: [
-              `我现在先玩着，请帮我给《${fileName}》留一个稍后继续看的切入口。`,
-              '',
-              '告诉我晚点回来时最该从哪里接着看，尽量短。',
-              '',
-              '摘要：',
-              summary,
-            ].join('\n'),
-          },
-          baseFillAction,
-        ]
-      }
-
-      return [
-        {
-          id: 'explain-gently',
-          label: '先讲重点',
-          prompt: [
-            `我们继续看《${fileName}》。`,
-            '',
-            '请你像陪我一起读一样，用温和一点的语气告诉我最重要的三件事。',
-            '',
-            '摘要：',
-            summary,
-          ].join('\n'),
-        },
-        {
-          id: 'find-worth-reading',
-          label: '标出必看部分',
-          prompt: [
-            `请继续陪我看《${fileName}》。`,
-            '',
-            '帮我从这个摘要里挑出最值得继续细看的部分，并告诉我为什么。',
-            '',
-            '摘要：',
-            summary,
-          ].join('\n'),
-        },
-        {
-          id: 'turn-into-plan',
-          label: '整理下一步',
-          prompt: [
-            `我们拿《${fileName}》继续往下走。`,
-            '',
-            '请把我接下来可以做的事情整理成一个很轻的阅读或处理顺序，不要太工具化。',
-            '',
-            '摘要：',
-            summary,
-          ].join('\n'),
-        },
-        baseFillAction,
-      ]
+      return buildFollowUpActionsForScene(fileName, summary, context, buildAnalysisPrompt)
     },
     [buildAnalysisPrompt],
   )
@@ -405,6 +543,7 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
 
       const aiChatProvider = resolveAIChatProvider(aiChatProviderId)
       const fileAnalysisProvider = resolveFileAnalysisProvider(fileAnalysisProviderId)
+      const context = buildCompanionChatContext(activity, windowTitle, windowProcess)
 
       addMessage({
         id: `file-${Date.now()}`,
@@ -440,16 +579,16 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
           role: 'system',
           content: `我先帮你把《${file.name}》理了一遍。你可以直接点下面的方式，我们一起继续往下看。\n\n${summary}`,
           timestamp: Date.now(),
-          actions: buildFollowUpActions(file.name, summary, activity),
+          actions: buildFollowUpActions(file.name, summary, context),
         })
 
         emitCompanionUtterance({
           source: 'file-analysis',
-          message: buildFileAnalysisUtterance(file.name, summary),
+          message: buildFileAnalysisUtterance(file.name, summary, context.sceneId),
           duration: 3200,
         })
 
-        setInput(buildAnalysisPrompt(file.name, summary))
+        setInput(buildAnalysisPrompt(file.name, summary, context))
       } catch (error: any) {
         addMessage({
           id: `file-error-${Date.now()}`,
@@ -469,6 +608,8 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
       fileAnalysisProviderId,
       isStreaming,
       activity,
+      windowProcess,
+      windowTitle,
     ],
   )
 
