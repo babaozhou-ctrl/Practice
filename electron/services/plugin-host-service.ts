@@ -9,6 +9,15 @@ export interface PluginManifestRecord {
   capabilities: string[]
   permissions: string[]
   apiVersion?: string
+  providers?: PluginManifestProviderRecord[]
+}
+
+export interface PluginManifestProviderRecord {
+  id: string
+  capability: 'aiChat' | 'fileAnalysis' | 'screenPerception'
+  manifestCapability?: string
+  label: string
+  description?: string
 }
 
 export interface PluginDiscoveryRecord {
@@ -19,6 +28,7 @@ export interface PluginDiscoveryRecord {
   capabilities: string[]
   permissions: string[]
   apiVersion: string | null
+  providers: PluginManifestProviderRecord[]
   source: 'local'
   directoryName: string
   manifestPath: string
@@ -69,6 +79,7 @@ async function loadPluginManifestRecord(
     capabilities: [],
     permissions: [],
     apiVersion: null,
+    providers: [],
     source: 'local',
     directoryName,
     manifestPath,
@@ -104,6 +115,15 @@ async function loadPluginManifestRecord(
     capabilities: Array.isArray(manifest.capabilities) ? manifest.capabilities.filter(isNonEmptyString) : [],
     permissions: Array.isArray(manifest.permissions) ? manifest.permissions.filter(isNonEmptyString) : [],
     apiVersion: typeof manifest.apiVersion === 'string' && manifest.apiVersion.trim() ? manifest.apiVersion.trim() : null,
+    providers: Array.isArray(manifest.providers)
+      ? manifest.providers.filter(isPluginManifestProviderRecord).map((provider) => ({
+          id: provider.id.trim(),
+          capability: provider.capability,
+          manifestCapability: isNonEmptyString(provider.manifestCapability) ? provider.manifestCapability.trim() : undefined,
+          label: provider.label.trim(),
+          description: isNonEmptyString(provider.description) ? provider.description.trim() : undefined,
+        }))
+      : [],
     source: 'local',
     directoryName,
     manifestPath,
@@ -136,6 +156,9 @@ async function validatePluginManifest(
   if (!Array.isArray(manifest.permissions)) {
     errors.push('插件 manifest 的 permissions 必须是数组。')
   }
+  if (manifest.providers && !Array.isArray(manifest.providers)) {
+    errors.push('插件 manifest 的 providers 必须是数组。')
+  }
 
   if (manifest.apiVersion && !SUPPORTED_PLUGIN_API_VERSIONS.has(manifest.apiVersion)) {
     errors.push(`当前只支持 apiVersion=${Array.from(SUPPORTED_PLUGIN_API_VERSIONS).join(', ')}。`)
@@ -146,6 +169,31 @@ async function validatePluginManifest(
     const entryPath = join(pluginDir, manifest.entry)
     if (!(await fileExists(entryPath))) {
       errors.push(`插件入口文件不存在：${manifest.entry}`)
+    }
+  }
+
+  if (Array.isArray(manifest.providers)) {
+    const providerIds = new Set<string>()
+    for (const provider of manifest.providers) {
+      if (!isPluginManifestProviderRecord(provider)) {
+        errors.push('plugins.providers 里存在结构不完整的 provider 声明。')
+        continue
+      }
+
+      if (providerIds.has(provider.id.trim())) {
+        errors.push(`plugins.providers 里存在重复的 provider id：${provider.id}`)
+      }
+      providerIds.add(provider.id.trim())
+
+      if (
+        provider.manifestCapability &&
+        Array.isArray(manifest.capabilities) &&
+        !manifest.capabilities.includes(provider.manifestCapability)
+      ) {
+        errors.push(
+          `provider "${provider.id}" 声明了 manifestCapability=${provider.manifestCapability}，但插件 capabilities 里没有它。`,
+        )
+      }
     }
   }
 
@@ -163,4 +211,19 @@ async function fileExists(path: string): Promise<boolean> {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
+}
+
+function isPluginManifestProviderRecord(value: unknown): value is PluginManifestProviderRecord {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const provider = value as Partial<PluginManifestProviderRecord>
+  return (
+    isNonEmptyString(provider.id) &&
+    isNonEmptyString(provider.label) &&
+    (provider.capability === 'aiChat' ||
+      provider.capability === 'fileAnalysis' ||
+      provider.capability === 'screenPerception')
+  )
 }

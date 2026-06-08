@@ -5,5 +5,14 @@
   "entry": "index.js",
   "capabilities": ["work-mode", "document-analysis"],
   "permissions": ["fs.read.user-selected", "ai.provider.invoke"],
+  "providers": [
+    {
+      "id": "notes-file-analyzer",
+      "capability": "fileAnalysis",
+      "manifestCapability": "document-analysis",
+      "label": "Example Notes File Analyzer",
+      "description": "A future file-analysis provider candidate exposed by this plugin manifest."
+    }
+  ],
   "apiVersion": "1.0.0"
 }

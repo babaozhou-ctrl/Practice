@@ -27,6 +27,7 @@ const screenAnalyzer = new ScreenAnalyzer(defaultScreenCaptureConfig)
 
 const registrations = new Map<string, CapabilityProviderRegistration>()
 const discoveredProviderDescriptors = new Map<string, ProviderDescriptor>()
+const discoveredProviderCandidates = new Map<string, DiscoveredPluginProviderCandidate>()
 
 registerCapabilityProvider({
   descriptor: {
@@ -116,6 +117,7 @@ export function unregisterCapabilityProvider(providerId: string) {
 
 export function reconcileDiscoveredPluginProviders(plugins: PluginDiscoveryRecord[]) {
   discoveredProviderDescriptors.clear()
+  discoveredProviderCandidates.clear()
 
   for (const plugin of plugins) {
     if (plugin.status !== 'valid') {
@@ -124,9 +126,10 @@ export function reconcileDiscoveredPluginProviders(plugins: PluginDiscoveryRecor
 
     const candidates = deriveProviderCandidatesFromPlugin(plugin)
     for (const candidate of candidates) {
+      discoveredProviderCandidates.set(candidate.providerId, candidate)
       discoveredProviderDescriptors.set(candidate.providerId, {
         id: candidate.providerId,
-        label: `${candidate.pluginName} (${candidate.runtimeBinding})`,
+        label: candidate.label,
         capability: candidate.runtimeBinding,
         kind: 'plugin',
         availability: 'discovered',
@@ -159,9 +162,9 @@ export function listProviderDescriptors(
 
 export function listDiscoveredProviderCandidates(
   capability?: PluginCapabilityProvider,
-): ProviderDescriptor[] {
-  return Array.from(discoveredProviderDescriptors.values())
-    .filter((descriptor) => !capability || descriptor.capability === capability)
+): DiscoveredPluginProviderCandidate[] {
+  return Array.from(discoveredProviderCandidates.values())
+    .filter((candidate) => !capability || candidate.runtimeBinding === capability)
 }
 
 export function isRegisteredProvider(capability: PluginCapabilityProvider, providerId: string): boolean {
@@ -217,14 +220,31 @@ export function resolveScreenPerceptionProvider(providerId?: string): ScreenPerc
 function deriveProviderCandidatesFromPlugin(
   plugin: PluginDiscoveryRecord,
 ): DiscoveredPluginProviderCandidate[] {
+  if (plugin.providers.length > 0) {
+    return plugin.providers.map((provider) => ({
+      providerId: `plugin-candidate.${plugin.id}.${provider.id}`,
+      pluginId: plugin.id,
+      pluginName: plugin.name,
+      declaredProviderId: provider.id,
+      manifestCapability: provider.manifestCapability ?? provider.capability,
+      runtimeBinding: provider.capability,
+      label: provider.label,
+      description:
+        provider.description ??
+        `${plugin.name} 声明了一个 ${provider.capability} provider 候选，但还没有真正注册可执行实现。`,
+    }))
+  }
+
   return describePluginCapabilities(plugin.capabilities)
     .filter(isReadyProviderCapability)
     .map((item) => ({
       providerId: `plugin-candidate.${plugin.id}.${item.runtimeBinding}`,
       pluginId: plugin.id,
       pluginName: plugin.name,
+      declaredProviderId: item.capability,
       manifestCapability: item.capability,
       runtimeBinding: item.runtimeBinding,
+      label: `${plugin.name} (${item.runtimeBinding})`,
       description: `${plugin.name} 声明了 ${item.capability}，已经能和当前 ${item.runtimeBinding} provider 契约对齐，但还没有真正注册可执行实现。`,
     }))
 }

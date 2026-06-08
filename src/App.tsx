@@ -11,6 +11,7 @@ import { listDiscoveredProviderCandidates, listProviderDescriptors } from './plu
 import { ensurePluginProviderStoreSubscription, usePluginProviderStore } from './plugins/PluginProviderStore'
 import { describePluginCapabilities } from './plugins/runtime/capabilityMap'
 import { useLocalPluginDiscoveryStore } from './plugins/runtime/LocalPluginDiscoveryStore'
+import type { DiscoveredPluginProviderCandidate } from './plugins/runtime/types'
 import { ensureSelectedPetCapabilitySubscription } from './store/selectedPetCapabilityStore'
 import { usePetStore } from './store/petStore'
 import { ensureSelectedPetStoreSubscription, useSelectedPetStore } from './store/selectedPetStore'
@@ -64,6 +65,11 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const discoveredAiProviders = listDiscoveredProviderCandidates('aiChat')
   const discoveredFileProviders = listDiscoveredProviderCandidates('fileAnalysis')
   const discoveredScreenProviders = listDiscoveredProviderCandidates('screenPerception')
+  const discoveredProviderCandidates: DiscoveredPluginProviderCandidate[] = [
+    ...discoveredAiProviders,
+    ...discoveredFileProviders,
+    ...discoveredScreenProviders,
+  ]
   const localPlugins = useLocalPluginDiscoveryStore((state) => state.plugins)
   const refreshLocalPlugins = useLocalPluginDiscoveryStore((state) => state.refresh)
 
@@ -400,14 +406,14 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           下面这些是已经能和当前 provider 契约对齐的插件候选，但现在还没有真正注册成可执行 provider。
         </div>
         <div style={{ display: 'grid', gap: '10px', marginBottom: '14px' }}>
-          {[...discoveredAiProviders, ...discoveredFileProviders, ...discoveredScreenProviders].length === 0 && (
+          {discoveredProviderCandidates.length === 0 && (
             <div style={{ fontSize: '12px', color: 'rgba(104, 132, 157, 0.72)' }}>
               当前还没有发现可对齐到 provider 契约的插件候选。
             </div>
           )}
-          {[...discoveredAiProviders, ...discoveredFileProviders, ...discoveredScreenProviders].map((provider) => (
+          {discoveredProviderCandidates.map((provider) => (
             <div
-              key={provider.id}
+              key={provider.providerId}
               style={{
                 padding: '12px 14px',
                 borderRadius: '14px',
@@ -416,15 +422,20 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: '#4f6880' }}>
-                  {provider.label}
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#4f6880' }}>
+                    {provider.label}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'rgba(104, 132, 157, 0.72)' }}>
+                    {provider.pluginId} · {provider.declaredProviderId}
+                  </div>
                 </div>
                 <span style={pillStyle(false, '#e7b36a', true)}>
                   Candidate
                 </span>
               </div>
               <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(92, 118, 143, 0.8)' }}>
-                Capability: {provider.capability} · Source: {provider.kind}
+                Capability: {provider.runtimeBinding} · Source: plugin
               </div>
               {provider.description && (
                 <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(92, 118, 143, 0.8)', marginTop: '4px' }}>
