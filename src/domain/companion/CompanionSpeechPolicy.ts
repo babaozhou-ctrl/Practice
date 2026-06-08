@@ -77,7 +77,8 @@ export class CompanionSpeechPolicy {
 
     const lastShownForSource = this.lastShownBySource[input.source] ?? 0
     const sourceCooldown = Math.round(
-      SOURCE_COOLDOWN_MS[input.source] * (lowDistractionMode ? resolveLowDistractionCooldownMultiplier(input.source) : 1),
+      SOURCE_COOLDOWN_MS[input.source] *
+        (lowDistractionMode ? resolveLowDistractionCooldownMultiplier(input.source) : 1),
     )
     if (lastShownForSource && now - lastShownForSource < sourceCooldown) {
       return null
@@ -93,10 +94,7 @@ export class CompanionSpeechPolicy {
         return null
       }
 
-      const canInterrupt =
-        priority > activeSpeech.priority &&
-        now - activeSpeech.startedAt >= REPLACE_AFTER_MS
-
+      const canInterrupt = priority > activeSpeech.priority && now - activeSpeech.startedAt >= REPLACE_AFTER_MS
       if (!canInterrupt) {
         return null
       }
@@ -109,6 +107,7 @@ export class CompanionSpeechPolicy {
       input.source,
       lowDistractionMode,
     )
+
     this.activeSpeech = {
       source: input.source,
       priority,
@@ -160,12 +159,7 @@ function refineMessage(message: string, snapshot: CompanionSnapshot, source: Spe
     Boolean(snapshot.workMode?.isFocusActive)
 
   const preferredSentence = firstSentence(message)
-  if (
-    preferSingleSentence &&
-    preferredSentence &&
-    preferredSentence.length >= 5 &&
-    preferredSentence.length <= maxChars + 8
-  ) {
+  if (preferSingleSentence && preferredSentence && preferredSentence.length >= 5 && preferredSentence.length <= maxChars + 8) {
     return preferredSentence
   }
 
@@ -175,7 +169,7 @@ function refineMessage(message: string, snapshot: CompanionSnapshot, source: Spe
 
   const cutIndex = findSoftBreak(message, maxChars)
   const shortened = message.slice(0, cutIndex).trim()
-  return `${shortened}…`
+  return `${shortened}...`
 }
 
 function resolveMaxChars(snapshot: CompanionSnapshot, source: SpeechSource): number {
@@ -228,14 +222,14 @@ function normalizeMessage(message: string): string {
 }
 
 function buildMessageKey(message: string): string {
-  return normalizeMessage(message).replace(/[。！？!?，、,.…~]+$/u, '').toLowerCase()
+  return normalizeMessage(message).replace(/[。！？!?，,.;；、.]+$/u, '').toLowerCase()
 }
 
 function firstSentence(message: string): string | null {
-  const matches = ['。', '！', '？', '!', '?']
+  const symbols = ['。', '！', '？', '!', '?']
   let cutIndex = -1
 
-  for (const symbol of matches) {
+  for (const symbol of symbols) {
     const index = message.indexOf(symbol)
     if (index >= 0 && (cutIndex === -1 || index < cutIndex)) {
       cutIndex = index
@@ -251,7 +245,7 @@ function firstSentence(message: string): string | null {
 
 function findSoftBreak(message: string, maxChars: number): number {
   const minChars = Math.max(8, Math.floor(maxChars * 0.55))
-  const softSymbols = ['。', '！', '？', '，', '、', '；', '：', '!', '?', ',', ';', ':', ' ']
+  const softSymbols = ['。', '，', '；', '、', '！', '？', '.', ',', ';', ':', ' ']
 
   for (let index = Math.min(maxChars, message.length - 1); index >= minChars; index -= 1) {
     if (softSymbols.includes(message[index])) {

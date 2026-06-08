@@ -19,11 +19,11 @@ function clipSentence(value: string, maxChars = 34): string {
 
   for (let index = maxChars; index >= Math.max(10, Math.floor(maxChars * 0.6)); index -= 1) {
     if ('，。；、,.!?！？ '.includes(normalized[index] ?? '')) {
-      return `${normalized.slice(0, index).trim()}…`
+      return `${normalized.slice(0, index).trim()}...`
     }
   }
 
-  return `${normalized.slice(0, maxChars).trim()}…`
+  return `${normalized.slice(0, maxChars).trim()}...`
 }
 
 export function summarizeForCompanionSpeech(text: string, fallback: string, maxChars = 34): string {

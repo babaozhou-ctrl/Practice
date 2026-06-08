@@ -161,6 +161,7 @@ export class ProactiveInteractionScheduler {
       if (shouldSkipForRepeat('productive-default')) {
         return null
       }
+
       return {
         category: 'productive-default',
         contextKey: `productive-default|${baseContextKey}`,
@@ -193,6 +194,7 @@ export class ProactiveInteractionScheduler {
       if (shouldSkipForRepeat('late-night-default')) {
         return null
       }
+
       return {
         category: 'late-night-default',
         contextKey: `late-night-default|${baseContextKey}`,
@@ -214,6 +216,7 @@ export class ProactiveInteractionScheduler {
       if (shouldSkipForRepeat('watch-together')) {
         return null
       }
+
       return {
         category: 'watch-together',
         contextKey: `watch-together|${baseContextKey}`,
@@ -233,6 +236,7 @@ export class ProactiveInteractionScheduler {
       if (shouldSkipForRepeat('gentle-check-in')) {
         return null
       }
+
       return {
         category: 'gentle-check-in',
         contextKey: `gentle-check-in|${baseContextKey}`,
@@ -312,5 +316,5 @@ function trimForSpeech(value: string, maxLength: number): string {
   if (normalized.length <= maxLength) {
     return normalized
   }
-  return `${normalized.slice(0, maxLength).trim()}…`
+  return `${normalized.slice(0, maxLength).trim()}...`
 }
