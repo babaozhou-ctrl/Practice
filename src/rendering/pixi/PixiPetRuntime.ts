@@ -300,6 +300,7 @@ export class PixiPetRuntime {
     const emotion = this.presentation?.snapshot.emotion ?? 'idle'
     const mode = this.presentation?.snapshot.mode ?? 'observing'
     const activity = this.presentation?.snapshot.activity ?? 'idle'
+    const scene = this.presentation?.snapshot.scene
     const workMode = this.presentation?.snapshot.workMode ?? null
     const micro = this.playbackMicroMotions
 
@@ -353,7 +354,9 @@ export class PixiPetRuntime {
       extraScaleY += clipScaleWave * (clipMotion.scaleYAmount ?? 0)
     }
 
-    const motionProfile = resolveWorkModeMotionProfile(workMode, this.lowDistractionMode)
+    const workModeMotion = resolveWorkModeMotionProfile(workMode, this.lowDistractionMode)
+    const sceneMotion = resolveSceneMotionProfile(scene, this.lowDistractionMode)
+    const motionProfile = mergeMotionProfiles(workModeMotion, sceneMotion)
     bounce *= motionProfile.bounceScale
     extraScaleY *= motionProfile.breathScale
     extraSway *= motionProfile.swayScale
@@ -374,6 +377,7 @@ export class PixiPetRuntime {
     extraSway += centerShift * motionProfile.swayScale
     extraRotate += tailRotation * motionProfile.rotationScale + earRotation * motionProfile.earScale
     blinkScaleY = 1 - (1 - blinkScaleY) * motionProfile.blinkScale
+    extraYOffset += motionProfile.restOffsetY
 
     if (workMode?.enabled && workMode.overworkLevel === 'firm') {
       extraYOffset += 4
@@ -386,7 +390,7 @@ export class PixiPetRuntime {
     const targetScaleY = 1 + extraScaleY
     const transitionBlend = clipMotion?.settleAlpha
       ? Math.min(0.4, Math.max(0.08, clipMotion.settleAlpha))
-      : this.transitionActive ? 0.14 : 0.22
+      : this.transitionActive ? 0.14 : motionProfile.settleBlend
 
     this.displayedX = lerp(this.displayedX, targetX, transitionBlend)
     this.displayedY = lerp(this.displayedY, targetY, transitionBlend)
@@ -583,6 +587,8 @@ function resolveWorkModeMotionProfile(
     rotationScale: baseProfile.rotationScale * lowDistractionMultiplier.rotationScale,
     earScale: baseProfile.earScale * lowDistractionMultiplier.earScale,
     blinkScale: baseProfile.blinkScale * lowDistractionMultiplier.blinkScale,
+    restOffsetY: 0,
+    settleBlend: lowDistractionMode ? 0.16 : 0.22,
   }
 }
 
@@ -595,6 +601,8 @@ function resolveBaseWorkModeMotionProfile(workMode: ResolvedPetPresentation['sna
       rotationScale: 0.48,
       earScale: 0.55,
       blinkScale: 1,
+      restOffsetY: 0,
+      settleBlend: 0.22,
     }
   }
 
@@ -607,6 +615,8 @@ function resolveBaseWorkModeMotionProfile(workMode: ResolvedPetPresentation['sna
         rotationScale: 0.72,
         earScale: 0.78,
         blinkScale: 1.08,
+        restOffsetY: -1.2,
+        settleBlend: 0.24,
       }
     }
 
@@ -617,6 +627,8 @@ function resolveBaseWorkModeMotionProfile(workMode: ResolvedPetPresentation['sna
       rotationScale: 0.62,
       earScale: 0.66,
       blinkScale: 1.04,
+      restOffsetY: -0.6,
+      settleBlend: 0.23,
     }
   }
 
@@ -629,6 +641,8 @@ function resolveBaseWorkModeMotionProfile(workMode: ResolvedPetPresentation['sna
         rotationScale: 0.42,
         earScale: 0.58,
         blinkScale: 1.24,
+        restOffsetY: 1.8,
+        settleBlend: 0.18,
       }
     }
 
@@ -640,6 +654,8 @@ function resolveBaseWorkModeMotionProfile(workMode: ResolvedPetPresentation['sna
         rotationScale: 0.62,
         earScale: 0.72,
         blinkScale: 1.16,
+        restOffsetY: 0.6,
+        settleBlend: 0.2,
       }
     }
 
@@ -650,6 +666,8 @@ function resolveBaseWorkModeMotionProfile(workMode: ResolvedPetPresentation['sna
       rotationScale: 0.36,
       earScale: 0.42,
       blinkScale: 0.92,
+      restOffsetY: 0,
+      settleBlend: 0.17,
     }
   }
 
@@ -661,6 +679,8 @@ function resolveBaseWorkModeMotionProfile(workMode: ResolvedPetPresentation['sna
       rotationScale: 0.58,
       earScale: 0.74,
       blinkScale: 1.2,
+      restOffsetY: 1.1,
+      settleBlend: 0.19,
     }
   }
 
@@ -671,5 +691,167 @@ function resolveBaseWorkModeMotionProfile(workMode: ResolvedPetPresentation['sna
     rotationScale: 0.6,
     earScale: 0.68,
     blinkScale: 1,
+    restOffsetY: 0,
+    settleBlend: 0.22,
+  }
+}
+
+function resolveSceneMotionProfile(
+  scene: ResolvedPetPresentation['snapshot']['scene'] | null | undefined,
+  lowDistractionMode: boolean,
+) {
+  const quietMultiplier = lowDistractionMode ? 0.88 : 1
+
+  if (!scene) {
+    return {
+      bounceScale: quietMultiplier,
+      breathScale: quietMultiplier,
+      swayScale: quietMultiplier,
+      rotationScale: quietMultiplier,
+      earScale: quietMultiplier,
+      blinkScale: 1,
+      restOffsetY: 0,
+      settleBlend: lowDistractionMode ? 0.18 : 0.22,
+    }
+  }
+
+  switch (scene.id) {
+    case 'away':
+      return {
+        bounceScale: 0.18,
+        breathScale: 0.52,
+        swayScale: 0.12,
+        rotationScale: 0.12,
+        earScale: 0.18,
+        blinkScale: 1.28,
+        restOffsetY: 2.4,
+        settleBlend: 0.12,
+      }
+    case 'deep_focus':
+      return {
+        bounceScale: 0.34 * quietMultiplier,
+        breathScale: 0.74 * quietMultiplier,
+        swayScale: 0.26 * quietMultiplier,
+        rotationScale: 0.28 * quietMultiplier,
+        earScale: 0.36 * quietMultiplier,
+        blinkScale: 1.08,
+        restOffsetY: 0.6,
+        settleBlend: 0.15,
+      }
+    case 'steady_focus':
+      return {
+        bounceScale: 0.48 * quietMultiplier,
+        breathScale: 0.82 * quietMultiplier,
+        swayScale: 0.42 * quietMultiplier,
+        rotationScale: 0.4 * quietMultiplier,
+        earScale: 0.5 * quietMultiplier,
+        blinkScale: 1.04,
+        restOffsetY: 0.2,
+        settleBlend: 0.18,
+      }
+    case 'watch_together':
+      return {
+        bounceScale: 0.64 * quietMultiplier,
+        breathScale: 0.94,
+        swayScale: 0.78,
+        rotationScale: 0.68,
+        earScale: 0.8,
+        blinkScale: 0.98,
+        restOffsetY: -0.4,
+        settleBlend: 0.24,
+      }
+    case 'social_corner':
+      return {
+        bounceScale: 0.76 * quietMultiplier,
+        breathScale: 1,
+        swayScale: 0.92 * quietMultiplier,
+        rotationScale: 0.84 * quietMultiplier,
+        earScale: 1,
+        blinkScale: 0.94,
+        restOffsetY: -0.8,
+        settleBlend: 0.26,
+      }
+    case 'play_session':
+      return {
+        bounceScale: 0.44 * quietMultiplier,
+        breathScale: 0.78,
+        swayScale: 0.32 * quietMultiplier,
+        rotationScale: 0.34 * quietMultiplier,
+        earScale: 0.42 * quietMultiplier,
+        blinkScale: 0.9,
+        restOffsetY: -0.2,
+        settleBlend: 0.16,
+      }
+    case 'reading_nook':
+      return {
+        bounceScale: 0.3 * quietMultiplier,
+        breathScale: 0.72,
+        swayScale: 0.22 * quietMultiplier,
+        rotationScale: 0.24 * quietMultiplier,
+        earScale: 0.34 * quietMultiplier,
+        blinkScale: 1.12,
+        restOffsetY: 0.4,
+        settleBlend: 0.15,
+      }
+    case 'late_night_wind_down':
+      return {
+        bounceScale: 0.22,
+        breathScale: 0.62,
+        swayScale: 0.18,
+        rotationScale: 0.16,
+        earScale: 0.24,
+        blinkScale: 1.22,
+        restOffsetY: 1.4,
+        settleBlend: 0.13,
+      }
+    case 'quiet_idle':
+      return {
+        bounceScale: 0.28 * quietMultiplier,
+        breathScale: 0.7,
+        swayScale: 0.24 * quietMultiplier,
+        rotationScale: 0.22 * quietMultiplier,
+        earScale: 0.34 * quietMultiplier,
+        blinkScale: 1.12,
+        restOffsetY: 0.6,
+        settleBlend: 0.16,
+      }
+    case 'soft_browsing':
+      return {
+        bounceScale: 0.54 * quietMultiplier,
+        breathScale: 0.88,
+        swayScale: 0.66 * quietMultiplier,
+        rotationScale: 0.6 * quietMultiplier,
+        earScale: 0.72 * quietMultiplier,
+        blinkScale: 1,
+        restOffsetY: -0.1,
+        settleBlend: 0.22,
+      }
+    default:
+      return {
+        bounceScale: 0.46 * quietMultiplier,
+        breathScale: 0.8,
+        swayScale: 0.5 * quietMultiplier,
+        rotationScale: 0.46 * quietMultiplier,
+        earScale: 0.58 * quietMultiplier,
+        blinkScale: 1,
+        restOffsetY: 0,
+        settleBlend: lowDistractionMode ? 0.18 : 0.22,
+      }
+  }
+}
+
+function mergeMotionProfiles(
+  left: ReturnType<typeof resolveWorkModeMotionProfile>,
+  right: ReturnType<typeof resolveSceneMotionProfile>,
+) {
+  return {
+    bounceScale: left.bounceScale * right.bounceScale,
+    breathScale: left.breathScale * right.breathScale,
+    swayScale: left.swayScale * right.swayScale,
+    rotationScale: left.rotationScale * right.rotationScale,
+    earScale: left.earScale * right.earScale,
+    blinkScale: left.blinkScale * right.blinkScale,
+    restOffsetY: left.restOffsetY + right.restOffsetY,
+    settleBlend: Math.min(0.28, Math.max(0.1, (left.settleBlend + right.settleBlend) / 2)),
   }
 }

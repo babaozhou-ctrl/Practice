@@ -8,6 +8,7 @@ Planned responsibilities:
 - texture and atlas loading
 - animation graph playback
 - micro-motion controllers
+- scene-aware motion weighting
 - scene composition
 - drag and hit-area controllers
 

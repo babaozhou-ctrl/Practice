@@ -42,6 +42,9 @@
 - Companion memory 现在会记录：
   - `lastScene`
   - 带 scene 语义的 `recentTopics`
+- Pixi 微动运行时现在也会消费 scene：
+  - `scene.energy` 会影响整体运动强度
+  - `scene.id` 会影响呼吸、摇摆、眨眼、重心偏移和 settle 节奏
 
 ## 当前 scene 语义
 
@@ -76,6 +79,10 @@
 
 4. 长期记忆
    - 后续可以记住“用户常在深夜收尾时想被轻一点提醒”这种更有陪伴感的模式
+
+5. 渲染表现
+   - 同一个 base clip 不再只能机械复用
+   - `quiet_idle`、`deep_focus`、`watch_together`、`late_night_wind_down` 会逐渐长出不同的身体节奏
 
 ## 下一步建议
 
