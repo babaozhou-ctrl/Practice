@@ -9,6 +9,7 @@ import {
 } from './store/companionPreferencesStore'
 import { listProviderDescriptors } from './plugins/PluginCapabilityRegistry'
 import { ensurePluginProviderStoreSubscription, usePluginProviderStore } from './plugins/PluginProviderStore'
+import { describePluginCapabilities } from './plugins/runtime/capabilityMap'
 import { useLocalPluginDiscoveryStore } from './plugins/runtime/LocalPluginDiscoveryStore'
 import { ensureSelectedPetCapabilitySubscription } from './store/selectedPetCapabilityStore'
 import { usePetStore } from './store/petStore'
@@ -351,9 +352,37 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(92, 118, 143, 0.8)', marginBottom: '6px' }}>
                 Entry: {plugin.entry} · API: {plugin.apiVersion ?? 'unknown'}
               </div>
-              <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(92, 118, 143, 0.8)', marginBottom: plugin.errors.length > 0 ? '6px' : 0 }}>
+              <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(92, 118, 143, 0.8)', marginBottom: '6px' }}>
                 Capabilities: {plugin.capabilities.join(', ') || 'none'} · Permissions: {plugin.permissions.join(', ') || 'none'}
               </div>
+              {plugin.capabilities.length > 0 && (
+                <div style={{ display: 'grid', gap: '6px', marginBottom: plugin.errors.length > 0 ? '8px' : 0 }}>
+                  {describePluginCapabilities(plugin.capabilities).map((item) => (
+                    <div
+                      key={`${plugin.id}-${item.capability}`}
+                      style={{
+                        padding: '8px 10px',
+                        borderRadius: '10px',
+                        background: 'rgba(255,255,255,0.6)',
+                        border: '1px solid rgba(138, 191, 230, 0.14)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#56728b' }}>
+                          {item.capability}
+                        </span>
+                        <span style={pillStyle(item.status === 'ready', item.status === 'ready' ? '#8ec5ec' : item.status === 'planned' ? '#e7b36a' : '#b7b7b7', true)}>
+                          {item.status === 'ready' ? 'Ready' : item.status === 'planned' ? 'Planned' : 'Unknown'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(92, 118, 143, 0.8)' }}>
+                        {item.runtimeBinding ? `Runtime binding: ${item.runtimeBinding}。` : ''}
+                        {item.summary}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
               {plugin.errors.length > 0 && (
                 <div style={{ fontSize: '11px', lineHeight: 1.6, color: '#b86565' }}>
                   {plugin.errors.join(' ')}
