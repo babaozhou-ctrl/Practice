@@ -1,11 +1,5 @@
 import type { ChatMessage, CompanionChatContext, CompanionMemorySnapshot } from '../types/chat'
-import {
-  EMPTY_COMPANION_MEMORY,
-  captureCompanionFileAnalysis,
-  cloneCompanionMemory,
-  readCompanionMemory,
-  writeCompanionMemory,
-} from './CompanionMemoryStore'
+import { EMPTY_COMPANION_MEMORY, cloneCompanionMemory, readCompanionMemory, writeCompanionMemory } from './CompanionMemoryStore'
 
 const MAX_MEMORY_TOKENS = 4000
 
@@ -83,15 +77,6 @@ export class MemoryManager {
 
     this.captureContext(context, next)
     this.companionMemory = writeCompanionMemory(next)
-  }
-
-  rememberFileAnalysis(
-    fileName: string,
-    briefSummary: string,
-    detailedAnalysis?: string | null,
-    sceneId?: string | null,
-  ) {
-    this.companionMemory = captureCompanionFileAnalysis(fileName, briefSummary, detailedAnalysis, sceneId)
   }
 
   captureContext(context: CompanionChatContext, target?: CompanionMemorySnapshot) {

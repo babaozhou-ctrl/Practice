@@ -116,15 +116,6 @@ export class ChatClient {
     return this.memory.getCompanionMemory()
   }
 
-  rememberFileAnalysis(
-    fileName: string,
-    briefSummary: string,
-    detailedAnalysis?: string | null,
-    sceneId?: string | null,
-  ) {
-    this.memory.rememberFileAnalysis(fileName, briefSummary, detailedAnalysis, sceneId)
-  }
-
   getActivePluginRequestId(): string | null {
     return this.activePluginRequestId
   }

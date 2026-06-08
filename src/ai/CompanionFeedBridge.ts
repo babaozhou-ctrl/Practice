@@ -1,4 +1,5 @@
 import type { ChatMessageAction, CompanionChatContext } from '../types/chat'
+import type { CompanionFeedAnalysisResult } from '../services/companionFeedAnalysis'
 
 export interface CompanionFeedAnalysisPayload {
   id: string
@@ -9,6 +10,28 @@ export interface CompanionFeedAnalysisPayload {
   actions: ChatMessageAction[]
   desktopUtterance: string
   createdAt: number
+}
+
+export function emitCompanionFeedAnalysisResult(
+  result: CompanionFeedAnalysisResult,
+  options?: {
+    idPrefix?: string
+    createdAt?: number
+  },
+) {
+  const createdAt = options?.createdAt ?? Date.now()
+  const idPrefix = options?.idPrefix ?? 'feed'
+
+  emitCompanionFeedAnalysis({
+    id: `${idPrefix}-${createdAt}`,
+    fileName: result.fileName,
+    briefSummary: result.briefSummary,
+    detailedAnalysis: result.detailedAnalysis,
+    context: result.context,
+    actions: result.actions,
+    desktopUtterance: result.desktopUtterance,
+    createdAt,
+  })
 }
 
 const COMPANION_FEED_EVENT = 'deep-pet:companion-feed-analysis'

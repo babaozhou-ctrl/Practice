@@ -3,7 +3,11 @@ import { ChatClient } from '../../ai/ChatClient'
 import { subscribeCompanionAction } from '../../ai/CompanionActionBridge'
 import { buildCompanionChatContext } from '../../ai/CompanionContextAdapter'
 import { buildChatReplyUtterance } from '../../ai/CompanionDesktopSummary'
-import { emitCompanionFeedAnalysis, readCompanionFeedAnalyses, subscribeCompanionFeedAnalysis } from '../../ai/CompanionFeedBridge'
+import {
+  emitCompanionFeedAnalysisResult,
+  readCompanionFeedAnalyses,
+  subscribeCompanionFeedAnalysis,
+} from '../../ai/CompanionFeedBridge'
 import { emitCompanionUtterance } from '../../ai/CompanionUtteranceBridge'
 import { usePluginProviderStore } from '../../plugins/PluginProviderStore'
 import { resolveSelectedPetPackage } from '../../pets/resolveSelectedPetPackage'
@@ -257,15 +261,8 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
           screenSource: screenPerception?.source ?? null,
         })
 
-        emitCompanionFeedAnalysis({
-          id: `chat-feed-${Date.now()}`,
-          fileName: result.fileName,
-          briefSummary: result.briefSummary,
-          detailedAnalysis: result.detailedAnalysis,
-          context: result.context,
-          actions: result.actions,
-          desktopUtterance: result.desktopUtterance,
-          createdAt: Date.now(),
+        emitCompanionFeedAnalysisResult(result, {
+          idPrefix: 'chat-feed',
         })
 
         emitCompanionUtterance({

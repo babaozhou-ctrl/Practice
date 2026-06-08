@@ -1,5 +1,5 @@
 import { emitCompanionAction } from './ai/CompanionActionBridge'
-import { emitCompanionFeedAnalysis } from './ai/CompanionFeedBridge'
+import { emitCompanionFeedAnalysisResult } from './ai/CompanionFeedBridge'
 import {
   captureCompanionRuntimeContext,
   readCompanionMemory,
@@ -1009,15 +1009,8 @@ async function bootstrap() {
         screenSource: latestScreenSource,
       })
 
-      emitCompanionFeedAnalysis({
-        id: `feed-${Date.now()}`,
-        fileName: result.fileName,
-        briefSummary: result.briefSummary,
-        detailedAnalysis: result.detailedAnalysis,
-        context: result.context,
-        actions: result.actions,
-        desktopUtterance: result.desktopUtterance,
-        createdAt: Date.now(),
+      emitCompanionFeedAnalysisResult(result, {
+        idPrefix: 'feed',
       })
 
       playFeedResultMotion()
