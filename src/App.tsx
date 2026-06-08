@@ -176,6 +176,24 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     fontSize: '12px',
     cursor: 'pointer',
   }
+  const helperText: React.CSSProperties = {
+    marginTop: '-6px',
+    marginBottom: '12px',
+    fontSize: '11px',
+    color: 'rgba(104, 132, 157, 0.72)',
+    lineHeight: 1.6,
+  }
+  const candidateList: React.CSSProperties = {
+    display: 'grid',
+    gap: '8px',
+    marginTop: '8px',
+  }
+  const candidateCard: React.CSSProperties = {
+    padding: '10px 12px',
+    borderRadius: '12px',
+    border: '1px solid rgba(138, 191, 230, 0.16)',
+    background: 'rgba(255,255,255,0.5)',
+  }
 
   return (
     <div style={ov} onClick={onClose}>
@@ -296,6 +314,12 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             </option>
           ))}
         </select>
+        <ProviderCandidateHint
+          candidates={discoveredAiProviders}
+          helperStyle={helperText}
+          listStyle={candidateList}
+          cardStyle={candidateCard}
+        />
         <div style={lb}>File Analysis Provider</div>
         <select
           style={inp}
@@ -308,6 +332,12 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             </option>
           ))}
         </select>
+        <ProviderCandidateHint
+          candidates={discoveredFileProviders}
+          helperStyle={helperText}
+          listStyle={candidateList}
+          cardStyle={candidateCard}
+        />
         <div style={lb}>Screen Perception Provider</div>
         <select
           style={inp}
@@ -320,6 +350,12 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             </option>
           ))}
         </select>
+        <ProviderCandidateHint
+          candidates={discoveredScreenProviders}
+          helperStyle={helperText}
+          listStyle={candidateList}
+          cardStyle={candidateCard}
+        />
 
         <div style={sectionTitle}>Local Plugins</div>
         <div style={{ marginBottom: '12px', fontSize: '12px', color: 'rgba(104, 132, 157, 0.72)', lineHeight: 1.6 }}>
@@ -599,6 +635,35 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             Save
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+const ProviderCandidateHint: React.FC<{
+  candidates: DiscoveredPluginProviderCandidate[]
+  helperStyle: React.CSSProperties
+  listStyle: React.CSSProperties
+  cardStyle: React.CSSProperties
+}> = ({ candidates, helperStyle, listStyle, cardStyle }) => {
+  if (candidates.length === 0) {
+    return null
+  }
+
+  return (
+    <div style={helperStyle}>
+      <div>已发现候选 provider，但它们现在还不能直接在这里被选中。</div>
+      <div style={listStyle}>
+        {candidates.map((candidate) => (
+          <div key={candidate.providerId} style={cardStyle}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
+              <span style={{ fontWeight: 700, color: '#56728b' }}>{candidate.label}</span>
+              <span style={{ color: '#b58545', fontWeight: 700 }}>Candidate</span>
+            </div>
+            <div>{candidate.pluginName} · {candidate.declaredProviderId}</div>
+            <div>{candidate.description}</div>
+          </div>
+        ))}
       </div>
     </div>
   )
