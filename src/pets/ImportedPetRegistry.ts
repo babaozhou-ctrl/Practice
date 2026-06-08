@@ -18,6 +18,7 @@ import {
   getDefaultImportedSpriteDefinition,
   slugifyImportedPetName,
 } from './importedPetDefaults'
+import { generatePetPreviewAsset } from './preview/generatePetPreview'
 
 export const IMPORTED_PET_STORAGE_KEY = 'deep-pet.imported-pets.v1'
 
@@ -261,10 +262,10 @@ export function importedPetToPackage(record: ImportedPetRecord): BuiltInPetPacka
   }
 }
 
-export function buildImportedPetRecordFromSprite(input: {
+export async function buildImportedPetRecordFromSprite(input: {
   name: string
   spriteDefinition: SpriteDefinition
-}): ImportedPetRecord {
+}): Promise<PersistImportedPetPayload> {
   const idBase = slugify(input.name)
   const id = `imported.${idBase}`
   const importedAt = Date.now()
@@ -300,6 +301,10 @@ export function buildImportedPetRecordFromSprite(input: {
     },
   }
 
+  const previewAsset = await generatePetPreviewAsset({
+    spriteDefinition: input.spriteDefinition,
+  })
+
   return {
     id,
     name: input.name,
@@ -316,6 +321,7 @@ export function buildImportedPetRecordFromSprite(input: {
         states: 'embedded',
         personality: 'embedded',
         companionContent: 'embedded',
+        ...(previewAsset ? { previewImage: previewAsset.relativePath } : {}),
       },
       tags: ['imported', 'custom-pet'],
       capabilities: {
@@ -333,6 +339,7 @@ export function buildImportedPetRecordFromSprite(input: {
     productionProfile: null,
     assetStatus: createDefaultImportedPetAssetStatus(false),
     spriteDefinition: input.spriteDefinition,
+    assetFiles: previewAsset ? [previewAsset] : [],
   }
 }
 

@@ -54,6 +54,7 @@ Custom package notes:
   - full package import: drag in a package folder's files including `manifest.json`, optional atlas, and companion metadata
   - legacy sprite import: drag in one older config JSON plus one PNG sprite sheet, then let the app generate fallback personality/content defaults
 - Full package import keeps atlas assets on disk and serves them through a local Electron protocol, so imported pets can actually render their own runtime atlas instead of falling back to Mochi-only public assets.
+- When an imported package does not ship `previewImage`, the renderer now generates a local preview thumbnail from the atlas or procedural sprite fallback so package cards still feel complete in settings.
 - For a concrete starting point, see:
   - `pets/template-luna/`
   - `docs/specs/pet-package-template.md`

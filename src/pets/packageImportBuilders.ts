@@ -21,6 +21,7 @@ import {
   getDefaultImportedSpriteDefinition,
   slugifyImportedPetName,
 } from './importedPetDefaults'
+import { generatePetPreviewAsset, type PreviewSourceFile } from './preview/generatePetPreview'
 
 export interface ImportedPetPackageSource {
   manifest: PetPackageManifest
@@ -34,24 +35,41 @@ export interface ImportedPetPackageSource {
   spriteDefinition?: SpriteDefinition | null
 }
 
-export function createImportedPetRecordFromPackage(
+export interface CreateImportedPetRecordOptions {
+  assetFiles?: ImportedPetAssetFile[]
+  previewSourceFiles?: PreviewSourceFile[]
+}
+
+export async function createImportedPetRecordFromPackage(
   source: ImportedPetPackageSource,
-  assetFiles: ImportedPetAssetFile[] = [],
-): PersistImportedPetPayload {
+  options: CreateImportedPetRecordOptions = {},
+): Promise<PersistImportedPetPayload> {
   const importedAt = Date.now()
   const id = normalizeImportedPetId(source.manifest.id || source.manifest.name)
   const name = source.manifest.name?.trim() || 'Imported Pet'
   const hasAtlasRuntime = Boolean(source.manifest.assets.atlas && source.productionProfile)
+  const manifest =
+    source.manifest.assets.previewImage
+      ? {
+          ...source.manifest,
+          id,
+          name,
+        }
+      : await withGeneratedPreviewManifest(
+          {
+            ...source.manifest,
+            id,
+            name,
+          },
+          source,
+          options,
+        )
 
   return {
     id,
     name,
     importedAt,
-    manifest: {
-      ...source.manifest,
-      id,
-      name,
-    },
+    manifest,
     animations: source.animations,
     states: source.states,
     appearance: source.appearance ?? null,
@@ -60,7 +78,7 @@ export function createImportedPetRecordFromPackage(
     productionProfile: source.productionProfile ?? null,
     assetStatus: source.assetStatus ?? createDefaultImportedPetAssetStatus(hasAtlasRuntime),
     spriteDefinition: source.spriteDefinition ?? getDefaultImportedSpriteDefinition(),
-    assetFiles,
+    assetFiles: resolveAssetFiles(manifest, options),
   }
 }
 
@@ -69,4 +87,65 @@ export function normalizeImportedPetId(value: string): string {
     return value
   }
   return `imported.${slugifyImportedPetName(value)}`
+}
+
+async function withGeneratedPreviewManifest(
+  manifest: PetPackageManifest,
+  source: ImportedPetPackageSource,
+  options: CreateImportedPetRecordOptions,
+): Promise<PetPackageManifest> {
+  const previewAsset = await generatePetPreviewAsset({
+    spriteDefinition: source.spriteDefinition ?? null,
+    productionProfile: source.productionProfile ?? null,
+    atlasRelativePath: source.manifest.assets.atlas,
+    sourceFiles: options.previewSourceFiles ?? [],
+  })
+
+  if (!previewAsset) {
+    return manifest
+  }
+
+  const existing = options.assetFiles ?? []
+  options.assetFiles = upsertAssetFile(existing, previewAsset)
+
+  return {
+    ...manifest,
+    assets: {
+      ...manifest.assets,
+      previewImage: previewAsset.relativePath,
+    },
+  }
+}
+
+function resolveAssetFiles(
+  manifest: PetPackageManifest,
+  options: CreateImportedPetRecordOptions,
+): ImportedPetAssetFile[] {
+  const assetFiles = [...(options.assetFiles ?? [])]
+  const previewPath = manifest.assets.previewImage
+  if (!previewPath) {
+    return assetFiles
+  }
+
+  return assetFiles
+}
+
+function upsertAssetFile(
+  assetFiles: ImportedPetAssetFile[],
+  nextFile: ImportedPetAssetFile,
+): ImportedPetAssetFile[] {
+  const normalizedPath = normalizeRelativePath(nextFile.relativePath)
+  const retained = assetFiles.filter(
+    (entry) => normalizeRelativePath(entry.relativePath) !== normalizedPath,
+  )
+  retained.push(nextFile)
+  return retained
+}
+
+function normalizeRelativePath(value: string): string {
+  return value
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter((segment) => segment.length > 0 && segment !== '.')
+    .join('/')
 }

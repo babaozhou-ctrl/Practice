@@ -100,7 +100,13 @@ export async function buildImportedPetPayloadFromPackageFiles(
   }
 
   const assetFiles = await collectAssetFiles(files, manifest)
-  return createImportedPetRecordFromPackage(rawData, assetFiles)
+  return createImportedPetRecordFromPackage(rawData, {
+    assetFiles,
+    previewSourceFiles: files.map((entry) => ({
+      relativePath: entry.relativePath,
+      file: entry.file,
+    })),
+  })
 }
 
 async function collectAssetFiles(

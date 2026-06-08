@@ -102,6 +102,7 @@ pets/
 - `renderer` 目前推荐 `pixi-atlas` 或 `procedural-sprite`。
 - `assets.companionContent` 在当前架构里已经是正式字段，不要省略。
 - `assets.previewImage` 建议始终提供。它不参与运行时动画，但会直接影响宠物包在设置页和未来社区库中的展示质量。
+- 如果未提供 `assets.previewImage`，导入流程会尝试基于 atlas 首帧或 `sprite-definition.json` 自动生成一张预览图，方便包在本地库里先正常展示。但自动图只适合作为兜底，正式开源包仍建议手工提供。
 
 ## personality.json 建议重点
 
