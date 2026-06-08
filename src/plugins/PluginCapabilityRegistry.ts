@@ -249,47 +249,101 @@ function clearAutoRegisteredPluginProviders() {
 function tryActivateDiscoveredPluginProvider(
   candidate: DiscoveredPluginProviderCandidate,
 ): boolean {
-  if (candidate.runtimeBinding !== 'fileAnalysis') {
-    return false
+  if (candidate.runtimeBinding === 'fileAnalysis') {
+    registerCapabilityProvider({
+      descriptor: {
+        id: candidate.providerId,
+        label: candidate.label,
+        capability: 'fileAnalysis',
+        kind: 'plugin',
+        availability: 'active',
+        description:
+          `${candidate.pluginName} is connected as a selectable file-analysis provider. ` +
+          'This phase routes file extraction through the built-in reader, while summary generation can already be delegated to the plugin runtime.',
+      },
+      fileAnalysisProvider: {
+        id: candidate.providerId,
+        label: candidate.label,
+        readFile(file) {
+          return fileAnalyzer.readFile(file)
+        },
+        async summarize(request) {
+          if (!window.electronAPI?.runPluginFileAnalysis) {
+            return fileAnalyzer.summarize(request)
+          }
+
+          try {
+            return await window.electronAPI.runPluginFileAnalysis({
+              providerId: candidate.providerId,
+              fileName: request.fileName,
+              content: request.content,
+            })
+          } catch {
+            return fileAnalyzer.summarize(request)
+          }
+        },
+      },
+    })
+
+    autoRegisteredPluginProviderIds.add(candidate.providerId)
+    return true
   }
 
-  registerCapabilityProvider({
-    descriptor: {
-      id: candidate.providerId,
-      label: candidate.label,
-      capability: 'fileAnalysis',
-      kind: 'plugin',
-      availability: 'active',
-      description:
-        `${candidate.pluginName} is connected as a selectable file-analysis provider. ` +
-        'This phase routes file extraction through the built-in reader, while summary generation can already be delegated to the plugin runtime.',
-    },
-    fileAnalysisProvider: {
-      id: candidate.providerId,
-      label: candidate.label,
-      readFile(file) {
-        return fileAnalyzer.readFile(file)
+  if (candidate.runtimeBinding === 'aiChat') {
+    registerCapabilityProvider({
+      descriptor: {
+        id: candidate.providerId,
+        label: candidate.label,
+        capability: 'aiChat',
+        kind: 'plugin',
+        availability: 'active',
+        description:
+          `${candidate.pluginName} is connected as a selectable chat provider. ` +
+          'This phase already delegates streaming chat to the plugin runtime, while document summaries still fall back to the built-in DeepSeek provider.',
       },
-      async summarize(request) {
-        if (!window.electronAPI?.runPluginFileAnalysis) {
-          return fileAnalyzer.summarize(request)
-        }
+      aiChatProvider: {
+        id: candidate.providerId,
+        label: candidate.label,
+        async streamChat(request, callbacks) {
+          if (!window.electronAPI?.runPluginAIChat) {
+            return aiChatProvider.streamChat(request, callbacks)
+          }
 
-        try {
-          return await window.electronAPI.runPluginFileAnalysis({
-            providerId: candidate.providerId,
-            fileName: request.fileName,
-            content: request.content,
-          })
-        } catch {
-          return fileAnalyzer.summarize(request)
-        }
+          try {
+            return await window.electronAPI.runPluginAIChat({
+              providerId: candidate.providerId,
+              config: request.config,
+              systemPrompt: request.systemPrompt,
+              messages: request.messages,
+            }, callbacks.onChunk)
+          } catch {
+            return aiChatProvider.streamChat(request, callbacks)
+          }
+        },
+        async summarizeDocument(request) {
+          return aiChatProvider.summarizeDocument(request)
+        },
+        async healthCheck(config) {
+          if (!config.enabled) {
+            return {
+              ok: false,
+              message: 'AI chat is disabled.',
+            }
+          }
+
+          return {
+            ok: true,
+            message: `${candidate.label} is available through the plugin runtime.`,
+          }
+        },
       },
-    },
-  })
+    })
 
-  autoRegisteredPluginProviderIds.add(candidate.providerId)
-  return true
+    autoRegisteredPluginProviderIds.add(candidate.providerId)
+    return true
+  }
+
+  return false
 }
 
 function deriveProviderCandidatesFromPlugin(

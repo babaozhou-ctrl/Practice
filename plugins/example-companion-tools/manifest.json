@@ -3,9 +3,16 @@
   "name": "Example Companion Tools",
   "version": "0.1.0",
   "entry": "index.js",
-  "capabilities": ["work-mode", "document-analysis"],
+  "capabilities": ["work-mode", "document-analysis", "ai-provider"],
   "permissions": ["fs.read.user-selected", "ai.provider.invoke"],
   "providers": [
+    {
+      "id": "cozy-chat",
+      "capability": "aiChat",
+      "manifestCapability": "ai-provider",
+      "label": "Example Cozy Chat",
+      "description": "A warm companion-style chat provider exposed by this plugin manifest."
+    },
     {
       "id": "notes-file-analyzer",
       "capability": "fileAnalysis",

@@ -119,6 +119,7 @@ function getBroadcastChannel(): BroadcastChannel | null {
 interface PluginProviderStore extends SelectedProviderState {
   hydrate: () => void
   setProvider: (capability: PluginCapabilityProvider, providerId: string) => void
+  rehydrateAfterPluginDiscovery: () => void
 }
 
 const initial = readProviderState()
@@ -127,6 +128,37 @@ export const usePluginProviderStore = create<PluginProviderStore>((set, get) => 
   ...initial,
   hydrate: () => {
     set(readProviderState())
+  },
+  rehydrateAfterPluginDiscovery: () => {
+    try {
+      if (typeof window === 'undefined' || !window.localStorage) {
+        return
+      }
+
+      const raw = window.localStorage.getItem(STORAGE_KEY)
+      if (!raw) {
+        set(getDefaultProviderState())
+        return
+      }
+
+      const parsed = JSON.parse(raw) as Partial<SelectedProviderState>
+      set(normalizeSelectedProviderState({
+        aiChatProviderId:
+          typeof parsed.aiChatProviderId === 'string'
+            ? parsed.aiChatProviderId
+            : 'builtin.ai-chat.deepseek',
+        fileAnalysisProviderId:
+          typeof parsed.fileAnalysisProviderId === 'string'
+            ? parsed.fileAnalysisProviderId
+            : 'builtin.file-analysis.default',
+        screenPerceptionProviderId:
+          typeof parsed.screenPerceptionProviderId === 'string'
+            ? parsed.screenPerceptionProviderId
+            : 'builtin.screen-perception.placeholder',
+      }))
+    } catch {
+      set(getDefaultProviderState())
+    }
   },
   setProvider: (capability, providerId) => {
     const next = normalizeSelectedProviderState({

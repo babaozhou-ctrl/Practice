@@ -43,6 +43,13 @@ export interface AIProviderHealthStatus {
   message: string
 }
 
+export interface PluginAIChatExecutionRequest {
+  providerId: string
+  config: AIConfig
+  systemPrompt: string
+  messages: ChatMessage[]
+}
+
 export interface AIChatProvider {
   id: string
   label: string

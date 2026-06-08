@@ -7,7 +7,7 @@ import {
   saveImportedPetPackage,
 } from './imported-pet-storage'
 import { extractDocumentText } from './services/document-reader'
-import { listLocalPluginManifests, runPluginFileAnalysis } from './services/plugin-host-service'
+import { listLocalPluginManifests, runPluginAIChat, runPluginFileAnalysis } from './services/plugin-host-service'
 import { detectActiveWindow } from './window-detector'
 
 let petWindow: BrowserWindow | null = null
@@ -204,6 +204,14 @@ function setupIPC() {
   ipcMain.handle('pets:save-imported', async (_event, record) => saveImportedPetPackage(record))
   ipcMain.handle('plugins:list-local', async () => listLocalPluginManifests())
   ipcMain.handle('plugins:run-file-analysis', async (_event, payload) => runPluginFileAnalysis(payload))
+  ipcMain.handle('plugins:run-ai-chat', async (event, payload) => runPluginAIChat({
+    ...payload,
+    emitChunk: (chunk) => {
+      if (payload.chunkChannel) {
+        event.sender.send(payload.chunkChannel, chunk)
+      }
+    },
+  }))
   ipcMain.on('app:quit', () => app.quit())
 }
 

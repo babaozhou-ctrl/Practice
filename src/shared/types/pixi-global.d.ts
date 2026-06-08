@@ -10,6 +10,7 @@ import type {
   PetStatesConfig,
 } from './petPackage'
 import type { PluginDiscoveryRecord } from '../../plugins/runtime/types'
+import type { PluginAIChatExecutionRequest } from '../../plugins/types'
 
 interface ImportedPetDiskPackage {
   id: string
@@ -46,6 +47,10 @@ declare global {
         fileName: string
         content: string
       }) => Promise<string>
+      runPluginAIChat?: (
+        payload: PluginAIChatExecutionRequest,
+        onChunk?: (chunk: string) => void,
+      ) => Promise<string>
       onSpeech?: (callback: (msg: string, dur: number) => void) => void
       onContextUpdate?: (callback: (info: { title: string; process: string; idleMs?: number }) => void) => void
       listImportedPets?: () => Promise<ImportedPetDiskPackage[]>

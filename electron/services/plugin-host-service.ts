@@ -1,6 +1,7 @@
 import { pathToFileURL } from 'url'
 import { readdir, readFile, stat } from 'fs/promises'
 import { dirname, join, resolve } from 'path'
+import type { AIConfig, ChatMessage } from '../../src/types/chat'
 
 export type PluginRuntimeStatus = 'not_loaded' | 'loaded' | 'load_failed'
 
@@ -53,11 +54,29 @@ interface PluginFileAnalysisRequest {
   content: string
 }
 
+interface PluginAIChatRequest {
+  providerId: string
+  config: AIConfig
+  systemPrompt: string
+  messages: ChatMessage[]
+  chunkChannel?: string
+  emitChunk?: (chunk: string) => void
+}
+
 interface PluginFileAnalysisContext {
   providerId: string
   pluginId: string
   pluginName: string
   fileName: string
+}
+
+interface PluginAIChatContext {
+  providerId: string
+  pluginId: string
+  pluginName: string
+  config: AIConfig
+  systemPrompt: string
+  messages: ChatMessage[]
 }
 
 interface PluginFileAnalysisApi {
@@ -67,7 +86,25 @@ interface PluginFileAnalysisApi {
   ) => Promise<string> | string
 }
 
+interface PluginAIChatApi {
+  streamChat?: (
+    context: PluginAIChatContext,
+    tools: {
+      emitChunk: (chunk: string) => void
+    },
+  ) => Promise<string> | string
+  summarizeDocument?: (
+    fileName: string,
+    content: string,
+    context: PluginAIChatContext,
+  ) => Promise<string> | string
+  healthCheck?: (
+    config: AIConfig,
+  ) => Promise<{ ok: boolean; message: string }> | { ok: boolean; message: string }
+}
+
 interface PluginProvidersApi {
+  aiChat?: Record<string, PluginAIChatApi | undefined>
   fileAnalysis?: Record<string, PluginFileAnalysisApi | undefined>
 }
 
@@ -163,6 +200,49 @@ export async function runPluginFileAnalysis(
   return normalized
 }
 
+export async function runPluginAIChat(
+  request: PluginAIChatRequest,
+): Promise<string> {
+  const loadedPlugin = findLoadedPluginByProviderId(request.providerId)
+  if (!loadedPlugin) {
+    throw new Error(`未找到 provider=${request.providerId} 对应的已加载插件。`)
+  }
+
+  const providerKey = getDeclaredProviderId(request.providerId)
+  const pluginProviders = getPluginProviders(loadedPlugin.module)
+  const aiChatProvider = pluginProviders.aiChat?.[providerKey]
+  if (!aiChatProvider?.streamChat) {
+    throw new Error(`插件 ${loadedPlugin.discovery.name} 没有实现 aiChat provider "${providerKey}" 的 streamChat。`)
+  }
+
+  const emitChunk = (chunk: string) => {
+    const normalizedChunk = typeof chunk === 'string' ? chunk : ''
+    if (!normalizedChunk) {
+      return
+    }
+    request.emitChunk?.(normalizedChunk)
+  }
+
+  const result = await aiChatProvider.streamChat(
+    {
+      providerId: request.providerId,
+      pluginId: loadedPlugin.discovery.id,
+      pluginName: loadedPlugin.discovery.name,
+      config: request.config,
+      systemPrompt: request.systemPrompt,
+      messages: request.messages,
+    },
+    { emitChunk },
+  )
+
+  const normalized = typeof result === 'string' ? result.trim() : ''
+  if (!normalized) {
+    throw new Error(`插件 ${loadedPlugin.discovery.name} 返回了空的聊天结果。`)
+  }
+
+  return normalized
+}
+
 async function loadPluginManifestRecord(
   directoryName: string,
   manifestPath: string,
@@ -226,7 +306,7 @@ async function loadPluginManifestRecord(
     directoryName,
     manifestPath,
     status: errors.length > 0 ? 'invalid' : 'valid',
-    runtimeStatus: errors.length > 0 ? 'not_loaded' : 'not_loaded',
+    runtimeStatus: 'not_loaded',
     errors,
     runtimeErrors: [],
   }
@@ -394,6 +474,17 @@ function validatePluginRuntimeContracts(
       }
       if (typeof runtimeProvider.summarize !== 'function') {
         errors.push(`fileAnalysis provider "${provider.id}" 缺少 summarize 函数。`)
+      }
+    }
+
+    if (provider.capability === 'aiChat') {
+      const runtimeProvider = providers.aiChat?.[provider.id]
+      if (!runtimeProvider) {
+        errors.push(`插件未导出 aiChat provider "${provider.id}"。`)
+        continue
+      }
+      if (typeof runtimeProvider.streamChat !== 'function') {
+        errors.push(`aiChat provider "${provider.id}" 缺少 streamChat 函数。`)
       }
     }
   }

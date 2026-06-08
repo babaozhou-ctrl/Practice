@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { reconcileDiscoveredPluginProviders } from '../PluginCapabilityRegistry'
+import { usePluginProviderStore } from '../PluginProviderStore'
 import type { PluginDiscoveryRecord } from './types'
 
 interface LocalPluginDiscoveryState {
@@ -14,6 +15,7 @@ export const useLocalPluginDiscoveryStore = create<LocalPluginDiscoveryState>((s
   refresh: async () => {
     const plugins = await window.electronAPI?.listLocalPlugins?.() ?? []
     reconcileDiscoveredPluginProviders(plugins)
+    usePluginProviderStore.getState().rehydrateAfterPluginDiscovery()
     set({
       plugins,
       hydrated: true,

@@ -1,4 +1,32 @@
+function buildChatReply(systemPrompt, messages) {
+  const lastUserMessage = [...messages].reverse().find((message) => message.role === 'user')
+  const promptTone = systemPrompt.includes('陪伴') ? '我会更像陪伴角色地回应你。' : '我会尽量自然一点回应你。'
+  const userLine = lastUserMessage?.content?.trim() || '我在这里陪着你。'
+
+  return [
+    '我在。',
+    promptTone,
+    `你刚刚提到的是：${userLine}`,
+    '如果你想继续往下聊，我可以顺着这个思路陪你拆开讲，不会一下子变成很硬的工具口吻。',
+  ].join('\n')
+}
+
 const providers = {
+  aiChat: {
+    'cozy-chat': {
+      async streamChat(context, tools) {
+        const reply = buildChatReply(context.systemPrompt, context.messages)
+        const chunks = reply.match(/.{1,18}/g) || [reply]
+
+        for (const chunk of chunks) {
+          tools.emitChunk(chunk)
+          await new Promise((resolve) => setTimeout(resolve, 8))
+        }
+
+        return reply
+      },
+    },
+  },
   fileAnalysis: {
     'notes-file-analyzer': {
       summarize(content, context) {
