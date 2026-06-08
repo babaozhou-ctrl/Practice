@@ -19,6 +19,46 @@ function isLateNightActivity(snapshot: CompanionSnapshot): boolean {
   return ['coding', 'reading', 'browsing', 'idle', 'other'].includes(snapshot.activity)
 }
 
+function isProductiveScene(snapshot: CompanionSnapshot): boolean {
+  return ['deep_focus', 'steady_focus', 'reading_nook', 'soft_browsing'].includes(snapshot.scene.id)
+}
+
+function isLateNightScene(snapshot: CompanionSnapshot, now: number): boolean {
+  const hour = new Date(now).getHours()
+  return snapshot.scene.id === 'late_night_wind_down' || ((hour >= 23 || hour < 6) && isLateNightActivity(snapshot))
+}
+
+function isWatchTogetherScene(snapshot: CompanionSnapshot): boolean {
+  return snapshot.scene.id === 'watch_together' || snapshot.activity === 'watching_video'
+}
+
+function isIdlePresenceScene(snapshot: CompanionSnapshot): boolean {
+  return (
+    snapshot.scene.id === 'quiet_idle' ||
+    snapshot.scene.id === 'ambient_presence' ||
+    (snapshot.activity === 'idle' && snapshot.mode === 'observing')
+  )
+}
+
+function getWatchTopic(snapshot: CompanionSnapshot): string | null {
+  const recentTopic = snapshot.memory?.recentTopics?.[0]?.trim()
+  const activeTitle = snapshot.activeWindow?.title?.trim()
+  return recentTopic || activeTitle || null
+}
+
+function getProductiveTitle(snapshot: CompanionSnapshot): string {
+  switch (snapshot.scene.id) {
+    case 'deep_focus':
+      return '这段专注已经很深了'
+    case 'reading_nook':
+      return '安静读了挺久了'
+    case 'soft_browsing':
+      return '看了挺久了'
+    default:
+      return '今天已经很努力了'
+  }
+}
+
 function entryToPayload(
   id: string,
   source: CompanionActionPayload['source'],
@@ -48,8 +88,7 @@ function buildFallbackContent(
 ): CompanionActionPayload | null {
   const memory = snapshot.memory
   const preferredName = memory?.preferredName?.trim() || '我'
-  const recentTopic = memory?.recentTopics?.[0]?.trim()
-  const hour = new Date(now).getHours()
+  const watchTopic = getWatchTopic(snapshot)
 
   if (workMode.enabled && workMode.isFocusActive && workMode.msRemaining !== null && workMode.msRemaining <= 2 * 60_000) {
     return {
@@ -104,10 +143,15 @@ function buildFallbackContent(
     }
   }
 
-  if (workMode.enabled && workMode.totalFocusMsToday >= 52 * 60_000 && snapshot.activity !== 'gaming') {
+  if (
+    workMode.enabled &&
+    workMode.totalFocusMsToday >= 52 * 60_000 &&
+    snapshot.activity !== 'gaming' &&
+    isProductiveScene(snapshot)
+  ) {
     return {
       id: `productive-session-${snapshot.timestamp}`,
-      title: '今天已经很努力了',
+      title: getProductiveTitle(snapshot),
       message,
       source: 'proactive',
       actions: [
@@ -117,7 +161,7 @@ function buildFallbackContent(
     }
   }
 
-  if ((hour >= 23 || hour < 6) && isLateNightActivity(snapshot)) {
+  if (isLateNightScene(snapshot, now)) {
     return {
       id: `late-night-${snapshot.timestamp}`,
       title: '夜深了',
@@ -130,19 +174,19 @@ function buildFallbackContent(
     }
   }
 
-  if (snapshot.activity === 'watching_video' && recentTopic) {
+  if (isWatchTogetherScene(snapshot) && watchTopic) {
     return {
       id: `watch-together-${snapshot.timestamp}`,
       title: '一起看着呢',
       message,
       source: 'proactive',
       actions: [
-        createAction('watch-highlight', '聊聊刚才那段', `我们刚才像是在一起看“${recentTopic}”。请陪我用自然一点的方式聊聊最值得继续说的点。`),
+        createAction('watch-highlight', '聊聊刚才那段', `我们刚才像是在一起看“${watchTopic}”。请陪我用自然一点的方式聊聊最值得继续说的点。`),
       ],
     }
   }
 
-  if (snapshot.activity === 'idle' && snapshot.mode === 'observing') {
+  if (isIdlePresenceScene(snapshot)) {
     return {
       id: `gentle-idle-${snapshot.timestamp}`,
       title: '静静陪着',
@@ -204,29 +248,33 @@ export function buildCompanionActionPayload(
     )
   }
 
-  if (workMode.enabled && workMode.totalFocusMsToday >= 52 * 60_000 && snapshot.activity !== 'gaming') {
+  if (
+    workMode.enabled &&
+    workMode.totalFocusMsToday >= 52 * 60_000 &&
+    snapshot.activity !== 'gaming' &&
+    isProductiveScene(snapshot)
+  ) {
     return (
       entryToPayload(`productive-session-${snapshot.timestamp}`, 'proactive', message, content?.productiveSession) ??
       buildFallbackContent(snapshot, workMode, message, now)
     )
   }
 
-  const hour = new Date(now).getHours()
-  if ((hour >= 23 || hour < 6) && isLateNightActivity(snapshot)) {
+  if (isLateNightScene(snapshot, now)) {
     return (
       entryToPayload(`late-night-${snapshot.timestamp}`, 'proactive', message, content?.lateNight) ??
       buildFallbackContent(snapshot, workMode, message, now)
     )
   }
 
-  if (snapshot.activity === 'watching_video') {
+  if (isWatchTogetherScene(snapshot)) {
     return (
       entryToPayload(`watch-together-${snapshot.timestamp}`, 'proactive', message, content?.watchTogether) ??
       buildFallbackContent(snapshot, workMode, message, now)
     )
   }
 
-  if (snapshot.activity === 'idle' && snapshot.mode === 'observing') {
+  if (isIdlePresenceScene(snapshot)) {
     const payload =
       entryToPayload(`gentle-idle-${snapshot.timestamp}`, 'proactive', message, content?.gentleIdle) ??
       buildFallbackContent(snapshot, workMode, message, now)

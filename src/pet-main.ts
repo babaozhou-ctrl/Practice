@@ -130,6 +130,31 @@ function deriveSpeechPresentation(
   if (snapshot.mode === 'focus_guardian') {
     return { tone: 'focus', kicker: 'SOFT FOCUS' }
   }
+  switch (snapshot.scene.id) {
+    case 'deep_focus':
+      return { tone: 'focus', kicker: 'DEEP FOCUS' }
+    case 'steady_focus':
+      return { tone: 'focus', kicker: 'STAYING NEARBY' }
+    case 'reading_nook':
+      return { tone: 'quiet', kicker: 'QUIET PAGES' }
+    case 'watch_together':
+      return { tone: 'warm', kicker: 'WATCHING WITH YOU' }
+    case 'social_corner':
+      return { tone: 'playful', kicker: 'RIGHT HERE' }
+    case 'play_session':
+      return { tone: 'playful', kicker: 'QUIET HYPE' }
+    case 'late_night_wind_down':
+      return { tone: 'quiet', kicker: 'LOW LIGHT' }
+    case 'quiet_idle':
+      return { tone: 'quiet', kicker: 'SOFT COMPANY' }
+    case 'soft_browsing':
+      return { tone: 'warm', kicker: 'WANDERING LIGHTLY' }
+    case 'ambient_presence':
+      return { tone: 'warm', kicker: 'GENTLE CHECK-IN' }
+    case 'away':
+      return { tone: 'quiet', kicker: 'KEEPING YOUR SPOT' }
+  }
+
   if (snapshot.mode === 'proactive') {
     return { tone: 'warm', kicker: 'GENTLE CHECK-IN' }
   }
@@ -139,11 +164,11 @@ function deriveSpeechPresentation(
   if (snapshot.emotion === 'sleepy') {
     return { tone: 'quiet', kicker: 'LOW LIGHT' }
   }
-  if (snapshot.activity === 'coding' || snapshot.activity === 'reading') {
-    return { tone: 'focus', kicker: 'STAYING NEARBY' }
+  if (snapshot.scene.energy === 'bright') {
+    return { tone: 'playful', kicker: 'LITTLE SPARK' }
   }
-  if (snapshot.activity === 'watching_video' || snapshot.activity === 'chatting') {
-    return { tone: 'warm', kicker: 'RIGHT HERE' }
+  if (snapshot.scene.energy === 'low') {
+    return { tone: 'quiet', kicker: 'SOFT COMPANY' }
   }
   if (message.length <= 8) {
     return { tone: 'playful', kicker: 'TINY REPLY' }

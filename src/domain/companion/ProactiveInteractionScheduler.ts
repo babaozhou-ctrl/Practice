@@ -56,8 +56,10 @@ export class ProactiveInteractionScheduler {
     const ritual = memory?.rituals[0]?.trim() || null
     const recentTopic = memory?.recentTopics[0]?.trim() || null
     const activeTitle = snapshot.activeWindow?.title?.trim() || null
+    const sceneId = snapshot.scene.id
 
     const baseContextKey = [
+      sceneId,
       snapshot.activity,
       snapshot.emotion,
       snapshot.mode,
@@ -125,7 +127,7 @@ export class ProactiveInteractionScheduler {
       return null
     }
 
-    if (signals.productiveSessionMs >= 52 * 60_000 && isProductive(snapshot.activity)) {
+    if (signals.productiveSessionMs >= 52 * 60_000 && isProductiveScene(snapshot)) {
       if (ritual) {
         if (shouldSkipForRepeat('productive-ritual')) {
           return null
@@ -174,7 +176,7 @@ export class ProactiveInteractionScheduler {
       }
     }
 
-    if (lateNight && ['coding', 'browsing', 'idle', 'other', 'reading'].includes(snapshot.activity)) {
+    if (sceneId === 'late_night_wind_down' || (lateNight && ['coding', 'browsing', 'idle', 'other', 'reading'].includes(snapshot.activity))) {
       if (ritual) {
         if (shouldSkipForRepeat('late-night-ritual')) {
           return null
@@ -208,27 +210,29 @@ export class ProactiveInteractionScheduler {
     }
 
     if (
-      snapshot.activity === 'watching_video' &&
+      sceneId === 'watch_together' &&
       snapshot.mode === 'reactive' &&
-      signals.timeSinceLastContextMs > 4 * 60_000 &&
-      recentTopic
+      signals.timeSinceLastContextMs > 4 * 60_000
     ) {
       if (shouldSkipForRepeat('watch-together')) {
         return null
       }
 
+      const sharedViewTopic = recentTopic || activeTitle
       return {
         category: 'watch-together',
         contextKey: `watch-together|${baseContextKey}`,
         intent: {
-          message: `这一段像是在一起看“${trimForSpeech(recentTopic, 22)}”。我在旁边陪你。`,
+          message: sharedViewTopic
+            ? `这一段像是在一起看“${trimForSpeech(sharedViewTopic, 22)}”。我在旁边陪你。`
+            : '这一段像是在一起看点什么。我就在旁边陪你。',
           duration: 3400,
         },
       }
     }
 
     if (
-      snapshot.activity === 'idle' &&
+      isIdlePresenceScene(snapshot) &&
       snapshot.mode === 'observing' &&
       signals.timeSinceLastContextMs > 10 * 60_000 &&
       signals.interruptionBudget >= 70
@@ -309,6 +313,21 @@ function isLateNight(now: number): boolean {
 
 function isProductive(activity: CompanionActivity): boolean {
   return activity === 'coding' || activity === 'reading' || activity === 'browsing'
+}
+
+function isProductiveScene(snapshot: CompanionSnapshot): boolean {
+  return (
+    ['deep_focus', 'steady_focus', 'reading_nook', 'soft_browsing'].includes(snapshot.scene.id) ||
+    isProductive(snapshot.activity)
+  )
+}
+
+function isIdlePresenceScene(snapshot: CompanionSnapshot): boolean {
+  return (
+    snapshot.scene.id === 'quiet_idle' ||
+    snapshot.scene.id === 'ambient_presence' ||
+    snapshot.activity === 'idle'
+  )
 }
 
 function trimForSpeech(value: string, maxLength: number): string {
