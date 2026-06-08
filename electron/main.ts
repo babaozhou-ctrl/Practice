@@ -1,6 +1,11 @@
-import { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage, screen } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage, protocol, screen } from 'electron'
+import { readFile } from 'fs/promises'
 import { join } from 'path'
-import { listImportedPetPackages, saveImportedPetPackage } from './imported-pet-storage'
+import {
+  listImportedPetPackages,
+  resolveImportedPetAssetPath,
+  saveImportedPetPackage,
+} from './imported-pet-storage'
 import { extractDocumentText } from './services/document-reader'
 import { detectActiveWindow } from './window-detector'
 
@@ -17,9 +22,46 @@ const APP_ID = 'com.deep.pet'
 const APP_ICON_PATH = join(__dirname, '../build/icon.png')
 const PET_WINDOW_WIDTH = 300
 const PET_WINDOW_HEIGHT = 420
+const IMPORTED_PET_PROTOCOL = 'deep-pet'
 
 process.on('uncaughtException', (err) => { console.error('Uncaught exception:', err.message) })
 process.on('unhandledRejection', (reason) => { console.error('Unhandled rejection:', reason) })
+
+function registerImportedPetProtocol() {
+  protocol.handle(IMPORTED_PET_PROTOCOL, async (request) => {
+    try {
+      const url = new URL(request.url)
+      if (url.hostname !== 'imported') {
+        return new Response('Not found', { status: 404 })
+      }
+
+      const segments = url.pathname
+        .split('/')
+        .filter(Boolean)
+        .map((segment) => decodeURIComponent(segment))
+
+      const petId = segments.shift()
+      const relativePath = segments.join('/')
+
+      if (!petId || !relativePath) {
+        return new Response('Bad request', { status: 400 })
+      }
+
+      const filePath = resolveImportedPetAssetPath(petId, relativePath)
+      const bytes = await readFile(filePath)
+      const contentType = getMimeType(relativePath)
+
+      return new Response(bytes, {
+        headers: {
+          'content-type': contentType,
+          'cache-control': 'no-cache',
+        },
+      })
+    } catch {
+      return new Response('Not found', { status: 404 })
+    }
+  })
+}
 
 function createPetWindow() {
   const { x, y } = getDefaultPosition()
@@ -221,6 +263,7 @@ function startContextPolling() {
 
 app.whenReady().then(() => {
   app.setAppUserModelId(APP_ID)
+  registerImportedPetProtocol()
   createPetWindow()
   setupIPC()
   setupTray()
@@ -235,3 +278,12 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
   if (!petWindow) createPetWindow()
 })
+
+function getMimeType(relativePath: string): string {
+  const lower = relativePath.toLowerCase()
+  if (lower.endsWith('.png')) return 'image/png'
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'
+  if (lower.endsWith('.webp')) return 'image/webp'
+  if (lower.endsWith('.json')) return 'application/json'
+  return 'application/octet-stream'
+}

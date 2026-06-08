@@ -1,134 +1,258 @@
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useCallback, useRef, useState } from 'react'
 import { usePetStore } from '../../store/petStore'
-import { loadSpriteSheet, parsePetConfig, buildSpriteFromFrames, PetAssetConfig } from '../../engine/CustomPetParser'
-import { buildImportedPetRecordFromSprite, persistImportedPetRecord } from '../../pets/ImportedPetRegistry'
+import {
+  buildSpriteFromFrames,
+  loadSpriteSheet,
+  parsePetConfig,
+  type PetAssetConfig,
+} from '../../engine/CustomPetParser'
+import {
+  buildImportedPetRecordFromSprite,
+  persistImportedPetRecord,
+  type PersistImportedPetPayload,
+} from '../../pets/ImportedPetRegistry'
+import { buildImportedPetPayloadFromPackageFiles } from '../../pets/packageImport'
 import { useSelectedPetStore } from '../../store/selectedPetStore'
 
-interface Props { onClose: () => void }
+interface Props {
+  onClose: () => void
+}
+
+type LoaderStatus = 'idle' | 'loading' | 'loaded' | 'error'
 
 const CustomPetLoader: React.FC<Props> = ({ onClose }) => {
   const [dragOver, setDragOver] = useState(false)
-  const [status, setStatus] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle')
+  const [status, setStatus] = useState<LoaderStatus>('idle')
   const [message, setMessage] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const setCustomPet = usePetStore((s) => s.setCustomPet)
   const selectPet = useSelectedPetStore((s) => s.selectPet)
+  const refreshCatalog = useSelectedPetStore((s) => s.refreshCatalog)
 
   const processFiles = useCallback(async (files: File[]) => {
-    const jsonFile = files.find(f => f.name.endsWith('.json'))
-    const pngFile = files.find(f => f.name.endsWith('.png'))
-
-    if (!jsonFile) {
-      setMessage('Need a .json config file')
-      setStatus('error')
-      return
-    }
-    if (!pngFile) {
-      setMessage('Need a .png sprite sheet')
+    if (files.length === 0) {
+      setMessage('没有检测到可导入的文件。')
       setStatus('error')
       return
     }
 
     setStatus('loading')
-    setMessage('Parsing pet config...')
 
     try {
-      const config: PetAssetConfig = parsePetConfig(await jsonFile.text())
-      setMessage(`Loading sprite sheet (${config.gridWidth}x${config.gridHeight})...`)
-
-      const frames = await loadSpriteSheet(pngFile, config)
-      const sprite = buildSpriteFromFrames(frames, config)
-      const imported = buildImportedPetRecordFromSprite({
-        name: config.name,
-        spriteDefinition: sprite.definition,
-      })
-
-      await persistImportedPetRecord(imported)
-      selectPet(imported.id)
-      setCustomPet(sprite.definition, config.name)
-      setMessage(`Pet "${config.name}" imported to your companion library.`)
+      const payload = await buildImportPayload(files, setMessage)
+      await persistImportedPetRecord(payload)
+      refreshCatalog()
+      selectPet(payload.id)
+      setCustomPet(null)
+      setMessage(`已导入 "${payload.name}"，现在已经切换为当前陪伴宠物。`)
       setStatus('loaded')
-    } catch (err: any) {
-      setMessage(`Error: ${err.message}`)
+    } catch (err) {
+      const nextMessage = err instanceof Error ? err.message : '导入失败。'
+      setMessage(nextMessage)
       setStatus('error')
     }
-  }, [selectPet, setCustomPet])
+  }, [refreshCatalog, selectPet, setCustomPet])
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
+  const handleDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
     setDragOver(false)
-    processFiles(Array.from(e.dataTransfer.files))
+    processFiles(Array.from(event.dataTransfer.files))
   }, [processFiles])
 
-  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) processFiles(Array.from(e.target.files))
+  const handleFileInput = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files) {
+      processFiles(Array.from(event.target.files))
+    }
   }, [processFiles])
 
-  const resetPet = useCallback(() => {
+  const resetPreview = useCallback(() => {
     setCustomPet(null)
     setStatus('idle')
     setMessage('')
   }, [setCustomPet])
 
-  const ov: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10001 }
-  const modal: React.CSSProperties = {
-    background: 'rgba(22, 18, 36, 0.95)', backdropFilter: 'blur(12px)',
-    borderRadius: '16px', padding: '24px', width: '340px',
-    border: dragOver ? '1.5px dashed #c084fc' : '1.5px solid rgba(192, 132, 252, 0.2)',
-    textAlign: 'center', color: '#e8d8ff',
+  const overlayStyle: React.CSSProperties = {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(12, 10, 18, 0.68)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10001,
+    backdropFilter: 'blur(16px)',
   }
-  const dropZone: React.CSSProperties = {
-    padding: '30px 20px', border: '1.5px dashed rgba(192, 132, 252, 0.25)',
-    borderRadius: '12px', cursor: 'pointer', marginBottom: '12px',
-    fontSize: '13px', color: status === 'error' ? '#fca5a5' : 'rgba(200,180,230,0.5)',
-    background: status === 'loading' ? 'rgba(192, 132, 252, 0.05)' : 'transparent',
+
+  const modalStyle: React.CSSProperties = {
+    width: '380px',
+    padding: '24px',
+    borderRadius: '20px',
+    background: 'linear-gradient(180deg, rgba(30, 28, 38, 0.96), rgba(20, 18, 28, 0.98))',
+    border: dragOver ? '1.5px dashed rgba(163, 211, 255, 0.9)' : '1px solid rgba(255,255,255,0.08)',
+    boxShadow: '0 24px 80px rgba(0, 0, 0, 0.35)',
+    color: '#f4f3ef',
+  }
+
+  const dropZoneStyle: React.CSSProperties = {
+    padding: '28px 20px',
+    borderRadius: '16px',
+    border: '1px dashed rgba(165, 204, 255, 0.28)',
+    background: status === 'loading'
+      ? 'rgba(111, 181, 255, 0.08)'
+      : 'linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01))',
+    cursor: 'pointer',
+    transition: 'all 180ms ease',
   }
 
   return (
-    <div style={ov} onClick={onClose}>
-      <div style={modal} onClick={e => e.stopPropagation()}
-        onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-        onDragLeave={() => setDragOver(false)} onDrop={handleDrop}>
-        <h3 style={{ margin: '0 0 12px', fontSize: '16px', fontWeight: 500 }}>Import Custom Pet</h3>
+    <div style={overlayStyle} onClick={onClose}>
+      <div
+        style={modalStyle}
+        onClick={(event) => event.stopPropagation()}
+        onDragOver={(event) => {
+          event.preventDefault()
+          setDragOver(true)
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+      >
+        <h3 style={{ margin: '0 0 10px', fontSize: '18px', fontWeight: 600 }}>
+          导入自定义宠物
+        </h3>
 
-        <input ref={fileInputRef} type="file" accept=".json,.png" multiple
-          style={{ display: 'none' }} onChange={handleFileInput} />
-
-        <div onClick={() => fileInputRef.current?.click()} style={dropZone}>
-          {status === 'idle' && 'Drop a .json config and .png sprite sheet here, or click to select files.'}
-          {status === 'loading' && `${message}...`}
-          {status === 'loaded' && message}
-          {status === 'error' && message}
-        </div>
-
-        <p style={{ fontSize: '11px', color: 'rgba(200,180,230,0.35)', margin: '0 0 12px' }}>
-          Requires a pet config JSON and a sprite sheet PNG. Imported pets will appear in Companion Settings.
+        <p style={{ margin: '0 0 16px', fontSize: '12px', lineHeight: 1.6, color: 'rgba(244,243,239,0.68)' }}>
+          支持两种方式：完整宠物包 `manifest.json + atlas/config`，或旧版 `config.json + sprite sheet.png`。
         </p>
 
-        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-          {(status === 'loaded' || status === 'error') && (
-            <>
-              <button onClick={resetPet} style={{
-                padding: '8px 16px', borderRadius: '10px', border: '1px solid rgba(192,132,252,0.2)',
-                background: 'transparent', color: 'rgba(200,180,230,0.6)', cursor: 'pointer', fontSize: '13px'
-              }}>Clear Preview</button>
-              <button onClick={onClose} style={{
-                padding: '8px 16px', borderRadius: '10px', border: 'none',
-                background: 'linear-gradient(135deg, #a78bfa, #c084fc)',
-                color: '#fff', cursor: 'pointer', fontSize: '13px'
-              }}>Done</button>
-            </>
-          )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,.png,.jpg,.jpeg,.webp"
+          multiple
+          style={{ display: 'none' }}
+          onChange={handleFileInput}
+        />
+
+        <div
+          onClick={() => fileInputRef.current?.click()}
+          style={dropZoneStyle}
+        >
           {status === 'idle' && (
-            <button onClick={onClose} style={{
-              padding: '8px 16px', borderRadius: '10px', border: '1px solid rgba(192,132,252,0.2)',
-              background: 'transparent', color: 'rgba(200,180,230,0.6)', cursor: 'pointer', fontSize: '13px'
-            }}>Cancel</button>
+            <div>
+              <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '8px' }}>
+                拖入宠物包文件，或点击选择
+              </div>
+              <div style={{ fontSize: '12px', lineHeight: 1.6, color: 'rgba(244,243,239,0.56)' }}>
+                推荐直接拖入一个宠物包目录中的全部文件。
+              </div>
+            </div>
           )}
+
+          {status === 'loading' && (
+            <div style={{ fontSize: '13px', lineHeight: 1.7 }}>
+              {message || '正在导入宠物包...'}
+            </div>
+          )}
+
+          {status === 'loaded' && (
+            <div style={{ fontSize: '13px', lineHeight: 1.7, color: '#dff4df' }}>
+              {message}
+            </div>
+          )}
+
+          {status === 'error' && (
+            <div style={{ fontSize: '13px', lineHeight: 1.7, color: '#ffd6d6' }}>
+              {message}
+            </div>
+          )}
+        </div>
+
+        <p style={{ margin: '14px 0 18px', fontSize: '11px', lineHeight: 1.7, color: 'rgba(244,243,239,0.46)' }}>
+          完整宠物包会保留自己的动画、personality、companion-content 与 atlas 资源。旧版导入则会自动生成默认陪伴人格与互动模板。
+        </p>
+
+        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+          {(status === 'loaded' || status === 'error') && (
+            <button
+              onClick={resetPreview}
+              style={secondaryButtonStyle}
+            >
+              重新导入
+            </button>
+          )}
+
+          <button
+            onClick={onClose}
+            style={status === 'loaded' ? primaryButtonStyle : secondaryButtonStyle}
+          >
+            {status === 'loaded' ? '完成' : '关闭'}
+          </button>
         </div>
       </div>
     </div>
   )
+}
+
+async function buildImportPayload(
+  files: File[],
+  setMessage: (message: string) => void,
+): Promise<PersistImportedPetPayload> {
+  const manifestFile = files.find((file) => file.name.toLowerCase() === 'manifest.json')
+
+  if (manifestFile) {
+    setMessage('正在解析完整宠物包...')
+    return buildImportedPetPayloadFromPackageFiles(
+      files.map((file) => ({
+        name: file.name,
+        relativePath: inferRelativePath(file),
+        file,
+      })),
+    )
+  }
+
+  const jsonFile = files.find((file) => file.name.toLowerCase().endsWith('.json'))
+  const pngFile = files.find((file) => file.name.toLowerCase().endsWith('.png'))
+
+  if (!jsonFile || !pngFile) {
+    throw new Error('需要提供完整宠物包文件，或至少一份旧版 JSON 配置和 PNG sprite sheet。')
+  }
+
+  setMessage('正在解析旧版 sprite 宠物...')
+  const config: PetAssetConfig = parsePetConfig(await jsonFile.text())
+  const frames = await loadSpriteSheet(pngFile, config)
+  const sprite = buildSpriteFromFrames(frames, config)
+
+  return buildImportedPetRecordFromSprite({
+    name: config.name,
+    spriteDefinition: sprite.definition,
+  })
+}
+
+function inferRelativePath(file: File): string {
+  const candidate = 'webkitRelativePath' in file && typeof file.webkitRelativePath === 'string'
+    ? file.webkitRelativePath
+    : file.name
+  return candidate.replace(/\\/g, '/')
+}
+
+const primaryButtonStyle: React.CSSProperties = {
+  padding: '9px 16px',
+  borderRadius: '12px',
+  border: 'none',
+  background: 'linear-gradient(135deg, #7bc6ff, #94a8ff)',
+  color: '#0f1720',
+  fontSize: '13px',
+  fontWeight: 600,
+  cursor: 'pointer',
+}
+
+const secondaryButtonStyle: React.CSSProperties = {
+  padding: '9px 16px',
+  borderRadius: '12px',
+  border: '1px solid rgba(255,255,255,0.1)',
+  background: 'rgba(255,255,255,0.03)',
+  color: 'rgba(244,243,239,0.78)',
+  fontSize: '13px',
+  cursor: 'pointer',
 }
 
 export default CustomPetLoader

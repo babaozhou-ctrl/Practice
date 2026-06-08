@@ -1,10 +1,11 @@
 import { app } from 'electron'
 import { mkdir, readdir, readFile, rm, writeFile } from 'fs/promises'
-import { join } from 'path'
+import { join, normalize, resolve } from 'path'
 import type { SpriteDefinition } from '../src/types/animation'
 import type {
   PetAnimationConfig,
   PetAppearanceProfile,
+  PetAssetStatus,
   PetCompanionContentProfile,
   PetPackageManifest,
   PetPersonalityProfile,
@@ -13,6 +14,11 @@ import type {
 } from '../src/shared/types/petPackage'
 
 const IMPORTED_PETS_DIR = join(app.getPath('userData'), 'pets', 'imported')
+
+export interface ImportedPetAssetFile {
+  relativePath: string
+  contentBase64: string
+}
 
 export interface DiskImportedPetPackage {
   id: string
@@ -25,7 +31,12 @@ export interface DiskImportedPetPackage {
   spriteDefinition: SpriteDefinition
   appearance?: PetAppearanceProfile | null
   companionContent?: PetCompanionContentProfile | null
+  assetStatus?: PetAssetStatus | null
   productionProfile?: PetProductionProfile | null
+}
+
+export interface SaveImportedPetPayload extends DiskImportedPetPackage {
+  assetFiles?: ImportedPetAssetFile[]
 }
 
 export async function ensureImportedPetsDir() {
@@ -58,11 +69,13 @@ export async function listImportedPetPackages(): Promise<DiskImportedPetPackage[
       const appearanceRaw = await safeReadFile(join(petDir, 'appearance.json'))
       const companionContentRaw = await safeReadFile(join(petDir, 'companion-content.json'))
       const productionProfileRaw = await safeReadFile(join(petDir, 'production.json'))
+      const assetStatusRaw = await safeReadFile(join(petDir, 'asset-status.json'))
       const appearance = appearanceRaw ? JSON.parse(appearanceRaw) as PetAppearanceProfile : null
       const companionContent = companionContentRaw
         ? JSON.parse(companionContentRaw) as PetCompanionContentProfile
         : null
       const productionProfile = productionProfileRaw ? JSON.parse(productionProfileRaw) as PetProductionProfile : null
+      const assetStatus = assetStatusRaw ? JSON.parse(assetStatusRaw) as PetAssetStatus : null
 
       if (typeof manifest.id !== 'string' || typeof manifest.name !== 'string') {
         continue
@@ -79,6 +92,7 @@ export async function listImportedPetPackages(): Promise<DiskImportedPetPackage[
         spriteDefinition,
         appearance,
         companionContent,
+        assetStatus,
         productionProfile,
       })
     } catch {
@@ -89,7 +103,7 @@ export async function listImportedPetPackages(): Promise<DiskImportedPetPackage[
   return packages.sort((left, right) => left.name.localeCompare(right.name))
 }
 
-export async function saveImportedPetPackage(pkg: DiskImportedPetPackage): Promise<DiskImportedPetPackage> {
+export async function saveImportedPetPackage(pkg: SaveImportedPetPayload): Promise<DiskImportedPetPackage> {
   await ensureImportedPetsDir()
   const petDir = join(IMPORTED_PETS_DIR, pkg.id)
   await rm(petDir, { recursive: true, force: true })
@@ -112,11 +126,38 @@ export async function saveImportedPetPackage(pkg: DiskImportedPetPackage): Promi
       'utf-8',
     )
   }
+  if (pkg.assetStatus) {
+    await writeFile(join(petDir, 'asset-status.json'), JSON.stringify(pkg.assetStatus, null, 2), 'utf-8')
+  }
   if (pkg.productionProfile) {
     await writeFile(join(petDir, 'production.json'), JSON.stringify(pkg.productionProfile, null, 2), 'utf-8')
   }
+  if (pkg.assetFiles?.length) {
+    for (const assetFile of pkg.assetFiles) {
+      const targetPath = resolveImportedAssetPath(petDir, assetFile.relativePath)
+      await mkdir(resolve(targetPath, '..'), { recursive: true })
+      await writeFile(targetPath, Buffer.from(assetFile.contentBase64, 'base64'))
+    }
+  }
 
-  return pkg
+  return {
+    id: pkg.id,
+    name: pkg.name,
+    importedAt: pkg.importedAt,
+    manifest: pkg.manifest,
+    animations: pkg.animations,
+    states: pkg.states,
+    personality: pkg.personality,
+    spriteDefinition: pkg.spriteDefinition,
+    appearance: pkg.appearance ?? null,
+    companionContent: pkg.companionContent ?? null,
+    assetStatus: pkg.assetStatus ?? null,
+    productionProfile: pkg.productionProfile ?? null,
+  }
+}
+
+export function resolveImportedPetAssetPath(petId: string, relativePath: string): string {
+  return resolveImportedAssetPath(join(IMPORTED_PETS_DIR, petId), relativePath)
 }
 
 async function safeReadFile(path: string): Promise<string | null> {
@@ -125,4 +166,22 @@ async function safeReadFile(path: string): Promise<string | null> {
   } catch {
     return null
   }
+}
+
+function resolveImportedAssetPath(baseDir: string, relativePath: string): string {
+  const sanitized = normalizeAssetRelativePath(relativePath)
+  const candidate = resolve(baseDir, sanitized)
+  const allowedRoot = resolve(baseDir)
+  if (!candidate.startsWith(allowedRoot)) {
+    throw new Error(`Invalid imported pet asset path: ${relativePath}`)
+  }
+  return candidate
+}
+
+function normalizeAssetRelativePath(relativePath: string): string {
+  return normalize(relativePath)
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter((segment) => segment.length > 0 && segment !== '.' && segment !== '..')
+    .join('/')
 }

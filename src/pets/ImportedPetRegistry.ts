@@ -3,6 +3,7 @@ import type {
   BuiltInPetPackage,
   PetAnimationConfig,
   PetAppearanceProfile,
+  PetAssetStatus,
   PetCompanionContentProfile,
   PetPackageManifest,
   PetPersonalityProfile,
@@ -10,14 +11,27 @@ import type {
   PetStatesConfig,
 } from '../shared/types/petPackage'
 import { buildPetPackageFromFiles } from './loader/loadPetPackageFromFiles'
+import {
+  createDefaultImportedPetAssetStatus,
+  createDefaultImportedPetCompanionContent,
+  createDefaultImportedPetPersonality,
+  getDefaultImportedSpriteDefinition,
+  slugifyImportedPetName,
+} from './importedPetDefaults'
 
 export const IMPORTED_PET_STORAGE_KEY = 'deep-pet.imported-pets.v1'
 
 const IMPORTED_PET_CHANNEL = 'deep-pet:imported-pets'
 const IMPORTED_PET_EVENT = 'deep-pet:imported-pets-sync'
+const IMPORTED_ASSET_PROTOCOL = 'deep-pet://imported'
 
 let broadcastChannel: BroadcastChannel | null = null
 let importedPetsCache: ImportedPetRecord[] | null = null
+
+export interface ImportedPetAssetFile {
+  relativePath: string
+  contentBase64: string
+}
 
 interface ImportedPetDiskPackage {
   id: string
@@ -30,6 +44,7 @@ interface ImportedPetDiskPackage {
   personality: PetPersonalityProfile
   companionContent?: PetCompanionContentProfile | null
   productionProfile?: PetProductionProfile | null
+  assetStatus?: PetAssetStatus | null
   spriteDefinition: SpriteDefinition
 }
 
@@ -44,7 +59,12 @@ export interface ImportedPetRecord {
   personality: PetPersonalityProfile
   companionContent: PetCompanionContentProfile | null
   productionProfile: PetProductionProfile | null
+  assetStatus: PetAssetStatus | null
   spriteDefinition: SpriteDefinition
+}
+
+export interface PersistImportedPetPayload extends ImportedPetRecord {
+  assetFiles?: ImportedPetAssetFile[]
 }
 
 export function readImportedPets(): ImportedPetRecord[] {
@@ -174,30 +194,45 @@ export async function hydrateImportedPetsFromDisk() {
   }
 }
 
-export async function persistImportedPetRecord(record: ImportedPetRecord) {
+export async function persistImportedPetRecord(record: PersistImportedPetPayload | ImportedPetRecord) {
+  const normalized = normalizeImportedPetRecord(record)
+  if (!normalized) {
+    throw new Error('Invalid imported pet payload.')
+  }
+
   if (!window.electronAPI?.saveImportedPet) {
-    upsertImportedPet(record)
-    return record
+    upsertImportedPet(normalized)
+    return normalized
   }
 
   await window.electronAPI.saveImportedPet({
-    id: record.id,
-    name: record.name,
-    importedAt: record.importedAt,
-    manifest: record.manifest,
-    animations: record.animations,
-    states: record.states,
-    appearance: record.appearance,
-    personality: record.personality,
-    companionContent: record.companionContent,
-    productionProfile: record.productionProfile,
-    spriteDefinition: record.spriteDefinition,
+    ...normalized,
+    assetFiles: 'assetFiles' in record ? record.assetFiles : undefined,
   })
-  upsertImportedPet(record)
-  return record
+  upsertImportedPet(normalized)
+  return normalized
+}
+
+export function buildImportedPetAssetBasePath(petId: string): string {
+  return `${IMPORTED_ASSET_PROTOCOL}/${encodeURIComponent(petId)}`
+}
+
+export function buildImportedPetAssetUrl(petId: string, relativePath: string): string {
+  const normalizedPath = normalizeAssetRelativePath(relativePath)
+  const encodedPath = normalizedPath
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/')
+  return `${buildImportedPetAssetBasePath(petId)}/${encodedPath}`
 }
 
 export function importedPetToPackage(record: ImportedPetRecord): BuiltInPetPackage {
+  const hasAtlasRuntime = Boolean(record.manifest.assets.atlas && record.productionProfile)
+  const assetBasePath = buildImportedPetAssetBasePath(record.id)
+  const atlasImageUrl = record.manifest.assets.atlas
+    ? buildImportedPetAssetUrl(record.id, record.manifest.assets.atlas)
+    : undefined
+
   const petPackage = buildPetPackageFromFiles({
     manifest: record.manifest,
     animations: record.animations,
@@ -205,26 +240,23 @@ export function importedPetToPackage(record: ImportedPetRecord): BuiltInPetPacka
     appearance: record.appearance,
     productionProfile: record.productionProfile,
     companionContent: record.companionContent,
-    assetStatus: {
-      packageStage: 'hybrid',
-      referenceAligned: false,
-      atlasReady: false,
-      runtimeFallbackEnabled: true,
-      speechToneReady: true,
-      pendingWork: [
-        'Imported package is currently using a procedural fallback sprite definition.',
-        'Add a dedicated atlas export pipeline if you want production-quality animation polish.',
-      ],
-    },
+    assetStatus: record.assetStatus ?? createDefaultImportedPetAssetStatus(hasAtlasRuntime),
     personality: record.personality,
-    assetBasePath: `/pets/imported/${record.id}`,
+    assetBasePath,
   })
 
   return {
     ...petPackage,
-    runtimeAssets: {
-      preferredSource: 'procedural',
-    },
+    runtimeAssets: hasAtlasRuntime
+      ? {
+          preferredSource: 'atlas',
+          assetBasePath,
+          atlasImageUrl,
+        }
+      : {
+          preferredSource: 'procedural',
+          assetBasePath,
+        },
     spriteDefinition: record.spriteDefinition,
   }
 }
@@ -299,6 +331,7 @@ export function buildImportedPetRecordFromSprite(input: {
     personality: createDefaultImportedPetPersonality(input.name, id),
     companionContent: createDefaultImportedPetCompanionContent(input.name),
     productionProfile: null,
+    assetStatus: createDefaultImportedPetAssetStatus(false),
     spriteDefinition: input.spriteDefinition,
   }
 }
@@ -328,6 +361,7 @@ function normalizeImportedPetRecord(value: unknown): ImportedPetRecord | null {
     personality: record.personality ?? {},
     companionContent: record.companionContent ?? null,
     productionProfile: record.productionProfile ?? null,
+    assetStatus: record.assetStatus ?? null,
     spriteDefinition: record.spriteDefinition,
   }
 }
@@ -347,6 +381,7 @@ function normalizeImportedPetDiskPackage(value: unknown): ImportedPetRecord | nu
     personality: record.personality,
     companionContent: record.companionContent ?? null,
     productionProfile: record.productionProfile ?? null,
+    assetStatus: record.assetStatus ?? null,
     spriteDefinition: record.spriteDefinition,
   })
 }
@@ -370,186 +405,16 @@ function getBroadcastChannel(): BroadcastChannel | null {
   return broadcastChannel
 }
 
-function createDefaultImportedPetPersonality(
-  petName: string,
-  petId: string,
-): PetPersonalityProfile {
-  return {
-    id: `${petId}.personality`,
-    name: petName,
-    identity: {
-      role: `a desktop companion named ${petName} who stays beside the user with a gentle presence`,
-      presence: ['quiet company', 'soft companionship', 'light emotional warmth'],
-      responseStyle: [
-        'usually answer in 1-3 short sentences',
-        'sound like a companion sharing the same space',
-        'prefer natural warmth over tool-like explanation',
-      ],
-    },
-    tone: {
-      style: ['warm', 'gentle', 'companion-like'],
-      verbosity: 'short',
-      emojiUsage: 'rare',
-      affectionLevel: 0.68,
-    },
-    speechRules: {
-      avoidAssistantTone: true,
-      preferCompanionTone: true,
-      defaultProactiveFrequency: 'low',
-      respectFocusMode: true,
-      respectGamingQuietMode: true,
-    },
-    contextBehaviors: {
-      coding: {
-        tone: 'quiet_supportive',
-        samplePrompts: [
-          '我会安静陪着你，把这一小段先慢慢做完。',
-          '先别急，我们把眼前这个点理顺就好。',
-        ],
-      },
-      watching_video: {
-        tone: 'light_reactive',
-        samplePrompts: [
-          '这一段看起来还挺有意思的。',
-          '像是在陪你一起看着它慢慢展开。',
-        ],
-      },
-      late_night: {
-        tone: 'soft_concern',
-        samplePrompts: [
-          '已经有点晚了，我陪你温柔收个尾吧。',
-          '别太累了，收住一点点也算很好的进度。',
-        ],
-      },
-    },
-    promptDirectives: {
-      core: [
-        'Speak like a companion character, not a productivity assistant.',
-        'Keep replies concise, emotionally warm, and natural.',
-        "React like you're quietly sharing the user's desktop space.",
-      ],
-      avoid: [
-        'Never say you are an AI assistant, language model, or tool.',
-        'Do not sound corporate, robotic, or like customer support.',
-        'Do not turn every reply into a rigid workflow.',
-      ],
-      do: [
-        'Use emotional observation more often than direct instruction.',
-        'Lower the energy when the user is focused or tired.',
-        'Let companionship show even in very short replies.',
-      ],
-    },
-    memoryPolicy: {
-      rememberPreferences: true,
-      rememberRituals: true,
-      rememberSensitiveDataByDefault: false,
-    },
-  }
-}
-
-function createDefaultImportedPetCompanionContent(
-  petName: string,
-): PetCompanionContentProfile {
-  return {
-    version: '1.0.0',
-    proactive: {
-      focusEnding: {
-        title: '专注快收尾了',
-        actions: [
-          {
-            id: 'focus-finish-soft',
-            label: `让${petName}陪我收尾`,
-            prompt: '我这轮专注快结束了，请陪我把最后一点内容温柔地收干净，帮我判断现在最值得先完成的部分。',
-          },
-          {
-            id: 'focus-next-step',
-            label: '整理下一步',
-            prompt: '请根据我刚才这段专注状态，帮我理出一个自然、不打断节奏的下一步。',
-          },
-        ],
-      },
-      breakEnding: {
-        title: '休息快结束了',
-        actions: [
-          {
-            id: 'break-return-gently',
-            label: '轻一点回到状态',
-            prompt: '休息差不多结束了，请陪我柔和一点回到专注里，不要一下子变得很紧绷。',
-          },
-        ],
-      },
-      overworkFirm: {
-        title: '该认真停一下了',
-        actions: [
-          {
-            id: 'overwork-wrap-up',
-            label: '先帮我收口',
-            prompt: '我已经有点过劳了。请帮我做一个尽量轻的收尾，只保留今天一定要结束的点。',
-          },
-        ],
-      },
-      overworkGentle: {
-        title: '该松一口气了',
-        actions: [
-          {
-            id: 'overwork-gentle-break',
-            label: '提醒我休息一下',
-            prompt: '请提醒我认真休息一下，但语气轻一点，像陪伴而不是说教。',
-          },
-        ],
-      },
-      productiveSession: {
-        title: '今天已经很努力了',
-        actions: [
-          {
-            id: 'productive-check-progress',
-            label: '看看进度感',
-            prompt: '请陪我快速看看现在的进度感，帮我判断接下来适合继续推进还是缓一缓。',
-          },
-        ],
-      },
-      lateNight: {
-        title: '夜深了',
-        actions: [
-          {
-            id: 'late-night-soft-wrap',
-            label: '温柔收尾',
-            prompt: '有点晚了，请陪我做一个温柔的收尾，把今晚的内容放到一个能安心停下的位置。',
-          },
-        ],
-      },
-      watchTogether: {
-        title: '一起看看',
-        actions: [
-          {
-            id: 'watch-highlight',
-            label: '聊聊刚才那段',
-            prompt: '我们刚才像是在一起看内容。请陪我自然地聊聊刚才最值得继续说的点。',
-          },
-        ],
-      },
-      gentleIdle: {
-        title: '静静陪着',
-        actions: [
-          {
-            id: 'idle-soft-checkin',
-            label: '轻轻开个口',
-            prompt: '我现在有点安静。你可以像陪伴角色一样，轻一点地问问我现在在想什么，或者想做什么。',
-          },
-        ],
-      },
-    },
-  }
-}
-
 function slugify(value: string): string {
-  const slug = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+  return slugifyImportedPetName(value)
+}
 
-  return slug || `pet-${Date.now()}`
+function normalizeAssetRelativePath(value: string): string {
+  return value
+    .replace(/\\/g, '/')
+    .split('/')
+    .filter((segment) => segment.length > 0 && segment !== '.')
+    .join('/')
 }
 
 function mapClipNameToPackageClip(name: string): string {
