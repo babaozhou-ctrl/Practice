@@ -5,6 +5,7 @@ import type { SpriteDefinition } from '../src/types/animation'
 import type {
   PetAnimationConfig,
   PetAppearanceProfile,
+  PetCompanionContentProfile,
   PetPackageManifest,
   PetPersonalityProfile,
   PetProductionProfile,
@@ -23,6 +24,7 @@ export interface DiskImportedPetPackage {
   personality: PetPersonalityProfile
   spriteDefinition: SpriteDefinition
   appearance?: PetAppearanceProfile | null
+  companionContent?: PetCompanionContentProfile | null
   productionProfile?: PetProductionProfile | null
 }
 
@@ -54,8 +56,12 @@ export async function listImportedPetPackages(): Promise<DiskImportedPetPackage[
       const metadataRaw = await safeReadFile(join(petDir, 'metadata.json'))
       const metadata = metadataRaw ? JSON.parse(metadataRaw) as { importedAt?: number } : {}
       const appearanceRaw = await safeReadFile(join(petDir, 'appearance.json'))
+      const companionContentRaw = await safeReadFile(join(petDir, 'companion-content.json'))
       const productionProfileRaw = await safeReadFile(join(petDir, 'production.json'))
       const appearance = appearanceRaw ? JSON.parse(appearanceRaw) as PetAppearanceProfile : null
+      const companionContent = companionContentRaw
+        ? JSON.parse(companionContentRaw) as PetCompanionContentProfile
+        : null
       const productionProfile = productionProfileRaw ? JSON.parse(productionProfileRaw) as PetProductionProfile : null
 
       if (typeof manifest.id !== 'string' || typeof manifest.name !== 'string') {
@@ -72,6 +78,7 @@ export async function listImportedPetPackages(): Promise<DiskImportedPetPackage[
         personality,
         spriteDefinition,
         appearance,
+        companionContent,
         productionProfile,
       })
     } catch {
@@ -97,6 +104,13 @@ export async function saveImportedPetPackage(pkg: DiskImportedPetPackage): Promi
 
   if (pkg.appearance) {
     await writeFile(join(petDir, 'appearance.json'), JSON.stringify(pkg.appearance, null, 2), 'utf-8')
+  }
+  if (pkg.companionContent) {
+    await writeFile(
+      join(petDir, 'companion-content.json'),
+      JSON.stringify(pkg.companionContent, null, 2),
+      'utf-8',
+    )
   }
   if (pkg.productionProfile) {
     await writeFile(join(petDir, 'production.json'), JSON.stringify(pkg.productionProfile, null, 2), 'utf-8')

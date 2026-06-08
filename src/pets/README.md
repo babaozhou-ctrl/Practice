@@ -7,6 +7,7 @@ Core goals:
 - validate pet package manifests
 - resolve atlas and animation assets
 - load personality and state mappings
+- load companion-content and proactive interaction presets
 - allow new pets without core runtime edits
 
 Current architecture direction:
@@ -14,6 +15,7 @@ Current architecture direction:
 - built-in pets are discovered through a small registry instead of being hard-coded directly into the runtime
 - the selected pet is persisted and broadcast across windows so chat, settings, and the pet window stay in sync
 - pet packages own their own animation/state/personality metadata
+- pet packages can also own companion-content, prompt directives, and contextual behavior presets
 - pet capabilities are typed and can be fulfilled by provider hooks instead of direct UI-level service construction
 - imported pets now have a disk-backed persistence path through Electron IPC so they can evolve toward a real local pet package library
 - capability providers are now normalized through a registry/store layer, which allows future plugin backends to register and fall back safely
@@ -21,7 +23,30 @@ Current architecture direction:
 
 Near-term next steps:
 
-- add imported-package registration instead of temporary in-memory custom sprite overrides
 - support package-level capability flags for file analysis, emotes, and proactive behavior styles
 - separate sprite fallback generation from package identity so non-Mochi pets can ship their own procedural fallback
 - replace built-in capability providers with real plugin/provider resolution for community and local integrations
+
+Custom package notes:
+
+- Recommended package files:
+  - `manifest.json`
+  - `animations.json`
+  - `states.json`
+  - `personality.json`
+  - `companion-content.json`
+  - `appearance.json` (optional)
+  - `production.json` (optional)
+- `personality.json` should define:
+  - `identity.role`
+  - `identity.presence`
+  - `identity.responseStyle`
+  - `tone`
+  - `speechRules`
+  - `contextBehaviors`
+  - `promptDirectives.core`
+  - `promptDirectives.avoid`
+  - `promptDirectives.do`
+  - `memoryPolicy`
+- `companion-content.json` should carry the pet's proactive action copy, so follow-up chips and ambient check-ins stay on-brand for that pet.
+- Imported pets now persist both `personality` and `companionContent`, which means custom pets can keep their own tone and interactive prompts after restart.

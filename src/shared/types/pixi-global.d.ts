@@ -2,6 +2,7 @@ import type { SpriteDefinition } from '../../types/animation'
 import type {
   PetAnimationConfig,
   PetAppearanceProfile,
+  PetCompanionContentProfile,
   PetPackageManifest,
   PetPersonalityProfile,
   PetProductionProfile,
@@ -18,6 +19,7 @@ interface ImportedPetDiskPackage {
   personality: PetPersonalityProfile
   spriteDefinition: SpriteDefinition
   appearance?: PetAppearanceProfile | null
+  companionContent?: PetCompanionContentProfile | null
   productionProfile?: PetProductionProfile | null
 }
 

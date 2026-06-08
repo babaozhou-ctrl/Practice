@@ -25,6 +25,7 @@ export interface PetPackageManifest {
     animations: string
     states: string
     personality: string
+    companionContent?: string
     appearance?: string
     artPrompts?: string
     productionProfile?: string
