@@ -57,3 +57,4 @@ Custom package notes:
 - For a concrete starting point, see:
   - `pets/template-luna/`
   - `docs/specs/pet-package-template.md`
+- The settings UI now treats pet packages as first-class product entries, showing source, stage, summary, tags, and capability labels instead of a bare name-only dropdown.

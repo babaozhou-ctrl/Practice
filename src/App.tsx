@@ -167,19 +167,82 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
         <div style={sectionTitle}>Companion Package</div>
         <div style={lb}>Current desktop companion</div>
-        <select
-          style={inp}
-          value={petId}
-          onChange={(event) => setPetId(event.target.value)}
-        >
-          {availablePets.map((pet) => (
-            <option key={pet.id} value={pet.id}>
-              {pet.name} {pet.packageStage ? `(${pet.packageStage})` : ''}
-            </option>
-          ))}
-        </select>
+        <div style={{ display: 'grid', gap: '10px', marginBottom: '12px' }}>
+          {availablePets.map((pet) => {
+            const selected = pet.id === petId
+            return (
+              <button
+                key={pet.id}
+                onClick={() => setPetId(pet.id)}
+                style={{
+                  textAlign: 'left',
+                  padding: '12px 14px',
+                  borderRadius: '14px',
+                  border: selected
+                    ? `1px solid ${pet.accentColor ?? 'rgba(142, 197, 236, 0.52)'}`
+                    : '1px solid rgba(138, 191, 230, 0.16)',
+                  background: selected
+                    ? 'linear-gradient(180deg, rgba(255,255,255,0.82), rgba(240,247,255,0.92))'
+                    : 'rgba(255,255,255,0.62)',
+                  cursor: 'pointer',
+                  boxShadow: selected
+                    ? '0 12px 28px rgba(116, 148, 181, 0.16)'
+                    : 'none',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '6px' }}>
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#4f6880' }}>
+                      {pet.name}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'rgba(104, 132, 157, 0.72)' }}>
+                      {pet.source === 'built-in' ? 'Built-in' : 'Imported'} · {pet.renderer}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    {pet.packageStage && (
+                      <span style={pillStyle(selected, pet.accentColor, false)}>
+                        {pet.packageStage}
+                      </span>
+                    )}
+                    {selected && (
+                      <span style={pillStyle(selected, pet.accentColor, true)}>
+                        Current
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {pet.summary && (
+                  <div style={{ fontSize: '12px', lineHeight: 1.55, color: 'rgba(79, 104, 128, 0.88)', marginBottom: '8px' }}>
+                    {pet.summary}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: pet.capabilities.length > 0 ? '8px' : 0 }}>
+                  {pet.tags.slice(0, 4).map((tag) => (
+                    <span key={tag} style={miniTagStyle}>
+                      {tag}
+                    </span>
+                  ))}
+                  {pet.archetype && (
+                    <span style={miniTagStyle}>
+                      {pet.archetype}
+                    </span>
+                  )}
+                </div>
+
+                {pet.capabilities.length > 0 && (
+                  <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(104, 132, 157, 0.76)' }}>
+                    Capabilities: {pet.capabilities.join(', ')}
+                  </div>
+                )}
+              </button>
+            )
+          })}
+        </div>
         <div style={{ marginBottom: '12px', fontSize: '12px', color: 'rgba(104, 132, 157, 0.72)', lineHeight: 1.5 }}>
-          Capabilities: {capabilitySummary.join(', ')}
+          Active capabilities: {capabilitySummary.join(', ')}
         </div>
 
         <div style={sectionTitle}>Capability Providers</div>
@@ -458,6 +521,30 @@ function renderPhaseLabel(phase: string): string {
     default:
       return 'Idle'
   }
+}
+
+function pillStyle(selected: boolean, accentColor: string | null, strong: boolean): React.CSSProperties {
+  return {
+    padding: '4px 8px',
+    borderRadius: '999px',
+    fontSize: '10px',
+    fontWeight: 700,
+    letterSpacing: '0.2px',
+    color: strong ? '#ffffff' : '#5f7992',
+    background: strong
+      ? (accentColor ?? '#8ec5ec')
+      : (selected ? 'rgba(142, 197, 236, 0.16)' : 'rgba(138, 191, 230, 0.1)'),
+  }
+}
+
+const miniTagStyle: React.CSSProperties = {
+  padding: '4px 8px',
+  borderRadius: '999px',
+  background: 'rgba(138, 191, 230, 0.1)',
+  color: '#62809d',
+  fontSize: '10px',
+  fontWeight: 600,
+  letterSpacing: '0.2px',
 }
 
 export default App

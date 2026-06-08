@@ -1,5 +1,9 @@
 import type { BuiltInPetPackage } from '../../shared/types/petPackage'
-import { importedPetToPackage, readImportedPets } from '../ImportedPetRegistry'
+import {
+  buildImportedPetAssetBasePath,
+  importedPetToPackage,
+  readImportedPets,
+} from '../ImportedPetRegistry'
 import { loadBuiltInMochiPackage } from '../loader/loadBuiltInMochi'
 import { DEFAULT_PET_PACKAGE_ID } from '../constants'
 
@@ -7,9 +11,14 @@ export interface PetCatalogEntry {
   id: string
   name: string
   description: string
+  source: 'built-in' | 'imported'
   tags: string[]
+  capabilities: string[]
   renderer: string
   packageStage: string | null
+  archetype: string | null
+  summary: string | null
+  accentColor: string | null
   assetBasePath?: string
 }
 
@@ -18,28 +27,13 @@ const builtInLoaders: Record<string, () => BuiltInPetPackage> = {
 }
 
 export function listBuiltInPetCatalog(): PetCatalogEntry[] {
-  const builtIns = Object.values(builtInLoaders).map((load) => {
-    const petPackage = load()
-    return {
-      id: petPackage.manifest.id,
-      name: petPackage.manifest.name,
-      description: petPackage.manifest.description ?? '',
-      tags: petPackage.manifest.tags ?? [],
-      renderer: petPackage.manifest.renderer,
-      packageStage: petPackage.assetStatus?.packageStage ?? null,
-      assetBasePath: petPackage.runtimeAssets.assetBasePath,
-    }
-  })
+  const builtIns = Object.values(builtInLoaders).map((load) =>
+    toCatalogEntry(load(), 'built-in'),
+  )
 
-  const imported = readImportedPets().map((record) => ({
-    id: record.id,
-    name: record.name,
-    description: record.manifest.description ?? 'Imported custom pet package.',
-    tags: record.manifest.tags ?? ['imported'],
-    renderer: record.manifest.renderer,
-    packageStage: 'hybrid',
-    assetBasePath: `/pets/imported/${record.id}`,
-  }))
+  const imported = readImportedPets().map((record) =>
+    toCatalogEntry(importedPetToPackage(record), 'imported'),
+  )
 
   return [...builtIns, ...imported]
 }
@@ -56,4 +50,46 @@ export function loadPetPackageById(petId: string): BuiltInPetPackage {
 
 export function hasBuiltInPetPackage(petId: string): boolean {
   return petId in builtInLoaders || readImportedPets().some((entry) => entry.id === petId)
+}
+
+function toCatalogEntry(
+  petPackage: BuiltInPetPackage,
+  source: 'built-in' | 'imported',
+): PetCatalogEntry {
+  const paletteValues = petPackage.appearance?.palette
+    ? Object.values(petPackage.appearance.palette)
+    : []
+
+  return {
+    id: petPackage.manifest.id,
+    name: petPackage.manifest.name,
+    description: petPackage.manifest.description ?? '',
+    source,
+    tags: petPackage.manifest.tags ?? [],
+    capabilities: formatCapabilities(petPackage.manifest.capabilities),
+    renderer: petPackage.manifest.renderer,
+    packageStage: petPackage.assetStatus?.packageStage ?? null,
+    archetype: petPackage.appearance?.archetype ?? null,
+    summary: petPackage.appearance?.summary ?? null,
+    accentColor: paletteValues[2] ?? paletteValues[0] ?? null,
+    assetBasePath: source === 'imported'
+      ? buildImportedPetAssetBasePath(petPackage.manifest.id)
+      : petPackage.runtimeAssets.assetBasePath,
+  }
+}
+
+function formatCapabilities(
+  capabilities: BuiltInPetPackage['manifest']['capabilities'] | undefined,
+): string[] {
+  if (!capabilities) {
+    return []
+  }
+
+  return Object.entries(capabilities)
+    .filter(([, enabled]) => enabled)
+    .map(([name]) =>
+      name
+        .replace(/([A-Z])/g, ' $1')
+        .replace(/^./, (letter) => letter.toUpperCase()),
+    )
 }
