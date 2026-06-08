@@ -191,12 +191,33 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '6px' }}>
-                  <div>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#4f6880' }}>
-                      {pet.name}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                    <div style={previewFrameStyle(selected, pet.accentColor)}>
+                      {pet.previewImageUrl ? (
+                        <img
+                          src={pet.previewImageUrl}
+                          alt={pet.name}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            imageRendering: 'pixelated',
+                            display: 'block',
+                          }}
+                        />
+                      ) : (
+                        <div style={previewFallbackStyle}>
+                          {pet.name.slice(0, 1).toUpperCase()}
+                        </div>
+                      )}
                     </div>
-                    <div style={{ fontSize: '11px', color: 'rgba(104, 132, 157, 0.72)' }}>
-                      {pet.source === 'built-in' ? 'Built-in' : 'Imported'} · {pet.renderer}
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: '14px', fontWeight: 700, color: '#4f6880' }}>
+                        {pet.name}
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'rgba(104, 132, 157, 0.72)' }}>
+                        {pet.source === 'built-in' ? 'Built-in' : 'Imported'} · {pet.renderer}
+                      </div>
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -545,6 +566,33 @@ const miniTagStyle: React.CSSProperties = {
   fontSize: '10px',
   fontWeight: 600,
   letterSpacing: '0.2px',
+}
+
+function previewFrameStyle(selected: boolean, accentColor: string | null): React.CSSProperties {
+  return {
+    width: '52px',
+    height: '52px',
+    borderRadius: '12px',
+    overflow: 'hidden',
+    flex: '0 0 auto',
+    border: selected
+      ? `1px solid ${accentColor ?? 'rgba(142, 197, 236, 0.52)'}`
+      : '1px solid rgba(138, 191, 230, 0.18)',
+    background: 'linear-gradient(180deg, rgba(255,255,255,0.78), rgba(240,247,255,0.92))',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.42)',
+  }
+}
+
+const previewFallbackStyle: React.CSSProperties = {
+  width: '100%',
+  height: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: '#7090ad',
+  fontSize: '18px',
+  fontWeight: 700,
+  letterSpacing: '0.4px',
 }
 
 export default App

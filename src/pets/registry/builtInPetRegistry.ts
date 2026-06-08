@@ -1,6 +1,7 @@
 import type { BuiltInPetPackage } from '../../shared/types/petPackage'
 import {
   buildImportedPetAssetBasePath,
+  buildImportedPetAssetUrl,
   importedPetToPackage,
   readImportedPets,
 } from '../ImportedPetRegistry'
@@ -19,6 +20,7 @@ export interface PetCatalogEntry {
   archetype: string | null
   summary: string | null
   accentColor: string | null
+  previewImageUrl: string | null
   assetBasePath?: string
 }
 
@@ -72,6 +74,7 @@ function toCatalogEntry(
     archetype: petPackage.appearance?.archetype ?? null,
     summary: petPackage.appearance?.summary ?? null,
     accentColor: paletteValues[2] ?? paletteValues[0] ?? null,
+    previewImageUrl: resolvePreviewImageUrl(petPackage, source),
     assetBasePath: source === 'imported'
       ? buildImportedPetAssetBasePath(petPackage.manifest.id)
       : petPackage.runtimeAssets.assetBasePath,
@@ -92,4 +95,25 @@ function formatCapabilities(
         .replace(/([A-Z])/g, ' $1')
         .replace(/^./, (letter) => letter.toUpperCase()),
     )
+}
+
+function resolvePreviewImageUrl(
+  petPackage: BuiltInPetPackage,
+  source: 'built-in' | 'imported',
+): string | null {
+  const previewPath = petPackage.manifest.assets.previewImage
+  if (!previewPath) {
+    return null
+  }
+
+  if (source === 'imported') {
+    return buildImportedPetAssetUrl(petPackage.manifest.id, previewPath)
+  }
+
+  const assetBasePath = petPackage.runtimeAssets.assetBasePath
+  if (!assetBasePath) {
+    return null
+  }
+
+  return `${assetBasePath}/${previewPath}`
 }

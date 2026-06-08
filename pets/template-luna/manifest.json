@@ -7,6 +7,7 @@
   "description": "A calm moonlit desktop companion template package.",
   "assets": {
     "atlas": "sprite-atlas.png",
+    "previewImage": "preview.png",
     "animations": "animations.json",
     "states": "states.json",
     "personality": "personality.json",

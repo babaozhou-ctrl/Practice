@@ -22,6 +22,7 @@ export interface PetPackageManifest {
   description?: string
   assets: {
     atlas?: string
+    previewImage?: string
     animations: string
     states: string
     personality: string

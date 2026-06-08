@@ -111,6 +111,9 @@ async function collectAssetFiles(
   if (manifest.assets.atlas) {
     assetRelativePaths.add(normalizeRelativePath(manifest.assets.atlas))
   }
+  if (manifest.assets.previewImage) {
+    assetRelativePaths.add(normalizeRelativePath(manifest.assets.previewImage))
+  }
 
   const collected: ImportedPetAssetFile[] = []
   for (const relativePath of assetRelativePaths) {

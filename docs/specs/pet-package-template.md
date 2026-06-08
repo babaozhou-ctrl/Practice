@@ -20,6 +20,7 @@ pets/
     states.json
     personality.json
     companion-content.json
+    preview.png
     appearance.json
     production.json
     asset-status.json
@@ -31,6 +32,7 @@ pets/
 说明：
 
 - `manifest.json`：宠物包入口，声明资源路径、能力、标签与 renderer 类型。
+- `preview.png`：设置页和未来宠物库展示用的预览图。
 - `animations.json`：定义 clip、fps、loop、micro motions、motion profile。
 - `states.json`：把桌面 companion 状态映射到 clip。
 - `personality.json`：定义人格、语气、上下文行为、prompt directives。
@@ -70,6 +72,7 @@ pets/
   "description": "A calm moonlit desktop companion.",
   "assets": {
     "atlas": "sprite-atlas.png",
+    "previewImage": "preview.png",
     "animations": "animations.json",
     "states": "states.json",
     "personality": "personality.json",
@@ -98,6 +101,7 @@ pets/
 - `id` 最好全局唯一，建议使用 `namespace.name` 风格。
 - `renderer` 目前推荐 `pixi-atlas` 或 `procedural-sprite`。
 - `assets.companionContent` 在当前架构里已经是正式字段，不要省略。
+- `assets.previewImage` 建议始终提供。它不参与运行时动画，但会直接影响宠物包在设置页和未来社区库中的展示质量。
 
 ## personality.json 建议重点
 
