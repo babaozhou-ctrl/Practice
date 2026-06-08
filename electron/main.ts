@@ -7,7 +7,7 @@ import {
   saveImportedPetPackage,
 } from './imported-pet-storage'
 import { extractDocumentText } from './services/document-reader'
-import { listLocalPluginManifests } from './services/plugin-host-service'
+import { listLocalPluginManifests, runPluginFileAnalysis } from './services/plugin-host-service'
 import { detectActiveWindow } from './window-detector'
 
 let petWindow: BrowserWindow | null = null
@@ -203,6 +203,7 @@ function setupIPC() {
   ipcMain.handle('pets:list-imported', async () => listImportedPetPackages())
   ipcMain.handle('pets:save-imported', async (_event, record) => saveImportedPetPackage(record))
   ipcMain.handle('plugins:list-local', async () => listLocalPluginManifests())
+  ipcMain.handle('plugins:run-file-analysis', async (_event, payload) => runPluginFileAnalysis(payload))
   ipcMain.on('app:quit', () => app.quit())
 }
 

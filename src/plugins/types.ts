@@ -58,7 +58,7 @@ export interface FileAnalysisProvider {
   id: string
   label: string
   readFile(file: File): Promise<string>
-  summarize(content: string): string
+  summarize(request: { fileName: string; content: string }): Promise<string>
 }
 
 export interface ScreenPerceptionProvider {

@@ -1,5 +1,6 @@
+import { pathToFileURL } from 'url'
 import { readdir, readFile, stat } from 'fs/promises'
-import { join, resolve } from 'path'
+import { dirname, join, resolve } from 'path'
 
 export interface PluginManifestRecord {
   id: string
@@ -36,18 +37,58 @@ export interface PluginDiscoveryRecord {
   errors: string[]
 }
 
+interface LoadedPluginRecord {
+  discovery: PluginDiscoveryRecord
+  entryPath: string
+  module: PluginModuleShape | null
+}
+
+interface PluginFileAnalysisRequest {
+  providerId: string
+  fileName: string
+  content: string
+}
+
+interface PluginFileAnalysisContext {
+  providerId: string
+  pluginId: string
+  pluginName: string
+  fileName: string
+}
+
+interface PluginFileAnalysisApi {
+  summarize?: (
+    content: string,
+    context: PluginFileAnalysisContext,
+  ) => Promise<string> | string
+}
+
+interface PluginProvidersApi {
+  fileAnalysis?: Record<string, PluginFileAnalysisApi | undefined>
+}
+
+interface PluginModuleShape {
+  providers?: PluginProvidersApi
+  default?: {
+    providers?: PluginProvidersApi
+  }
+}
+
 const PLUGINS_DIR = resolve(process.cwd(), 'plugins')
 const SUPPORTED_PLUGIN_API_VERSIONS = new Set(['1.0.0'])
+const loadedPlugins = new Map<string, LoadedPluginRecord>()
 
 export async function listLocalPluginManifests(): Promise<PluginDiscoveryRecord[]> {
   let entries: Awaited<ReturnType<typeof readdir>> = []
   try {
     entries = await readdir(PLUGINS_DIR, { withFileTypes: true })
   } catch {
+    loadedPlugins.clear()
     return []
   }
 
   const discovered: PluginDiscoveryRecord[] = []
+  const nextLoadedPlugins = new Map<string, LoadedPluginRecord>()
 
   for (const entry of entries) {
     if (!entry.isDirectory()) {
@@ -56,7 +97,21 @@ export async function listLocalPluginManifests(): Promise<PluginDiscoveryRecord[
 
     const pluginDir = join(PLUGINS_DIR, entry.name)
     const manifestPath = join(pluginDir, 'manifest.json')
-    discovered.push(await loadPluginManifestRecord(entry.name, manifestPath))
+    const record = await loadPluginManifestRecord(entry.name, manifestPath)
+    discovered.push(record)
+
+    if (record.status !== 'valid') {
+      continue
+    }
+
+    const entryPath = join(pluginDir, record.entry)
+    const loaded = await loadPluginModule(record, entryPath)
+    nextLoadedPlugins.set(record.id, loaded)
+  }
+
+  loadedPlugins.clear()
+  for (const [pluginId, loaded] of nextLoadedPlugins.entries()) {
+    loadedPlugins.set(pluginId, loaded)
   }
 
   return discovered.sort((left, right) => {
@@ -65,6 +120,36 @@ export async function listLocalPluginManifests(): Promise<PluginDiscoveryRecord[
     }
     return left.name.localeCompare(right.name)
   })
+}
+
+export async function runPluginFileAnalysis(
+  request: PluginFileAnalysisRequest,
+): Promise<string> {
+  const loadedPlugin = findLoadedPluginByProviderId(request.providerId)
+  if (!loadedPlugin) {
+    throw new Error(`未找到 provider=${request.providerId} 对应的已加载插件。`)
+  }
+
+  const providerKey = getDeclaredProviderId(request.providerId)
+  const pluginProviders = getPluginProviders(loadedPlugin.module)
+  const fileAnalysisProvider = pluginProviders.fileAnalysis?.[providerKey]
+  if (!fileAnalysisProvider?.summarize) {
+    throw new Error(`插件 ${loadedPlugin.discovery.name} 没有实现 fileAnalysis provider "${providerKey}" 的 summarize。`)
+  }
+
+  const result = await fileAnalysisProvider.summarize(request.content, {
+    providerId: request.providerId,
+    pluginId: loadedPlugin.discovery.id,
+    pluginName: loadedPlugin.discovery.name,
+    fileName: request.fileName,
+  })
+
+  const normalized = typeof result === 'string' ? result.trim() : ''
+  if (!normalized) {
+    throw new Error(`插件 ${loadedPlugin.discovery.name} 返回了空的文件摘要。`)
+  }
+
+  return normalized
 }
 
 async function loadPluginManifestRecord(
@@ -165,7 +250,7 @@ async function validatePluginManifest(
   }
 
   if (isNonEmptyString(manifest.entry)) {
-    const pluginDir = resolve(manifestPath, '..')
+    const pluginDir = dirname(manifestPath)
     const entryPath = join(pluginDir, manifest.entry)
     if (!(await fileExists(entryPath))) {
       errors.push(`插件入口文件不存在：${manifest.entry}`)
@@ -198,6 +283,65 @@ async function validatePluginManifest(
   }
 
   return errors
+}
+
+async function loadPluginModule(
+  discovery: PluginDiscoveryRecord,
+  entryPath: string,
+): Promise<LoadedPluginRecord> {
+  try {
+    const moduleUrl = pathToFileURL(entryPath).href
+    const imported = await import(moduleUrl)
+    return {
+      discovery,
+      entryPath,
+      module: imported as PluginModuleShape,
+    }
+  } catch (error: any) {
+    return {
+      discovery: {
+        ...discovery,
+        status: 'invalid',
+        errors: [...discovery.errors, `插件入口加载失败：${error?.message ?? String(error)}`],
+      },
+      entryPath,
+      module: null,
+    }
+  }
+}
+
+function findLoadedPluginByProviderId(providerId: string): LoadedPluginRecord | null {
+  const declaredProviderId = getDeclaredProviderId(providerId)
+
+  for (const loaded of loadedPlugins.values()) {
+    const matched = loaded.discovery.providers.find((provider) => provider.id === declaredProviderId)
+    if (matched) {
+      return loaded
+    }
+  }
+
+  return null
+}
+
+function getDeclaredProviderId(providerId: string): string {
+  const parts = providerId.split('.')
+  return parts[parts.length - 1] ?? providerId
+}
+
+function getPluginProviders(module: PluginModuleShape | null): PluginProvidersApi {
+  if (!module) {
+    return {}
+  }
+
+  if (module.providers) {
+    return module.providers
+  }
+
+  if (module.default?.providers) {
+    return module.default.providers
+  }
+
+  return {}
 }
 
 async function fileExists(path: string): Promise<boolean> {

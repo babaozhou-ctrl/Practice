@@ -233,8 +233,8 @@ function createBuiltinFileAnalysisProvider(): FileAnalysisProvider {
     readFile(file) {
       return fileAnalyzer.readFile(file)
     },
-    summarize(content) {
-      return fileAnalyzer.summarize(content)
+    async summarize(request) {
+      return fileAnalyzer.summarize(request)
     },
   }
 }
@@ -262,7 +262,7 @@ function tryActivateDiscoveredPluginProvider(
       availability: 'active',
       description:
         `${candidate.pluginName} is connected as a selectable file-analysis provider. ` +
-        'This phase still delegates file reading and summarization to the built-in analyzer so the provider contract and persistence path can be verified safely.',
+        'This phase routes file extraction through the built-in reader, while summary generation can already be delegated to the plugin runtime.',
     },
     fileAnalysisProvider: {
       id: candidate.providerId,
@@ -270,8 +270,20 @@ function tryActivateDiscoveredPluginProvider(
       readFile(file) {
         return fileAnalyzer.readFile(file)
       },
-      summarize(content) {
-        return fileAnalyzer.summarize(content)
+      async summarize(request) {
+        if (!window.electronAPI?.runPluginFileAnalysis) {
+          return fileAnalyzer.summarize(request)
+        }
+
+        try {
+          return await window.electronAPI.runPluginFileAnalysis({
+            providerId: candidate.providerId,
+            fileName: request.fileName,
+            content: request.content,
+          })
+        } catch {
+          return fileAnalyzer.summarize(request)
+        }
       },
     },
   })

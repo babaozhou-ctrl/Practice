@@ -554,7 +554,10 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
 
       try {
         const content = await fileAnalysisProvider.readFile(file)
-        const localSummary = fileAnalysisProvider.summarize(content)
+        const localSummary = await fileAnalysisProvider.summarize({
+          fileName: file.name,
+          content,
+        })
         let summary = localSummary
 
         if (config.enabled && config.apiKey) {

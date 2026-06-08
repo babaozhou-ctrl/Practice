@@ -3,6 +3,11 @@ export interface FileAnalysisResult {
   localSummary: string
 }
 
+export interface FileSummaryRequest {
+  fileName: string
+  content: string
+}
+
 export class FileAnalyzer {
   async readFile(file: File): Promise<string> {
     const ext = file.name.split('.').pop()?.toLowerCase()
@@ -79,9 +84,9 @@ export class FileAnalyzer {
     }
   }
 
-  summarize(content: string): string {
-    const lines = content.split('\n')
-    const wordCount = content.split(/\s+/).length
+  summarize(request: FileSummaryRequest): string {
+    const lines = request.content.split('\n')
+    const wordCount = request.content.split(/\s+/).length
     const lineCount = lines.length
     const preview = lines.slice(0, 10).join('\n').substring(0, 500)
 
@@ -92,7 +97,10 @@ export class FileAnalyzer {
     const content = await this.readFile(file)
     return {
       content,
-      localSummary: this.summarize(content),
+      localSummary: this.summarize({
+        fileName: file.name,
+        content,
+      }),
     }
   }
 }

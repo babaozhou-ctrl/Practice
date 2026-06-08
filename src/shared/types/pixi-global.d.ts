@@ -41,6 +41,11 @@ declare global {
         mimeType?: string
         buffer: ArrayBuffer | Uint8Array
       }) => Promise<string>
+      runPluginFileAnalysis?: (payload: {
+        providerId: string
+        fileName: string
+        content: string
+      }) => Promise<string>
       onSpeech?: (callback: (msg: string, dur: number) => void) => void
       onContextUpdate?: (callback: (info: { title: string; process: string; idleMs?: number }) => void) => void
       listImportedPets?: () => Promise<ImportedPetDiskPackage[]>

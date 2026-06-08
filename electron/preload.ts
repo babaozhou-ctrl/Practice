@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getActiveWindow: (): Promise<{title:string,process:string,idleMs?:number}> => ipcRenderer.invoke('context:get-active-window'),
   extractDocumentText: (payload: { fileName: string; mimeType?: string; buffer: ArrayBuffer | Uint8Array }) =>
     ipcRenderer.invoke('documents:extract-text', payload),
+  runPluginFileAnalysis: (payload: { providerId: string; fileName: string; content: string }) =>
+    ipcRenderer.invoke('plugins:run-file-analysis', payload),
   onSpeech: (callback: (msg: string, dur: number) => void) => {
     ipcRenderer.on('speech:show', (_e, msg, dur) => callback(msg, dur))
   },
