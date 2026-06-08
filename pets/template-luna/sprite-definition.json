@@ -1,0 +1,133 @@
+{
+  "gridWidth": 15,
+  "gridHeight": 17,
+  "pixelScale": 4,
+  "palette": {
+    "name": "Luna Default",
+    "body": "#f4f0ff",
+    "highlight": "#c9d3ff",
+    "shadow": "#7f90cc",
+    "eyeWhite": "#9fb8ff",
+    "pupil": "#6e87d5",
+    "blush": "#f6bfd0",
+    "hoodie": "#d8ddff",
+    "skirt": "#cfd4ff",
+    "ear": "#eedcff"
+  },
+  "palettes": [
+    {
+      "name": "Luna Default",
+      "body": "#f4f0ff",
+      "highlight": "#c9d3ff",
+      "shadow": "#7f90cc",
+      "eyeWhite": "#9fb8ff",
+      "pupil": "#6e87d5",
+      "blush": "#f6bfd0",
+      "hoodie": "#d8ddff",
+      "skirt": "#cfd4ff",
+      "ear": "#eedcff"
+    }
+  ],
+  "clips": [
+    {
+      "name": "IDLE",
+      "loop": true,
+      "frames": [
+        { "pixels": [[0]], "duration": 160 },
+        { "pixels": [[0]], "duration": 160 },
+        { "pixels": [[0]], "duration": 160 },
+        { "pixels": [[0]], "duration": 160 }
+      ]
+    },
+    {
+      "name": "THINKING",
+      "loop": true,
+      "frames": [
+        { "pixels": [[0]], "duration": 160 },
+        { "pixels": [[0]], "duration": 160 },
+        { "pixels": [[0]], "duration": 160 },
+        { "pixels": [[0]], "duration": 160 }
+      ]
+    },
+    {
+      "name": "CODING",
+      "loop": true,
+      "frames": [
+        { "pixels": [[0]], "duration": 170 },
+        { "pixels": [[0]], "duration": 170 },
+        { "pixels": [[0]], "duration": 170 },
+        { "pixels": [[0]], "duration": 170 }
+      ]
+    },
+    {
+      "name": "WATCHING",
+      "loop": true,
+      "frames": [
+        { "pixels": [[0]], "duration": 180 },
+        { "pixels": [[0]], "duration": 180 },
+        { "pixels": [[0]], "duration": 180 },
+        { "pixels": [[0]], "duration": 180 }
+      ]
+    },
+    {
+      "name": "CHATTING",
+      "loop": true,
+      "frames": [
+        { "pixels": [[0]], "duration": 150 },
+        { "pixels": [[0]], "duration": 150 },
+        { "pixels": [[0]], "duration": 150 },
+        { "pixels": [[0]], "duration": 150 }
+      ]
+    },
+    {
+      "name": "GAMING",
+      "loop": true,
+      "frames": [
+        { "pixels": [[0]], "duration": 130 },
+        { "pixels": [[0]], "duration": 130 },
+        { "pixels": [[0]], "duration": 130 },
+        { "pixels": [[0]], "duration": 130 }
+      ]
+    },
+    {
+      "name": "SLEEPING",
+      "loop": true,
+      "frames": [
+        { "pixels": [[0]], "duration": 220 },
+        { "pixels": [[0]], "duration": 220 },
+        { "pixels": [[0]], "duration": 220 },
+        { "pixels": [[0]], "duration": 220 }
+      ]
+    },
+    {
+      "name": "HAPPY",
+      "loop": false,
+      "frames": [
+        { "pixels": [[0]], "duration": 90 },
+        { "pixels": [[0]], "duration": 90 },
+        { "pixels": [[0]], "duration": 100 },
+        { "pixels": [[0]], "duration": 120 }
+      ]
+    },
+    {
+      "name": "EXCITED",
+      "loop": false,
+      "frames": [
+        { "pixels": [[0]], "duration": 80 },
+        { "pixels": [[0]], "duration": 80 },
+        { "pixels": [[0]], "duration": 80 },
+        { "pixels": [[0]], "duration": 120 }
+      ]
+    },
+    {
+      "name": "WALK",
+      "loop": true,
+      "frames": [
+        { "pixels": [[0]], "duration": 120 },
+        { "pixels": [[0]], "duration": 120 },
+        { "pixels": [[0]], "duration": 120 },
+        { "pixels": [[0]], "duration": 120 }
+      ]
+    }
+  ]
+}

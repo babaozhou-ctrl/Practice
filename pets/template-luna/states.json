@@ -1,0 +1,71 @@
+{
+  "states": {
+    "idle": {
+      "baseClip": "idle_loop",
+      "mode": "observing",
+      "minHoldMs": 6000
+    },
+    "sleepy": {
+      "baseClip": "sleep_loop",
+      "mode": "quiet",
+      "minHoldMs": 15000
+    },
+    "happy": {
+      "baseClip": "happy_react",
+      "fallbackClip": "idle_loop",
+      "mode": "reactive",
+      "minHoldMs": 3000
+    },
+    "thinking": {
+      "baseClip": "thinking_loop",
+      "mode": "quiet",
+      "minHoldMs": 5000
+    },
+    "coding": {
+      "baseClip": "coding_loop",
+      "mode": "focus_guardian",
+      "minHoldMs": 12000
+    },
+    "gaming": {
+      "baseClip": "gaming_loop",
+      "mode": "quiet",
+      "minHoldMs": 20000
+    },
+    "watching_video": {
+      "baseClip": "watching_loop",
+      "mode": "reactive",
+      "minHoldMs": 12000
+    },
+    "chatting": {
+      "baseClip": "chatting_loop",
+      "mode": "reactive",
+      "minHoldMs": 8000
+    },
+    "excited": {
+      "baseClip": "excited_loop",
+      "fallbackClip": "idle_loop",
+      "mode": "proactive",
+      "minHoldMs": 4000
+    }
+  },
+  "transientStates": {
+    "welcome_back": {
+      "baseClip": "welcome_back",
+      "resumeResolvedState": true,
+      "mode": "reactive",
+      "minHoldMs": 0
+    },
+    "dragging": {
+      "baseClip": "drag",
+      "mode": "quiet",
+      "minHoldMs": 0
+    },
+    "tap_affection": {
+      "baseClip": "tap_affection",
+      "fallbackClip": "idle_loop",
+      "resumeResolvedState": true,
+      "mode": "reactive",
+      "minHoldMs": 0
+    }
+  }
+}

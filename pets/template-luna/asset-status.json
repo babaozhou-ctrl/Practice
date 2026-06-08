@@ -1,0 +1,12 @@
+{
+  "packageStage": "hybrid",
+  "referenceAligned": false,
+  "atlasReady": false,
+  "runtimeFallbackEnabled": true,
+  "speechToneReady": true,
+  "pendingWork": [
+    "Replace placeholder atlas with production sprite-atlas.png.",
+    "Tune frame timing and motion profiles against actual art.",
+    "Validate expression readability with contact sheet and preview gifs."
+  ]
+}
