@@ -10,6 +10,7 @@
     "animations": "animations.json",
     "states": "states.json",
     "personality": "personality.json",
+    "companionContent": "companion-content.json",
     "appearance": "appearance.json",
     "artPrompts": "art-prompts.md",
     "productionProfile": "production.json",

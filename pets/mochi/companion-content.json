@@ -1,0 +1,120 @@
+{
+  "version": "1.0.0",
+  "proactive": {
+    "focusEnding": {
+      "title": "专注快收尾了",
+      "actions": [
+        {
+          "id": "focus-finish-strong",
+          "label": "再陪我收个尾",
+          "prompt": "我这轮专注快结束了，请继续陪我把最后一点内容收干净，帮我判断现在最值得先完成的事。"
+        },
+        {
+          "id": "focus-start-break",
+          "label": "开始休息",
+          "prompt": "我准备开始休息了，陪我做一个轻一点的收尾，然后提醒我怎么把注意力放下来。"
+        },
+        {
+          "id": "focus-next-step",
+          "label": "帮我整理下一步",
+          "prompt": "请根据我刚才这段专注状态，帮我整理一个自然、轻量的下一步顺序，让我不用硬切换。"
+        }
+      ]
+    },
+    "breakEnding": {
+      "title": "休息快结束了",
+      "actions": [
+        {
+          "id": "break-return-gently",
+          "label": "轻一点回到专注",
+          "prompt": "休息差不多结束了。请陪我温柔一点回到专注，不要一下子变得很紧绷。"
+        },
+        {
+          "id": "break-decide-first-step",
+          "label": "帮我决定先做什么",
+          "prompt": "我要回到工作里了。请帮我决定重启时第一步做什么，尽量让我容易重新进入状态。"
+        }
+      ]
+    },
+    "overworkFirm": {
+      "title": "该认真歇一下了",
+      "actions": [
+        {
+          "id": "overwork-wrap-up",
+          "label": "先帮我收尾",
+          "prompt": "我已经有点过劳了。请帮我做一个尽量轻的收尾，只保留今晚一定要结束的点。"
+        },
+        {
+          "id": "overwork-pause-reminder",
+          "label": "提醒我暂停",
+          "prompt": "我现在需要停一下。请用温和但坚定的方式提醒我为什么应该先休息，并帮我放下手头的内容。"
+        }
+      ]
+    },
+    "overworkGentle": {
+      "title": "该松一口气了",
+      "actions": [
+        {
+          "id": "overwork-gentle-wrap",
+          "label": "先帮我收个口",
+          "prompt": "我有点撑太久了。请帮我把当前这段工作收个口，让我能比较自然地停下来。"
+        },
+        {
+          "id": "overwork-gentle-break",
+          "label": "提醒我休息一下",
+          "prompt": "请提醒我认真休息一下，但语气轻一点，像陪伴而不是说教。"
+        }
+      ]
+    },
+    "productiveSession": {
+      "title": "今天已经很努力了",
+      "actions": [
+        {
+          "id": "productive-check-progress",
+          "label": "帮我看看进度",
+          "prompt": "我今天已经专注挺久了。请陪我快速看一下现在的进度感，帮我判断接下来是继续冲还是适合缓一缓。"
+        },
+        {
+          "id": "productive-soft-plan",
+          "label": "整理轻一点的后续",
+          "prompt": "请根据我现在这段投入状态，帮我整理一个轻一点的后续安排，不要太工具化。"
+        }
+      ]
+    },
+    "lateNight": {
+      "title": "夜深了",
+      "actions": [
+        {
+          "id": "late-night-soft-wrap",
+          "label": "帮我温柔收尾",
+          "prompt": "有点晚了。请陪我做一个温柔的收尾，把今晚的内容放到一个能安心停下的位置。"
+        },
+        {
+          "id": "late-night-save-for-tomorrow",
+          "label": "只留明天继续的点",
+          "prompt": "请帮我只保留明天最值得继续的点，用很轻的方式整理出来，让我现在能安心休息。"
+        }
+      ]
+    },
+    "watchTogether": {
+      "title": "一起看着呢",
+      "actions": [
+        {
+          "id": "watch-highlight",
+          "label": "聊聊刚才那段",
+          "prompt": "我们刚才像是在一起看内容。请陪我用自然一点的方式聊聊最值得继续说的点。"
+        }
+      ]
+    },
+    "gentleIdle": {
+      "title": "静静陪着",
+      "actions": [
+        {
+          "id": "idle-soft-checkin",
+          "label": "陪我轻轻开个口",
+          "prompt": "我现在有点安静。你可以像陪伴角色一样，轻一点地问问我现在在想什么或想做什么。"
+        }
+      ]
+    }
+  }
+}

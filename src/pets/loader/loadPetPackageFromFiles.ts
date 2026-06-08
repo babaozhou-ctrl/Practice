@@ -3,6 +3,7 @@ import type {
   PetAnimationConfig,
   PetAssetStatus,
   PetAppearanceProfile,
+  PetCompanionContentProfile,
   PetPackageManifest,
   PetPersonalityProfile,
   PetProductionProfile,
@@ -16,6 +17,7 @@ export interface PetPackageFileBundle {
   states: PetStatesConfig
   appearance?: PetAppearanceProfile | null
   productionProfile?: PetProductionProfile | null
+  companionContent?: PetCompanionContentProfile | null
   assetStatus?: PetAssetStatus | null
   personality?: PetPersonalityProfile
   assetBasePath: string
@@ -56,6 +58,7 @@ export function buildPetPackageFromFiles(
     states: bundle.states,
     appearance: bundle.appearance ?? null,
     productionProfile: bundle.productionProfile ?? null,
+    companionContent: bundle.companionContent ?? null,
     assetStatus: bundle.assetStatus ?? null,
     runtimeAssets: {
       preferredSource: 'atlas',

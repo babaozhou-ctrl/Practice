@@ -214,6 +214,31 @@ export interface PetProductionProfile {
   deliveryChecklist: string[]
 }
 
+export interface PetCompanionContentAction {
+  id: string
+  label: string
+  prompt: string
+}
+
+export interface PetCompanionContentEntry {
+  title: string
+  actions: PetCompanionContentAction[]
+}
+
+export interface PetCompanionContentProfile {
+  version: string
+  proactive: {
+    focusEnding: PetCompanionContentEntry
+    breakEnding: PetCompanionContentEntry
+    overworkFirm: PetCompanionContentEntry
+    overworkGentle: PetCompanionContentEntry
+    productiveSession: PetCompanionContentEntry
+    lateNight: PetCompanionContentEntry
+    watchTogether: PetCompanionContentEntry
+    gentleIdle: PetCompanionContentEntry
+  }
+}
+
 export interface PetAssetStatus {
   packageStage: 'placeholder-runtime' | 'hybrid' | 'production-ready'
   referenceAligned: boolean
@@ -229,6 +254,7 @@ export interface BuiltInPetPackage {
   states: PetStatesConfig
   appearance: PetAppearanceProfile | null
   productionProfile: PetProductionProfile | null
+  companionContent: PetCompanionContentProfile | null
   assetStatus: PetAssetStatus | null
   runtimeAssets: PetRuntimeAssetConfig
   personality: PetPersonalityProfile

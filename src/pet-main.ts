@@ -411,6 +411,7 @@ async function bootstrap() {
 
       if (didSpeak) {
         const actionPayload = buildCompanionActionPayload(
+          petPackage,
           stabilizedSnapshot,
           workModeSignals,
           proactiveSpeech.message,
