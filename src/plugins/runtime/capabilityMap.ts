@@ -11,7 +11,7 @@ export type PluginRuntimeCompatibilityStatus = 'ready' | 'planned' | 'unknown'
 
 export interface PluginCapabilityCompatibility {
   capability: string
-  runtimeBinding: string | null
+  runtimeBinding: 'aiChat' | 'fileAnalysis' | 'screenPerception' | null
   status: PluginRuntimeCompatibilityStatus
   summary: string
 }

@@ -10,6 +10,7 @@ export interface ProviderDescriptor {
   label: string
   capability: PluginCapabilityProvider
   kind: 'builtin' | 'plugin'
+  availability?: 'active' | 'discovered'
   description?: string
 }
 

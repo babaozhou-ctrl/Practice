@@ -10,6 +10,8 @@ import type {
   ProviderDescriptor,
   ScreenPerceptionProvider,
 } from './types'
+import { describePluginCapabilities } from './runtime/capabilityMap'
+import type { DiscoveredPluginProviderCandidate, PluginDiscoveryRecord } from './runtime/types'
 
 const defaultScreenCaptureConfig: ScreenCaptureConfig = {
   enabled: false,
@@ -24,6 +26,7 @@ const fileAnalyzer = new FileAnalyzer()
 const screenAnalyzer = new ScreenAnalyzer(defaultScreenCaptureConfig)
 
 const registrations = new Map<string, CapabilityProviderRegistration>()
+const discoveredProviderDescriptors = new Map<string, ProviderDescriptor>()
 
 registerCapabilityProvider({
   descriptor: {
@@ -31,6 +34,7 @@ registerCapabilityProvider({
     label: 'DeepSeek Companion Chat',
     capability: 'aiChat',
     kind: 'builtin',
+    availability: 'active',
     description: 'Streaming companion chat and AI-backed document summaries through a unified provider contract.',
   },
   aiChatProvider,
@@ -42,6 +46,7 @@ registerCapabilityProvider({
     label: 'Built-in File Analyzer',
     capability: 'fileAnalysis',
     kind: 'builtin',
+    availability: 'active',
     description: 'Reads text-like files and prepares a lightweight summary for companion chat.',
   },
   fileAnalysisProvider: {
@@ -62,6 +67,7 @@ registerCapabilityProvider({
     label: 'Built-in Screen Perception Placeholder',
     capability: 'screenPerception',
     kind: 'builtin',
+    availability: 'active',
     description: 'Placeholder screen-perception backend reserved for future OCR and vision flows.',
   },
   screenPerceptionProvider: {
@@ -83,7 +89,10 @@ registerCapabilityProvider({
 })
 
 export function registerCapabilityProvider(registration: CapabilityProviderRegistration) {
-  const { descriptor } = registration
+  const descriptor = {
+    ...registration.descriptor,
+    availability: 'active' as const,
+  }
 
   if (descriptor.capability === 'aiChat' && !registration.aiChatProvider) {
     throw new Error(`Provider ${descriptor.id} is missing an aiChatProvider implementation.`)
@@ -95,16 +104,63 @@ export function registerCapabilityProvider(registration: CapabilityProviderRegis
     throw new Error(`Provider ${descriptor.id} is missing a screenPerceptionProvider implementation.`)
   }
 
-  registrations.set(descriptor.id, registration)
+  registrations.set(descriptor.id, {
+    ...registration,
+    descriptor,
+  })
 }
 
 export function unregisterCapabilityProvider(providerId: string) {
   registrations.delete(providerId)
 }
 
-export function listProviderDescriptors(capability?: PluginCapabilityProvider): ProviderDescriptor[] {
-  return Array.from(registrations.values())
-    .map((registration) => registration.descriptor)
+export function reconcileDiscoveredPluginProviders(plugins: PluginDiscoveryRecord[]) {
+  discoveredProviderDescriptors.clear()
+
+  for (const plugin of plugins) {
+    if (plugin.status !== 'valid') {
+      continue
+    }
+
+    const candidates = deriveProviderCandidatesFromPlugin(plugin)
+    for (const candidate of candidates) {
+      discoveredProviderDescriptors.set(candidate.providerId, {
+        id: candidate.providerId,
+        label: `${candidate.pluginName} (${candidate.runtimeBinding})`,
+        capability: candidate.runtimeBinding,
+        kind: 'plugin',
+        availability: 'discovered',
+        description: candidate.description,
+      })
+    }
+  }
+}
+
+export function listProviderDescriptors(
+  capability?: PluginCapabilityProvider,
+  options: { includeDiscovered?: boolean } = {},
+): ProviderDescriptor[] {
+  const active = Array.from(registrations.values()).map((registration) => registration.descriptor)
+  const discovered = options.includeDiscovered
+    ? Array.from(discoveredProviderDescriptors.values())
+    : []
+
+  return [...active, ...discovered]
+    .filter((descriptor) => !capability || descriptor.capability === capability)
+    .sort((left, right) => {
+      const leftRank = left.availability === 'discovered' ? 1 : 0
+      const rightRank = right.availability === 'discovered' ? 1 : 0
+      if (leftRank !== rightRank) {
+        return leftRank - rightRank
+      }
+      return left.label.localeCompare(right.label)
+    })
+}
+
+export function listDiscoveredProviderCandidates(
+  capability?: PluginCapabilityProvider,
+): ProviderDescriptor[] {
+  return Array.from(discoveredProviderDescriptors.values())
     .filter((descriptor) => !capability || descriptor.capability === capability)
 }
 
@@ -156,4 +212,28 @@ export function resolveScreenPerceptionProvider(providerId?: string): ScreenPerc
     throw new Error(`No screen perception provider registered for id "${normalizedId}".`)
   }
   return registration.screenPerceptionProvider
+}
+
+function deriveProviderCandidatesFromPlugin(
+  plugin: PluginDiscoveryRecord,
+): DiscoveredPluginProviderCandidate[] {
+  return describePluginCapabilities(plugin.capabilities)
+    .filter(isReadyProviderCapability)
+    .map((item) => ({
+      providerId: `plugin-candidate.${plugin.id}.${item.runtimeBinding}`,
+      pluginId: plugin.id,
+      pluginName: plugin.name,
+      manifestCapability: item.capability,
+      runtimeBinding: item.runtimeBinding,
+      description: `${plugin.name} 声明了 ${item.capability}，已经能和当前 ${item.runtimeBinding} provider 契约对齐，但还没有真正注册可执行实现。`,
+    }))
+}
+
+function isReadyProviderCapability(
+  item: ReturnType<typeof describePluginCapabilities>[number],
+): item is ReturnType<typeof describePluginCapabilities>[number] & {
+  runtimeBinding: 'aiChat' | 'fileAnalysis' | 'screenPerception'
+  status: 'ready'
+} {
+  return item.status === 'ready' && item.runtimeBinding !== null
 }

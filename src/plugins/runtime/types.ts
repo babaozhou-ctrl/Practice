@@ -12,3 +12,12 @@ export interface PluginDiscoveryRecord {
   status: 'valid' | 'invalid'
   errors: string[]
 }
+
+export interface DiscoveredPluginProviderCandidate {
+  providerId: string
+  pluginId: string
+  pluginName: string
+  manifestCapability: string
+  runtimeBinding: 'aiChat' | 'fileAnalysis' | 'screenPerception'
+  description: string
+}

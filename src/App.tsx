@@ -7,7 +7,7 @@ import {
   ensureCompanionPreferencesStoreSubscription,
   useCompanionPreferencesStore,
 } from './store/companionPreferencesStore'
-import { listProviderDescriptors } from './plugins/PluginCapabilityRegistry'
+import { listDiscoveredProviderCandidates, listProviderDescriptors } from './plugins/PluginCapabilityRegistry'
 import { ensurePluginProviderStoreSubscription, usePluginProviderStore } from './plugins/PluginProviderStore'
 import { describePluginCapabilities } from './plugins/runtime/capabilityMap'
 import { useLocalPluginDiscoveryStore } from './plugins/runtime/LocalPluginDiscoveryStore'
@@ -61,6 +61,9 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const aiProviders = listProviderDescriptors('aiChat')
   const fileProviders = listProviderDescriptors('fileAnalysis')
   const screenProviders = listProviderDescriptors('screenPerception')
+  const discoveredAiProviders = listDiscoveredProviderCandidates('aiChat')
+  const discoveredFileProviders = listDiscoveredProviderCandidates('fileAnalysis')
+  const discoveredScreenProviders = listDiscoveredProviderCandidates('screenPerception')
   const localPlugins = useLocalPluginDiscoveryStore((state) => state.plugins)
   const refreshLocalPlugins = useLocalPluginDiscoveryStore((state) => state.refresh)
 
@@ -386,6 +389,46 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               {plugin.errors.length > 0 && (
                 <div style={{ fontSize: '11px', lineHeight: 1.6, color: '#b86565' }}>
                   {plugin.errors.join(' ')}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div style={sectionTitle}>Provider Candidates</div>
+        <div style={{ marginBottom: '12px', fontSize: '12px', color: 'rgba(104, 132, 157, 0.72)', lineHeight: 1.6 }}>
+          下面这些是已经能和当前 provider 契约对齐的插件候选，但现在还没有真正注册成可执行 provider。
+        </div>
+        <div style={{ display: 'grid', gap: '10px', marginBottom: '14px' }}>
+          {[...discoveredAiProviders, ...discoveredFileProviders, ...discoveredScreenProviders].length === 0 && (
+            <div style={{ fontSize: '12px', color: 'rgba(104, 132, 157, 0.72)' }}>
+              当前还没有发现可对齐到 provider 契约的插件候选。
+            </div>
+          )}
+          {[...discoveredAiProviders, ...discoveredFileProviders, ...discoveredScreenProviders].map((provider) => (
+            <div
+              key={provider.id}
+              style={{
+                padding: '12px 14px',
+                borderRadius: '14px',
+                border: '1px solid rgba(138, 191, 230, 0.18)',
+                background: 'rgba(255,255,255,0.58)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: '#4f6880' }}>
+                  {provider.label}
+                </div>
+                <span style={pillStyle(false, '#e7b36a', true)}>
+                  Candidate
+                </span>
+              </div>
+              <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(92, 118, 143, 0.8)' }}>
+                Capability: {provider.capability} · Source: {provider.kind}
+              </div>
+              {provider.description && (
+                <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(92, 118, 143, 0.8)', marginTop: '4px' }}>
+                  {provider.description}
                 </div>
               )}
             </div>
