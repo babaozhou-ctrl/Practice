@@ -21,7 +21,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     payload: PluginAIChatExecutionRequest,
     onChunk?: (chunk: string) => void,
   ) => {
-    const channel = `plugins:ai-chat-chunk:${Date.now()}:${Math.random().toString(16).slice(2)}`
+    const requestId = payload.requestId || `plugin-ai-chat:${Date.now()}:${Math.random().toString(16).slice(2)}`
+    const channel = `plugins:ai-chat-chunk:${requestId}`
     const listener = (_event: Electron.IpcRendererEvent, chunk: string) => {
       onChunk?.(chunk)
     }
@@ -33,7 +34,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     try {
       return await ipcRenderer.invoke('plugins:run-ai-chat', {
         ...payload,
-        chunkChannel: channel,
+        requestId,
       })
     } finally {
       if (onChunk) {
@@ -41,6 +42,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       }
     }
   },
+  cancelPluginAIChat: (requestId: string) =>
+    ipcRenderer.invoke('plugins:cancel-ai-chat', { requestId }),
   onSpeech: (callback: (msg: string, dur: number) => void) => {
     ipcRenderer.on('speech:show', (_event, msg, dur) => callback(msg, dur))
   },

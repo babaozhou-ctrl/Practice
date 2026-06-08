@@ -7,7 +7,12 @@ import {
   saveImportedPetPackage,
 } from './imported-pet-storage'
 import { extractDocumentText } from './services/document-reader'
-import { listLocalPluginManifests, runPluginAIChat, runPluginFileAnalysis } from './services/plugin-host-service'
+import {
+  cancelPluginAIChat,
+  listLocalPluginManifests,
+  runPluginAIChat,
+  runPluginFileAnalysis,
+} from './services/plugin-host-service'
 import { detectActiveWindow } from './window-detector'
 
 let petWindow: BrowserWindow | null = null
@@ -207,11 +212,10 @@ function setupIPC() {
   ipcMain.handle('plugins:run-ai-chat', async (event, payload) => runPluginAIChat({
     ...payload,
     emitChunk: (chunk) => {
-      if (payload.chunkChannel) {
-        event.sender.send(payload.chunkChannel, chunk)
-      }
+      event.sender.send(`plugins:ai-chat-chunk:${payload.requestId}`, chunk)
     },
   }))
+  ipcMain.handle('plugins:cancel-ai-chat', async (_event, payload) => cancelPluginAIChat(payload.requestId))
   ipcMain.on('app:quit', () => app.quit())
 }
 

@@ -51,6 +51,7 @@ declare global {
         payload: PluginAIChatExecutionRequest,
         onChunk?: (chunk: string) => void,
       ) => Promise<string>
+      cancelPluginAIChat?: (requestId: string) => Promise<boolean>
       onSpeech?: (callback: (msg: string, dur: number) => void) => void
       onContextUpdate?: (callback: (info: { title: string; process: string; idleMs?: number }) => void) => void
       listImportedPets?: () => Promise<ImportedPetDiskPackage[]>

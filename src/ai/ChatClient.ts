@@ -12,6 +12,7 @@ export class ChatClient {
   private memory: MemoryManager
   private providerId: string
   private abortController: AbortController | null = null
+  private activePluginRequestId: string | null = null
 
   constructor(config: AIConfig, providerId = 'builtin.ai-chat.deepseek') {
     this.config = config
@@ -44,6 +45,7 @@ export class ChatClient {
     }
 
     this.abortController = new AbortController()
+    this.activePluginRequestId = `plugin-ai-chat:${Date.now()}:${Math.random().toString(16).slice(2)}`
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
@@ -60,6 +62,7 @@ export class ChatClient {
     try {
       const fullContent = await provider.streamChat(
         {
+          requestId: this.activePluginRequestId,
           config: this.config,
           systemPrompt,
           messages: this.memory.getMessages(),
@@ -87,11 +90,18 @@ export class ChatClient {
       } else {
         onError(err)
       }
+    } finally {
+      this.abortController = null
+      this.activePluginRequestId = null
     }
   }
 
   cancel() {
     this.abortController?.abort()
+
+    if (this.activePluginRequestId && window.electronAPI?.cancelPluginAIChat) {
+      void window.electronAPI.cancelPluginAIChat(this.activePluginRequestId)
+    }
   }
 
   clearMemory() {
@@ -104,5 +114,9 @@ export class ChatClient {
 
   getCompanionMemory() {
     return this.memory.getCompanionMemory()
+  }
+
+  getActivePluginRequestId(): string | null {
+    return this.activePluginRequestId
   }
 }

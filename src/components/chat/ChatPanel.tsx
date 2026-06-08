@@ -496,6 +496,11 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
     await sendPrompt(input)
   }, [input, sendPrompt])
 
+  const stopStreaming = useCallback(() => {
+    client.cancel()
+    setStreaming(false)
+  }, [client, setStreaming])
+
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
@@ -880,6 +885,11 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
         <button onClick={() => void sendMessage()} style={styles.sendBtn} disabled={isStreaming}>
           {isStreaming ? '思考中' : '发送'}
         </button>
+        {isStreaming && (
+          <button type="button" onClick={stopStreaming} style={styles.utilityBtn}>
+            Stop
+          </button>
+        )}
       </div>
     </div>
   )

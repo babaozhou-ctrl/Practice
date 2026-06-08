@@ -22,6 +22,7 @@ export interface CapabilityProviderRegistration {
 }
 
 export interface AIChatStreamRequest {
+  requestId?: string
   config: AIConfig
   systemPrompt: string
   messages: ChatMessage[]
@@ -44,6 +45,7 @@ export interface AIProviderHealthStatus {
 }
 
 export interface PluginAIChatExecutionRequest {
+  requestId?: string
   providerId: string
   config: AIConfig
   systemPrompt: string

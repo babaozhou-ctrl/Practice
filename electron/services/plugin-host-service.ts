@@ -55,11 +55,11 @@ interface PluginFileAnalysisRequest {
 }
 
 interface PluginAIChatRequest {
+  requestId: string
   providerId: string
   config: AIConfig
   systemPrompt: string
   messages: ChatMessage[]
-  chunkChannel?: string
   emitChunk?: (chunk: string) => void
 }
 
@@ -71,12 +71,17 @@ interface PluginFileAnalysisContext {
 }
 
 interface PluginAIChatContext {
+  requestId: string
   providerId: string
   pluginId: string
   pluginName: string
   config: AIConfig
   systemPrompt: string
   messages: ChatMessage[]
+}
+
+interface PluginExecutionControl {
+  isCancelled: () => boolean
 }
 
 interface PluginFileAnalysisApi {
@@ -91,6 +96,7 @@ interface PluginAIChatApi {
     context: PluginAIChatContext,
     tools: {
       emitChunk: (chunk: string) => void
+      isCancelled: () => boolean
     },
   ) => Promise<string> | string
   summarizeDocument?: (
@@ -115,9 +121,19 @@ interface PluginModuleShape {
   }
 }
 
+interface ActiveAIChatRequestRecord {
+  requestId: string
+  providerId: string
+  startedAt: number
+  cancelled: boolean
+}
+
 const PLUGINS_DIR = resolve(process.cwd(), 'plugins')
 const SUPPORTED_PLUGIN_API_VERSIONS = new Set(['1.0.0'])
 const loadedPlugins = new Map<string, LoadedPluginRecord>()
+const activeAIChatRequests = new Map<string, ActiveAIChatRequestRecord>()
+const PLUGIN_AI_CHAT_TIMEOUT_MS = 20_000
+const PLUGIN_FILE_ANALYSIS_TIMEOUT_MS = 12_000
 
 export async function listLocalPluginManifests(): Promise<PluginDiscoveryRecord[]> {
   let entries: Awaited<ReturnType<typeof readdir>> = []
@@ -185,12 +201,18 @@ export async function runPluginFileAnalysis(
     throw new Error(`插件 ${loadedPlugin.discovery.name} 没有实现 fileAnalysis provider "${providerKey}" 的 summarize。`)
   }
 
-  const result = await fileAnalysisProvider.summarize(request.content, {
-    providerId: request.providerId,
-    pluginId: loadedPlugin.discovery.id,
-    pluginName: loadedPlugin.discovery.name,
-    fileName: request.fileName,
-  })
+  const result = await withTimeout(
+    Promise.resolve(
+      fileAnalysisProvider.summarize(request.content, {
+        providerId: request.providerId,
+        pluginId: loadedPlugin.discovery.id,
+        pluginName: loadedPlugin.discovery.name,
+        fileName: request.fileName,
+      }),
+    ),
+    PLUGIN_FILE_ANALYSIS_TIMEOUT_MS,
+    `插件 ${loadedPlugin.discovery.name} 的文件分析执行超时。`,
+  )
 
   const normalized = typeof result === 'string' ? result.trim() : ''
   if (!normalized) {
@@ -215,32 +237,82 @@ export async function runPluginAIChat(
     throw new Error(`插件 ${loadedPlugin.discovery.name} 没有实现 aiChat provider "${providerKey}" 的 streamChat。`)
   }
 
+  const activeRequest: ActiveAIChatRequestRecord = {
+    requestId: request.requestId,
+    providerId: request.providerId,
+    startedAt: Date.now(),
+    cancelled: false,
+  }
+  activeAIChatRequests.set(request.requestId, activeRequest)
+
+  const control: PluginExecutionControl = {
+    isCancelled: () => {
+      const state = activeAIChatRequests.get(request.requestId)
+      return !state || state.cancelled
+    },
+  }
+
   const emitChunk = (chunk: string) => {
+    if (control.isCancelled()) {
+      return
+    }
+
     const normalizedChunk = typeof chunk === 'string' ? chunk : ''
     if (!normalizedChunk) {
       return
     }
+
     request.emitChunk?.(normalizedChunk)
   }
 
-  const result = await aiChatProvider.streamChat(
-    {
-      providerId: request.providerId,
-      pluginId: loadedPlugin.discovery.id,
-      pluginName: loadedPlugin.discovery.name,
-      config: request.config,
-      systemPrompt: request.systemPrompt,
-      messages: request.messages,
-    },
-    { emitChunk },
-  )
+  try {
+    const result = await withTimeout(
+      Promise.resolve(
+        aiChatProvider.streamChat(
+          {
+            requestId: request.requestId,
+            providerId: request.providerId,
+            pluginId: loadedPlugin.discovery.id,
+            pluginName: loadedPlugin.discovery.name,
+            config: request.config,
+            systemPrompt: request.systemPrompt,
+            messages: request.messages,
+          },
+          {
+            emitChunk,
+            isCancelled: control.isCancelled,
+          },
+        ),
+      ),
+      PLUGIN_AI_CHAT_TIMEOUT_MS,
+      `插件 ${loadedPlugin.discovery.name} 的聊天执行超时。`,
+    )
 
-  const normalized = typeof result === 'string' ? result.trim() : ''
-  if (!normalized) {
-    throw new Error(`插件 ${loadedPlugin.discovery.name} 返回了空的聊天结果。`)
+    if (control.isCancelled()) {
+      const cancelError = new Error('Plugin AI chat request was cancelled.')
+      cancelError.name = 'AbortError'
+      throw cancelError
+    }
+
+    const normalized = typeof result === 'string' ? result.trim() : ''
+    if (!normalized) {
+      throw new Error(`插件 ${loadedPlugin.discovery.name} 返回了空的聊天结果。`)
+    }
+
+    return normalized
+  } finally {
+    activeAIChatRequests.delete(request.requestId)
+  }
+}
+
+export function cancelPluginAIChat(requestId: string): boolean {
+  const record = activeAIChatRequests.get(requestId)
+  if (!record) {
+    return false
   }
 
-  return normalized
+  record.cancelled = true
+  return true
 }
 
 async function loadPluginManifestRecord(
@@ -518,4 +590,27 @@ function isPluginManifestProviderRecord(value: unknown): value is PluginManifest
       provider.capability === 'fileAnalysis' ||
       provider.capability === 'screenPerception')
   )
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error(timeoutMessage))
+    }, timeoutMs)
+
+    promise.then(
+      (value) => {
+        clearTimeout(timeoutId)
+        resolve(value)
+      },
+      (error) => {
+        clearTimeout(timeoutId)
+        reject(error)
+      },
+    )
+  })
 }

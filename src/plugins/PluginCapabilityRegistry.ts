@@ -311,6 +311,7 @@ function tryActivateDiscoveredPluginProvider(
 
           try {
             return await window.electronAPI.runPluginAIChat({
+              requestId: request.requestId,
               providerId: candidate.providerId,
               config: request.config,
               systemPrompt: request.systemPrompt,
