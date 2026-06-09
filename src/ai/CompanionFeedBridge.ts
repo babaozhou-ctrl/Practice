@@ -49,6 +49,7 @@ export function emitCompanionFeedAnalysis(payload: CompanionFeedAnalysisPayload)
 
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(COMPANION_FEED_EVENT, { detail: normalized }))
+    window.electronAPI?.emitCompanionFeedBridgePayload?.(normalized)
   }
 
   getBroadcastChannel()?.postMessage(normalized)
@@ -80,6 +81,15 @@ export function subscribeCompanionFeedAnalysis(
   }
   channel?.addEventListener('message', onMessage as EventListener)
 
+  const onElectronBridge = (payload: CompanionFeedAnalysisPayload) => {
+    const normalized = normalizePayload(payload)
+    if (normalized) {
+      persistPayload(normalized)
+      listener(normalized)
+    }
+  }
+  window.electronAPI?.onCompanionFeedBridgePayload?.(onElectronBridge)
+
   return () => {
     window.removeEventListener(COMPANION_FEED_EVENT, onInternal as EventListener)
     channel?.removeEventListener('message', onMessage as EventListener)
@@ -103,6 +113,22 @@ export function readCompanionFeedAnalyses(): CompanionFeedAnalysisPayload[] {
     }
 
     return parsed
+      .map((item) => normalizePayload(item))
+      .filter((item): item is CompanionFeedAnalysisPayload => Boolean(item))
+      .sort((left, right) => left.createdAt - right.createdAt)
+  } catch {
+    return []
+  }
+}
+
+export async function readCompanionFeedAnalysesFromBridge(): Promise<CompanionFeedAnalysisPayload[]> {
+  try {
+    const payloads = await window.electronAPI?.readCompanionFeedBridgeHistory?.()
+    if (!Array.isArray(payloads)) {
+      return []
+    }
+
+    return payloads
       .map((item) => normalizePayload(item))
       .filter((item): item is CompanionFeedAnalysisPayload => Boolean(item))
       .sort((left, right) => left.createdAt - right.createdAt)

@@ -14,6 +14,12 @@ import {
 } from './context/ScreenPerceptionSync'
 import { classifyActivity } from './context/ActivityClassifier'
 import { useContextStore } from './store/contextStore'
+import {
+  buildCompanionBriefSummary,
+  buildCompanionDesktopSummary,
+  buildFileAnalysisUtterance,
+} from './ai/CompanionDesktopSummary'
+import { buildCompanionChatContext } from './ai/CompanionContextAdapter'
 import { buildCompanionActionPayload } from './domain/companion/CompanionActionContent'
 import { CompanionBehaviorStabilizer } from './domain/companion/CompanionBehaviorStabilizer'
 import { CompanionSpeechPolicy, type SpeechSource } from './domain/companion/CompanionSpeechPolicy'
@@ -23,6 +29,7 @@ import { attachWorkModeToSnapshot } from './domain/companion/attachWorkModeToSna
 import type { CompanionSnapshot } from './domain/companion/types'
 import { readCompanionPreferencesState, subscribeCompanionPreferences } from './preferences/CompanionPreferencesStore'
 import { subscribeSelectedPet } from './pets/PetSelectionStore'
+import { loadPetPackageById } from './pets/registry/builtInPetRegistry'
 import { resolvePetPresentation } from './pets/loader/resolvePetPresentation'
 import { resolveSelectedPetPackage } from './pets/resolveSelectedPetPackage'
 import { ensurePluginProviderStoreSubscription } from './plugins/PluginProviderStore'
@@ -30,7 +37,15 @@ import { PetDragController } from './rendering/controllers/PetDragController'
 import { PixiPetRuntime } from './rendering/pixi/PixiPetRuntime'
 import { buildRuntimeTextureSetForPetPackage } from './rendering/pixi/pixelTextureFactory'
 import { ensurePixiLoaded } from './rendering/pixi/pixiVendor'
-import { analyzeFileForCompanionFeed } from './services/companionFeedAnalysis'
+import {
+  readCompanionSettingsPreviewState,
+  subscribeCompanionSettingsPreview,
+  type CompanionSettingsPreviewState,
+} from './settings/CompanionSettingsPreviewStore'
+import { analyzeFileForCompanionFeed, buildFeedFollowUpActionsForScene } from './services/companionFeedAnalysis'
+import type { PetCompanionContentProfile } from './shared/types/petPackage'
+import type { BuiltInPetPackage } from './shared/types/petPackage'
+import { readChatRuntimeState, subscribeChatRuntimeState, type ChatRuntimeState } from './store/chatStore'
 import { readWorkModeState, subscribeWorkMode } from './workmode/WorkModeStore'
 import { WorkModeRuntime } from './workmode/WorkModeRuntime'
 
@@ -62,6 +77,28 @@ const FEED_ERROR_SEQUENCE = [
   { state: 'THINKING' as const, holdMs: 320 },
   { state: 'IDLE' as const, holdMs: 520 },
 ]
+const PREVIEW_APPLIED_SEQUENCE = [
+  { state: 'HAPPY' as const, holdMs: 420 },
+  { state: 'EXCITED' as const, holdMs: 320 },
+  { state: 'IDLE' as const, holdMs: 280 },
+]
+const PREVIEW_DISMISSED_SEQUENCE = [
+  { state: 'THINKING' as const, holdMs: 260 },
+  { state: 'IDLE' as const, holdMs: 360 },
+]
+const DEFAULT_SCENE_SHIFT_TO_BREAK_SEQUENCE = [
+  { state: 'HAPPY' as const, holdMs: 320 },
+  { state: 'IDLE' as const, holdMs: 280 },
+]
+const DEFAULT_SCENE_SHIFT_TO_FOCUS_SEQUENCE = [
+  { state: 'THINKING' as const, holdMs: 340 },
+  { state: 'IDLE' as const, holdMs: 240 },
+]
+const DEFAULT_SCENE_SHIFT_TO_WATCH_SEQUENCE = [
+  { state: 'THINKING' as const, holdMs: 260 },
+  { state: 'HAPPY' as const, holdMs: 240 },
+  { state: 'IDLE' as const, holdMs: 220 },
+]
 const FEED_THINKING_LINES = [
   '那我先抱走啦，稍微想一想。',
   '好哦，我先替你看一会儿。',
@@ -79,7 +116,7 @@ interface SpeechPresentation {
 interface FeedCardController {
   showConfirm(file: File, onAccept: () => void, onReject: () => void): void
   showThinking(fileName: string): void
-  showResult(fileName: string, summary: string, onOpenChat: () => void): void
+  showResult(fileName: string, desktopSummary: string, onOpenChat: () => void): void
   showError(message: string): void
   setDragActive(active: boolean): void
   setCopy(copy: FeedCardCopy): void
@@ -91,10 +128,41 @@ interface FeedCardCopy {
   petName: string
   confirmTitle: string
   thinkingTitle: string
+  resultTitle: string
+  errorTitle: string
+  confirmAcceptLabel: string
+  confirmRejectLabel: string
+  resultOpenChatLabel: string
+  resultLaterLabel: string
+  confirmBody: string
+  thinkingBody: string
+  resultBody: string
 }
+
+interface RuntimeCompanionState {
+  lowDistractionMode: boolean
+  chatRuntimeState: ChatRuntimeState
+  previewState: CompanionSettingsPreviewState
+}
+
+type CompanionBridgeSequence = Array<{ state: 'IDLE' | 'HAPPY' | 'THINKING' | 'EXCITED'; holdMs: number }>
 
 function randomFrom<T>(items: readonly T[]): T {
   return items[Math.floor(Math.random() * items.length)]
+}
+
+function emitAutomationMetricEvent(
+  name: string,
+  options?: {
+    value?: number
+    tags?: Record<string, string | number | boolean | null>
+  },
+) {
+  window.electronAPI?.emitAutomationMetricsEvent?.({
+    name,
+    value: options?.value,
+    tags: options?.tags,
+  })
 }
 
 function sanitizeDesktopTextStable(value: string): string {
@@ -145,24 +213,6 @@ function sanitizeDesktopText(value: string): string {
     .replace(/鍏堣鐫€/g, '先记着')
     .replace(/鎴戠湅瀹屽暒/g, '我看完啦')
     .replace(/杩欐娌℃帴濂?/g, '这次没接好')
-}
-
-function formatSpeechKicker(name?: string | null): string {
-  const trimmed = name?.trim()
-  if (!trimmed) {
-    return DEFAULT_SPEECH_KICKER
-  }
-
-  return `${trimmed}陪着你`
-}
-
-function buildFeedCardCopy(name?: string | null): FeedCardCopy {
-  const petName = name?.trim() || 'bb7'
-  return {
-    petName,
-    confirmTitle: `${petName} 接住文件啦`,
-    thinkingTitle: `${petName} 正在看`,
-  }
 }
 
 class SpeechBubbleController {
@@ -230,253 +280,6 @@ class SpeechBubbleController {
 
   getActiveUntil() {
     return this.activeUntil
-  }
-}
-
-function createFeedCardController(
-  highlightEl: HTMLElement,
-  cardEl: HTMLElement,
-): FeedCardController {
-  let cardTimer: number | null = null
-  let activeMode: FeedCardMode | null = null
-  let copy = buildFeedCardCopy()
-
-  const clearCardTimer = () => {
-    if (cardTimer) {
-      window.clearTimeout(cardTimer)
-      cardTimer = null
-    }
-  }
-
-  const hide = () => {
-    clearCardTimer()
-    activeMode = null
-    highlightEl.classList.remove('show')
-    cardEl.classList.remove('show')
-    cardEl.replaceChildren()
-  }
-
-  const showCard = (mode: FeedCardMode, title: string, text: string) => {
-    clearCardTimer()
-    activeMode = mode
-    cardEl.dataset.mode = mode
-    cardEl.replaceChildren()
-
-    const titleEl = document.createElement('div')
-    titleEl.className = 'feed-title'
-    titleEl.textContent = sanitizeDesktopTextStable(title)
-
-    const textEl = document.createElement('div')
-    textEl.className = 'feed-text'
-    textEl.textContent = sanitizeDesktopTextStable(text)
-
-    cardEl.appendChild(titleEl)
-    cardEl.appendChild(textEl)
-    cardEl.classList.add('show')
-  }
-
-  return {
-    showConfirm(file, onAccept, onReject) {
-      showCard(
-        'confirm',
-        copy.confirmTitle,
-        `要把《${file.name}》喂给我吗？我会先轻轻看一遍，再把更完整的内容放进聊天里。`,
-      )
-
-      const actionsEl = document.createElement('div')
-      actionsEl.className = 'feed-actions'
-
-      const rejectBtn = document.createElement('button')
-      rejectBtn.textContent = '先不喂了'
-      rejectBtn.onclick = () => {
-        onReject()
-        hide()
-      }
-
-      const acceptBtn = document.createElement('button')
-      acceptBtn.textContent = '喂给你'
-      acceptBtn.className = 'primary'
-      acceptBtn.onclick = () => {
-        onAccept()
-      }
-
-      actionsEl.appendChild(rejectBtn)
-      actionsEl.appendChild(acceptBtn)
-      cardEl.appendChild(actionsEl)
-      cardEl.classList.add('show')
-    },
-    showThinking(fileName) {
-      showCard(
-        'thinking',
-        copy.thinkingTitle,
-        `我先看看《${fileName}》。稍微等我一下，我会先在桌面轻轻告诉你几句话，再把更完整的整理放进聊天里。`,
-      )
-      const pulse = document.createElement('div')
-      pulse.className = 'feed-pulse'
-      cardEl.appendChild(pulse)
-    },
-    showResult(fileName, summary, onOpenChat) {
-      showCard('done', '我看完啦', `《${fileName}》我先帮你顺了一遍。\n${summary}\n\n更完整的内容已经放进聊天里了。`)
-
-      const actionsEl = document.createElement('div')
-      actionsEl.className = 'feed-actions'
-
-      const laterBtn = document.createElement('button')
-      laterBtn.textContent = '先记着'
-      laterBtn.onclick = () => {
-        hide()
-      }
-
-      const openBtn = document.createElement('button')
-      openBtn.textContent = '打开聊天'
-      openBtn.className = 'primary'
-      openBtn.onclick = () => {
-        onOpenChat()
-        hide()
-      }
-
-      actionsEl.appendChild(laterBtn)
-      actionsEl.appendChild(openBtn)
-      cardEl.appendChild(actionsEl)
-
-      clearCardTimer()
-      cardTimer = window.setTimeout(() => {
-        if (activeMode === 'done') {
-          hide()
-        }
-      }, 7_000)
-    },
-    showError(message) {
-      showCard('done', '这次没接好', message)
-      clearCardTimer()
-      cardTimer = window.setTimeout(() => {
-        if (activeMode === 'done') {
-          hide()
-        }
-      }, 3_800)
-    },
-    setDragActive(active) {
-      if (active) {
-        highlightEl.classList.add('show')
-      } else if (activeMode !== 'confirm' && activeMode !== 'thinking') {
-        highlightEl.classList.remove('show')
-      }
-    },
-    setCopy(next) {
-      copy = next
-    },
-    hide,
-    destroy() {
-      hide()
-    },
-  }
-}
-
-function deriveSpeechPresentation(
-  snapshot: ReturnType<CompanionStateMachine['getSnapshot']>,
-  message: string,
-): SpeechPresentation {
-  if (snapshot.transientAction === 'tap_affection') {
-    return { tone: 'warm', kicker: '摸摸收到' }
-  }
-  if (snapshot.transientAction === 'welcome_back') {
-    return { tone: 'warm', kicker: '你回来啦' }
-  }
-  if (snapshot.transientAction === 'dragging') {
-    return { tone: 'playful', kicker: '跟着你走' }
-  }
-  if (snapshot.mode === 'focus_guardian') {
-    return { tone: 'focus', kicker: '安静陪写' }
-  }
-
-  switch (snapshot.scene.id) {
-    case 'deep_focus':
-      return { tone: 'focus', kicker: '专心一点' }
-    case 'steady_focus':
-      return { tone: 'focus', kicker: '陪你盯着' }
-    case 'reading_nook':
-      return { tone: 'quiet', kicker: '一起读着' }
-    case 'watch_together':
-      return { tone: 'warm', kicker: '陪你一起看' }
-    case 'social_corner':
-      return { tone: 'playful', kicker: '在你旁边' }
-    case 'play_session':
-      return { tone: 'playful', kicker: '悄悄围观' }
-    case 'late_night_wind_down':
-      return { tone: 'quiet', kicker: '夜深啦' }
-    case 'quiet_idle':
-      return { tone: 'quiet', kicker: '安静陪着' }
-    case 'soft_browsing':
-      return { tone: 'warm', kicker: '慢慢看看' }
-    case 'ambient_presence':
-      return { tone: 'warm', kicker: '陪你待着' }
-    case 'away':
-      return { tone: 'quiet', kicker: '替你看位' }
-  }
-
-  if (snapshot.mode === 'proactive') {
-    return { tone: 'warm', kicker: '轻轻提醒' }
-  }
-  if (snapshot.mode === 'reactive' && snapshot.emotion === 'happy') {
-    return { tone: 'playful', kicker: '有点开心' }
-  }
-  if (snapshot.emotion === 'sleepy') {
-    return { tone: 'quiet', kicker: '夜深啦' }
-  }
-  if (snapshot.scene.energy === 'bright') {
-    return { tone: 'playful', kicker: '有点开心' }
-  }
-  if (snapshot.scene.energy === 'low') {
-    return { tone: 'quiet', kicker: '安静陪着' }
-  }
-  if (message.length <= 8) {
-    return { tone: 'playful', kicker: '小声回应' }
-  }
-
-  return { tone: 'quiet', kicker: DEFAULT_SPEECH_KICKER }
-}
-
-function setupContextMenu(menu: HTMLElement) {
-  const items: Array<{ label?: string; action?: () => void; divider?: boolean; danger?: boolean }> = [
-    { label: '打开聊天', action: () => window.electronAPI?.openChat?.() },
-    { label: '打开设置', action: () => window.electronAPI?.openSettings?.() },
-    { divider: true },
-    { label: '切换穿透', action: () => window.electronAPI?.toggleClickThrough?.() },
-    { divider: true },
-    { label: '退出 Deep Pet', action: () => window.electronAPI?.quitApp?.(), danger: true },
-  ]
-
-  const hide = () => menu.classList.remove('show')
-  menu.innerHTML = ''
-
-  for (const item of items) {
-    if ('divider' in item) {
-      const divider = document.createElement('div')
-      divider.className = 'd'
-      menu.appendChild(divider)
-      continue
-    }
-
-    const entry = document.createElement('div')
-    entry.className = 'i'
-    entry.textContent = item.label ?? ''
-    if (item.danger) {
-      entry.style.color = 'rgba(255, 170, 170, 0.95)'
-    }
-    entry.onclick = () => {
-      hide()
-      item.action?.()
-    }
-    menu.appendChild(entry)
-  }
-
-  return {
-    show(x: number, y: number) {
-      menu.style.left = `${x}px`
-      menu.style.top = `${y}px`
-      menu.classList.add('show')
-    },
-    hide,
   }
 }
 
@@ -594,13 +397,360 @@ function getStableSpeechPresentation(
   return { tone: 'quiet', kicker: getStableSpeechKicker(snapshot, message) }
 }
 
+function getRuntimeAwareSpeechKicker(
+  snapshot: ReturnType<CompanionStateMachine['getSnapshot']>,
+  message: string,
+  chatRuntimeState: ChatRuntimeState,
+  source: SpeechSource,
+): string {
+  const workMode = snapshot.workMode
+
+  if (workMode?.enabled && workMode.overworkLevel === 'firm') {
+    return '先停一下'
+  }
+
+  if (workMode?.enabled && workMode.isBreakActive) {
+    return workMode.phase === 'long_break' ? '好好歇一会儿' : '休息一下'
+  }
+
+  if (workMode?.enabled && workMode.isPaused) {
+    return '先缓一缓'
+  }
+
+  if (source === 'startup') {
+    if (!chatRuntimeState.enabled) return '先陪着你'
+    if (!chatRuntimeState.isConnected) return '等我连上'
+    return '随时接住你'
+  }
+
+  if (!chatRuntimeState.enabled) {
+    if (snapshot.activity === 'coding' || snapshot.mode === 'focus_guardian') {
+      return '安静陪写'
+    }
+    return '先陪着你'
+  }
+
+  if (!chatRuntimeState.isConnected) {
+    if (snapshot.mode === 'focus_guardian' || snapshot.scene.id === 'deep_focus' || snapshot.scene.id === 'steady_focus') {
+      return '安静陪写'
+    }
+    return '先安静陪着'
+  }
+
+  return getStableSpeechKicker(snapshot, message)
+}
+
+function getRuntimeAwareSpeechPresentation(
+  snapshot: ReturnType<CompanionStateMachine['getSnapshot']>,
+  message: string,
+  chatRuntimeState: ChatRuntimeState,
+  source: SpeechSource,
+): SpeechPresentation {
+  const workMode = snapshot.workMode
+  const kicker = getRuntimeAwareSpeechKicker(snapshot, message, chatRuntimeState, source)
+
+  if (workMode?.enabled && workMode.overworkLevel === 'firm') {
+    return { tone: 'quiet', kicker }
+  }
+
+  if (workMode?.enabled && workMode.isBreakActive) {
+    return { tone: 'warm', kicker }
+  }
+
+  if (workMode?.enabled && workMode.isFocusActive) {
+    return { tone: 'focus', kicker }
+  }
+
+  if (source === 'startup' && (!chatRuntimeState.enabled || !chatRuntimeState.isConnected)) {
+    return { tone: 'quiet', kicker }
+  }
+
+  if (!chatRuntimeState.enabled || !chatRuntimeState.isConnected) {
+    if (snapshot.mode === 'proactive' || snapshot.scene.id === 'ambient_presence' || snapshot.scene.id === 'quiet_idle') {
+      return { tone: 'quiet', kicker }
+    }
+  }
+
+  const basePresentation = getStableSpeechPresentation(snapshot, message)
+  return {
+    ...basePresentation,
+    kicker,
+  }
+}
+
+function buildChatRuntimeStateSpeech(
+  previous: ChatRuntimeState,
+  next: ChatRuntimeState,
+  petName?: string | null,
+): { message: string; duration: number; presentation: SpeechPresentation } | null {
+  const name = petName?.trim() || 'bb7'
+
+  if (!previous.enabled && next.enabled && next.isConnected) {
+    return {
+      message: `${name} 现在已经能接住你说的话了。想聊的时候就叫我。`,
+      duration: 2_800,
+      presentation: { tone: 'warm', kicker: '已经连好了' },
+    }
+  }
+
+  if (!previous.enabled && next.enabled && !next.isConnected) {
+    return {
+      message: `聊天已经打开了，不过我还在等连上。先让我安静陪着你。`,
+      duration: 2_800,
+      presentation: { tone: 'quiet', kicker: '等我连上' },
+    }
+  }
+
+  if (previous.enabled && !next.enabled) {
+    return {
+      message: `我先把聊天收起来啦，接下来会更安静地陪着你。`,
+      duration: 2_600,
+      presentation: { tone: 'quiet', kicker: '先陪着你' },
+    }
+  }
+
+  if (previous.enabled && !previous.isConnected && next.isConnected) {
+    return {
+      message: `聊天这边已经连好了。我现在能更稳地接住你。`,
+      duration: 2_800,
+      presentation: { tone: 'warm', kicker: '已经连好了' },
+    }
+  }
+
+  if (previous.enabled && previous.isConnected && !next.isConnected) {
+    return {
+      message: `聊天这边暂时没连稳，不过我还会在桌面安静陪着你。`,
+      duration: 3_000,
+      presentation: { tone: 'quiet', kicker: '先安静陪着' },
+    }
+  }
+
+  return null
+}
+
+function buildSettingsPreviewSpeech(
+  previous: CompanionSettingsPreviewState,
+  next: CompanionSettingsPreviewState,
+  petName: string,
+): { message: string; duration: number; presentation: SpeechPresentation } | null {
+  if (!next.active) {
+    if (previous.active) {
+      switch (next.exitReason) {
+        case 'applied':
+          return {
+            message: `那我就按刚才的感觉正式陪着你了。接下来会稳稳待在这个状态里。`,
+            duration: 2_500,
+            presentation: { tone: 'warm', kicker: '已经定下来啦' },
+          }
+        case 'dismissed':
+          return {
+            message: '这轮预演我先轻轻收回来啦。你想继续试的时候，再叫我一声就好。',
+            duration: 2_500,
+            presentation: { tone: 'quiet', kicker: '先记着' },
+          }
+        case 'stale':
+          return {
+            message: '刚才那份预览我先放下了，不过我还记得你想试的感觉。',
+            duration: 2_400,
+            presentation: { tone: 'quiet', kicker: '我先收着' },
+          }
+        default:
+          return {
+            message: '这轮预览先停在这里，我会回到现在正式在用的陪伴状态。',
+            duration: 2_300,
+            presentation: { tone: 'quiet', kicker: '回到现在' },
+          }
+      }
+    }
+    return null
+  }
+
+  if (!previous.active || previous.selectedPetId !== next.selectedPetId) {
+    return {
+      message: `现在先用 ${petName} 陪你预演一下，看看桌面上的感觉合不合适。`,
+      duration: 2_800,
+      presentation: { tone: 'warm', kicker: '先陪你试试' },
+    }
+  }
+
+  if (previous.lowDistractionMode !== next.lowDistractionMode && next.lowDistractionMode !== null) {
+    return next.lowDistractionMode
+      ? {
+          message: '我先把存在感放轻一点，尽量更安静地陪着你。',
+          duration: 2_500,
+          presentation: { tone: 'quiet', kicker: '先安静一点' },
+        }
+      : {
+          message: '那我就稍微更有存在感一点，陪你的时候也会更灵一点。',
+          duration: 2_500,
+          presentation: { tone: 'warm', kicker: '靠近一点' },
+        }
+  }
+
+  if (previous.chatEnabled !== next.chatEnabled && next.chatEnabled !== null) {
+    return next.chatEnabled
+      ? {
+          message: '聊天这边我也先一起打开了，想试试对话状态的话可以直接看现在的感觉。',
+          duration: 2_600,
+          presentation: { tone: 'warm', kicker: '先接住你' },
+        }
+      : {
+          message: '那我先把聊天收一收，回到更安静的陪伴状态。',
+          duration: 2_500,
+          presentation: { tone: 'quiet', kicker: '先陪着你' },
+        }
+  }
+
+  return null
+}
+
+function resolveConfiguredBridgeSequence(
+  petPackage: BuiltInPetPackage,
+  key: 'focusToBreak' | 'breakToFocus' | 'focusToWatch' | 'watchToFocus',
+) {
+  const configured = petPackage.companionContent?.bridgeMotions?.[key]
+  if (!configured || configured.length === 0) {
+    switch (key) {
+      case 'focusToBreak':
+        return DEFAULT_SCENE_SHIFT_TO_BREAK_SEQUENCE
+      case 'breakToFocus':
+        return DEFAULT_SCENE_SHIFT_TO_FOCUS_SEQUENCE
+      case 'focusToWatch':
+        return DEFAULT_SCENE_SHIFT_TO_WATCH_SEQUENCE
+      case 'watchToFocus':
+        return DEFAULT_SCENE_SHIFT_TO_FOCUS_SEQUENCE
+    }
+  }
+
+  return configured.map((step) => ({
+    state: step.state,
+    holdMs: step.holdMs,
+  }))
+}
+
+function resolveSceneBridgeSequence(
+  petPackage: BuiltInPetPackage,
+  previous: CompanionSnapshot | null,
+  next: CompanionSnapshot,
+): CompanionBridgeSequence | null {
+  if (!previous) {
+    return null
+  }
+
+  const previousSceneId = previous.scene.id
+  const nextSceneId = next.scene.id
+  const previousPhase = previous.workMode?.phase ?? 'idle'
+  const nextPhase = next.workMode?.phase ?? 'idle'
+
+  if (previousPhase !== nextPhase) {
+    if (nextPhase === 'short_break' || nextPhase === 'long_break') {
+      return resolveConfiguredBridgeSequence(petPackage, 'focusToBreak')
+    }
+    if (nextPhase === 'focus') {
+      return resolveConfiguredBridgeSequence(petPackage, 'breakToFocus')
+    }
+  }
+
+  if (previousSceneId !== nextSceneId) {
+    if (
+      (previousSceneId === 'deep_focus' || previousSceneId === 'steady_focus' || previousSceneId === 'reading_nook') &&
+      nextSceneId === 'watch_together'
+    ) {
+      return resolveConfiguredBridgeSequence(petPackage, 'focusToWatch')
+    }
+
+    if (
+      (previousSceneId === 'watch_together' || previousSceneId === 'soft_browsing') &&
+      (nextSceneId === 'deep_focus' || nextSceneId === 'steady_focus')
+    ) {
+      return resolveConfiguredBridgeSequence(petPackage, 'watchToFocus')
+    }
+  }
+
+  return null
+}
+
 function getStableFeedCardCopy(name?: string | null): FeedCardCopy {
   const petName = name?.trim() || 'bb7'
   return {
     petName,
     confirmTitle: `${petName} \u63a5\u4f4f\u6587\u4ef6\u5566`,
     thinkingTitle: `${petName} \u6b63\u5728\u770b\u5462`,
+    resultTitle: `${petName} \u770b\u5b8c\u5566`,
+    errorTitle: `${petName} \u8fd9\u6b21\u6ca1\u63a5\u7a33`,
+    confirmAcceptLabel: '\u4ea4\u7ed9\u4f60',
+    confirmRejectLabel: '\u5148\u653e\u4e00\u4e0b',
+    resultOpenChatLabel: '\u7ee7\u7eed\u804a\u8fd9\u4e2a',
+    resultLaterLabel: '\u5148\u8bb0\u7740',
+    confirmBody:
+      '\u8981\u628a\u300a{{fileName}}\u300b\u4ea4\u7ed9{{petName}}\u5417\uff1f\u6211\u4f1a\u5148\u8f7b\u8f7b\u770b\u4e00\u904d\uff0c\u5148\u5728\u684c\u9762\u7559\u51e0\u53e5\u77ed\u77ed\u7684\u5c0f\u7ed3\uff0c\u518d\u628a\u66f4\u5b8c\u6574\u7684\u6574\u7406\u653e\u8fdb\u804a\u5929\u91cc\u966a\u4f60\u7ee7\u7eed\u5f80\u4e0b\u770b\u3002',
+    thinkingBody:
+      '{{petName}}\u5148\u62b1\u7740\u300a{{fileName}}\u300b\u770b\u4e00\u4f1a\u513f\u3002\u7a0d\u5fae\u7b49\u6211\u4e00\u4e0b\uff0c\u6211\u5148\u5728\u684c\u9762\u8f7b\u8f7b\u544a\u8bc9\u4f60\u6700\u503c\u5f97\u5728\u610f\u7684\u90a3\u51e0\u53e5\uff0c\u518d\u628a\u66f4\u5b8c\u6574\u7684\u6574\u7406\u653e\u5230\u804a\u5929\u91cc\u3002',
+    resultBody:
+      '\u300a{{fileName}}\u300b\u6211\u5148\u66ff\u4f60\u987a\u8fc7\u4e00\u904d\u4e86\u3002\n{{desktopSummary}}\n\n\u66f4\u5b8c\u6574\u7684\u6574\u7406\u5df2\u7ecf\u5728\u804a\u5929\u91cc\u7b49\u4f60\u4e86\uff0c\u4f60\u60f3\u7ee7\u7eed\u7684\u8bdd\uff0c{{petName}}\u5c31\u966a\u4f60\u5f80\u4e0b\u770b\u3002',
   }
+}
+
+function resolveFeedCardCopy(
+  petName?: string | null,
+  companionContent?: PetCompanionContentProfile | null,
+): FeedCardCopy {
+  const fallback = getStableFeedCardCopy(petName)
+  const profile = companionContent?.feedCard
+  if (!profile) {
+    return fallback
+  }
+
+  return {
+    ...fallback,
+    confirmTitle: profile.confirmTitle.trim() || fallback.confirmTitle,
+    thinkingTitle: profile.thinkingTitle.trim() || fallback.thinkingTitle,
+    resultTitle: profile.resultTitle.trim() || fallback.resultTitle,
+    errorTitle: profile.errorTitle.trim() || fallback.errorTitle,
+    confirmAcceptLabel: profile.confirmAcceptLabel.trim() || fallback.confirmAcceptLabel,
+    confirmRejectLabel: profile.confirmRejectLabel.trim() || fallback.confirmRejectLabel,
+    resultOpenChatLabel: profile.resultOpenChatLabel.trim() || fallback.resultOpenChatLabel,
+    resultLaterLabel: profile.resultLaterLabel.trim() || fallback.resultLaterLabel,
+    confirmBody: profile.confirmBody.trim() || fallback.confirmBody,
+    thinkingBody: profile.thinkingBody.trim() || fallback.thinkingBody,
+    resultBody: profile.resultBody.trim() || fallback.resultBody,
+  }
+}
+
+function renderFeedCardTemplate(
+  template: string,
+  params: {
+    petName: string
+    fileName: string
+    desktopSummary?: string
+  },
+): string {
+  return template
+    .replace(/\{\{petName\}\}/g, params.petName)
+    .replace(/\{\{fileName\}\}/g, params.fileName)
+    .replace(/\{\{desktopSummary\}\}/g, params.desktopSummary ?? '')
+}
+
+function buildFeedConfirmCardText(copy: FeedCardCopy, fileName: string): string {
+  return renderFeedCardTemplate(copy.confirmBody, {
+    petName: copy.petName,
+    fileName,
+  })
+}
+
+function buildFeedThinkingCardText(copy: FeedCardCopy, fileName: string): string {
+  return renderFeedCardTemplate(copy.thinkingBody, {
+    petName: copy.petName,
+    fileName,
+  })
+}
+
+function buildFeedResultCardText(copy: FeedCardCopy, fileName: string, desktopSummary: string): string {
+  return renderFeedCardTemplate(copy.resultBody, {
+    petName: copy.petName,
+    fileName,
+    desktopSummary,
+  })
 }
 
 function createStableFeedCardController(
@@ -650,21 +800,21 @@ function createStableFeedCardController(
       showCard(
         'confirm',
         copy.confirmTitle,
-        `\u8981\u628a\u300a${file.name}\u300b\u5582\u7ed9\u6211\u5417\uff1f\u6211\u4f1a\u5148\u8f7b\u8f7b\u770b\u4e00\u904d\uff0c\u518d\u628a\u66f4\u5b8c\u6574\u7684\u5185\u5bb9\u653e\u8fdb\u804a\u5929\u91cc\u3002`,
+        buildFeedConfirmCardText(copy, file.name),
       )
 
       const actionsEl = document.createElement('div')
       actionsEl.className = 'feed-actions'
 
       const rejectBtn = document.createElement('button')
-      rejectBtn.textContent = '\u5148\u4e0d\u5582\u4e86'
+      rejectBtn.textContent = copy.confirmRejectLabel
       rejectBtn.onclick = () => {
         onReject()
         hide()
       }
 
       const acceptBtn = document.createElement('button')
-      acceptBtn.textContent = '\u5582\u7ed9\u4f60'
+      acceptBtn.textContent = copy.confirmAcceptLabel
       acceptBtn.className = 'primary'
       acceptBtn.onclick = () => {
         onAccept()
@@ -679,30 +829,30 @@ function createStableFeedCardController(
       showCard(
         'thinking',
         copy.thinkingTitle,
-        `\u6211\u5148\u770b\u770b\u300a${fileName}\u300b\u3002\u7a0d\u5fae\u7b49\u6211\u4e00\u4e0b\uff0c\u6211\u4f1a\u5148\u5728\u684c\u9762\u8f7b\u8f7b\u544a\u8bc9\u4f60\u51e0\u53e5\u8bdd\uff0c\u518d\u628a\u66f4\u5b8c\u6574\u7684\u6574\u7406\u653e\u8fdb\u804a\u5929\u91cc\u3002`,
+        buildFeedThinkingCardText(copy, fileName),
       )
       const pulse = document.createElement('div')
       pulse.className = 'feed-pulse'
       cardEl.appendChild(pulse)
     },
-    showResult(fileName, summary, onOpenChat) {
+    showResult(fileName, desktopSummary, onOpenChat) {
       showCard(
         'done',
-        '\u6211\u770b\u5b8c\u5566',
-        `\u300a${fileName}\u300b\u6211\u5148\u5e2e\u4f60\u987a\u4e86\u4e00\u904d\u3002\n${summary}\n\n\u66f4\u5b8c\u6574\u7684\u5185\u5bb9\u5df2\u7ecf\u653e\u8fdb\u804a\u5929\u91cc\u4e86\u3002`,
+        copy.resultTitle,
+        buildFeedResultCardText(copy, fileName, desktopSummary),
       )
 
       const actionsEl = document.createElement('div')
       actionsEl.className = 'feed-actions'
 
       const laterBtn = document.createElement('button')
-      laterBtn.textContent = '\u5148\u8bb0\u7740'
+      laterBtn.textContent = copy.resultLaterLabel
       laterBtn.onclick = () => {
         hide()
       }
 
       const openBtn = document.createElement('button')
-      openBtn.textContent = '\u6253\u5f00\u804a\u5929'
+      openBtn.textContent = copy.resultOpenChatLabel
       openBtn.className = 'primary'
       openBtn.onclick = () => {
         onOpenChat()
@@ -721,7 +871,7 @@ function createStableFeedCardController(
       }, 7_000)
     },
     showError(message) {
-      showCard('done', '\u8fd9\u6b21\u6ca1\u63a5\u597d', message)
+      showCard('done', copy.errorTitle, message)
       clearCardTimer()
       cardTimer = window.setTimeout(() => {
         if (activeMode === 'done') {
@@ -746,129 +896,150 @@ function createStableFeedCardController(
   }
 }
 
-function setupStableContextMenu(menu: HTMLElement) {
-  const items: Array<{ label?: string; action?: () => void; divider?: boolean; danger?: boolean }> = [
-    { label: '\u6253\u5f00\u804a\u5929', action: () => window.electronAPI?.openChat?.() },
-    { label: '\u6253\u5f00\u8bbe\u7f6e', action: () => window.electronAPI?.openSettings?.() },
-    { divider: true },
-    { label: '\u5207\u6362\u7a7f\u900f', action: () => window.electronAPI?.toggleClickThrough?.() },
-    { divider: true },
-    { label: '\u9000\u51fa Deep Pet', action: () => window.electronAPI?.quitApp?.(), danger: true },
-  ]
-
+function setupStableContextMenu(menu: HTMLElement, options: { getSnapshot: () => CompanionSnapshot | null }) {
   const hide = () => menu.classList.remove('show')
   menu.innerHTML = ''
 
-  for (const item of items) {
-    if (item.divider) {
-      const divider = document.createElement('div')
-      divider.className = 'd'
-      menu.appendChild(divider)
-      continue
-    }
+  const buildChip = (content: string) => {
+    const chip = document.createElement('span')
+    chip.className = 'ctx-chip'
+    chip.textContent = content
+    return chip
+  }
 
-    const entry = document.createElement('div')
-    entry.className = 'i'
-    entry.textContent = item.label ?? ''
-    if (item.danger) {
-      entry.style.color = 'rgba(255, 170, 170, 0.95)'
-    }
+  const createSection = (title: string) => {
+    const section = document.createElement('div')
+    section.className = 'ctx-section'
+
+    const titleEl = document.createElement('div')
+    titleEl.className = 'ctx-section-title'
+    titleEl.textContent = title
+    section.appendChild(titleEl)
+
+    return section
+  }
+
+  const createItem = (label: string, meta: string, action: () => void, options?: { danger?: boolean; primary?: boolean }) => {
+    const entry = document.createElement('button')
+    entry.type = 'button'
+    entry.className = `ctx-item${options?.danger ? ' danger' : ''}${options?.primary ? ' primary' : ''}`
+
+    const labelEl = document.createElement('div')
+    labelEl.className = 'ctx-item-label'
+    labelEl.textContent = label
+
+    const metaEl = document.createElement('div')
+    metaEl.className = 'ctx-item-meta'
+    metaEl.textContent = meta
+
+    entry.appendChild(labelEl)
+    entry.appendChild(metaEl)
     entry.onclick = () => {
       hide()
-      item.action?.()
+      action()
     }
-    menu.appendChild(entry)
+
+    return entry
   }
+
+  const render = () => {
+    menu.innerHTML = ''
+
+    const petName = resolveSelectedPetPackage().manifest.name || 'bb7'
+    const lowDistraction = readCompanionPreferencesState().lowDistractionMode
+    const chatRuntime = readChatRuntimeState()
+    const screenEnabled = useContextStore.getState().isScreenMonitoring
+    const snapshot = options.getSnapshot()
+    const sceneLabel = snapshot?.scene.label ?? '桌面陪伴'
+    const sceneEnergyLabel =
+      snapshot?.scene.energy === 'bright' ? '更有回应感' : snapshot?.scene.energy === 'low' ? '更安静' : '陪着你待着'
+    const workMode = snapshot?.workMode
+    const workModeLabel = !workMode?.enabled
+      ? '没有开启工作节奏'
+      : workMode.isBreakActive
+        ? workMode.phase === 'long_break'
+          ? '现在是长休息'
+          : '现在在短休息'
+        : workMode.isPaused
+          ? '工作节奏已暂停'
+          : '现在在专注里'
+
+    const hero = document.createElement('div')
+    hero.className = 'ctx-hero'
+
+    const eyebrow = document.createElement('div')
+    eyebrow.className = 'ctx-eyebrow'
+    eyebrow.textContent = 'Companion'
+
+    const title = document.createElement('div')
+    title.className = 'ctx-title'
+    title.textContent = petName
+
+    const subtitle = document.createElement('div')
+    subtitle.className = 'ctx-subtitle'
+    subtitle.textContent = `${sceneLabel} · ${sceneEnergyLabel}`
+
+    const chipRow = document.createElement('div')
+    chipRow.className = 'ctx-chip-row'
+    chipRow.appendChild(buildChip(chatRuntime.enabled ? (chatRuntime.isConnected ? '聊天已连通' : '聊天待处理') : '安静陪伴中'))
+    chipRow.appendChild(buildChip(lowDistraction ? '低打扰模式' : '标准陪伴'))
+    chipRow.appendChild(buildChip(screenEnabled ? '桌面感知开启' : '桌面感知关闭'))
+
+    const summary = document.createElement('div')
+    summary.className = 'ctx-summary'
+    summary.textContent = workModeLabel
+
+    hero.appendChild(eyebrow)
+    hero.appendChild(title)
+    hero.appendChild(subtitle)
+    hero.appendChild(chipRow)
+    hero.appendChild(summary)
+    menu.appendChild(hero)
+
+    const actionsSection = createSection('常用入口')
+    actionsSection.appendChild(
+      createItem('\u6253\u5f00\u804a\u5929', '继续和它说话，或接着看完整分析。', () => window.electronAPI?.openChat?.(), {
+        primary: true,
+      }),
+    )
+    actionsSection.appendChild(
+      createItem('\u6253\u5f00\u8bbe\u7f6e', '调整陪伴状态、接入和工作节奏。', () => window.electronAPI?.openSettings?.()),
+    )
+    menu.appendChild(actionsSection)
+
+    const controlsSection = createSection('桌面控制')
+    controlsSection.appendChild(
+      createItem(
+        '\u5207\u6362\u7a7f\u900f',
+        '需要让它更安静待着时，可以切换窗口穿透。',
+        () => window.electronAPI?.toggleClickThrough?.(),
+      ),
+    )
+    menu.appendChild(controlsSection)
+
+    const exitSection = createSection('应用')
+    exitSection.appendChild(
+      createItem('\u9000\u51fa Deep Pet', '先让 bb7 从桌面上休息一下。', () => window.electronAPI?.quitApp?.(), {
+        danger: true,
+      }),
+    )
+    menu.appendChild(exitSection)
+  }
+
+  render()
 
   return {
     show(x: number, y: number) {
-      menu.style.left = `${x}px`
-      menu.style.top = `${y}px`
+      render()
+      const rect = menu.getBoundingClientRect()
+      const margin = 14
+      const left = Math.min(x, window.innerWidth - rect.width - margin)
+      const top = Math.min(y, window.innerHeight - rect.height - margin)
+      menu.style.left = `${Math.max(margin, left)}px`
+      menu.style.top = `${Math.max(margin, top)}px`
       menu.classList.add('show')
     },
     hide,
-  }
-}
-
-function getCleanSpeechKicker(
-  snapshot: ReturnType<CompanionStateMachine['getSnapshot']>,
-  message: string,
-): string {
-  if (snapshot.transientAction === 'tap_affection') return '摸摸收到'
-  if (snapshot.transientAction === 'welcome_back') return '你回来啦'
-  if (snapshot.transientAction === 'dragging') return '跟着你走'
-  if (snapshot.mode === 'focus_guardian') return '安静陪写'
-
-  switch (snapshot.scene.id) {
-    case 'deep_focus':
-      return '专心一点'
-    case 'steady_focus':
-      return '陪你盯着'
-    case 'reading_nook':
-      return '一起读着'
-    case 'watch_together':
-      return '陪你一起看'
-    case 'social_corner':
-      return '在你旁边'
-    case 'play_session':
-      return '悄悄围观'
-    case 'late_night_wind_down':
-      return '夜深啦'
-    case 'quiet_idle':
-      return '安静陪着'
-    case 'soft_browsing':
-      return '慢慢看看'
-    case 'ambient_presence':
-      return '陪你待着'
-    case 'away':
-      return '替你看位'
-  }
-
-  if (snapshot.mode === 'proactive') return '轻轻提醒'
-  if (snapshot.mode === 'reactive' && snapshot.emotion === 'happy') return '有点开心'
-  if (snapshot.emotion === 'sleepy') return '夜深啦'
-  if (snapshot.scene.energy === 'bright') return '有点开心'
-  if (snapshot.scene.energy === 'low') return '安静陪着'
-  if (message.length <= 8) return '小声回应'
-  return '安静陪着'
-}
-
-function getCleanFeedCardCopy(name?: string | null): FeedCardCopy {
-  const petName = name?.trim() || 'bb7'
-  return {
-    petName,
-    confirmTitle: `${petName} 接住文件啦`,
-    thinkingTitle: `${petName} 正在看呢`,
-  }
-}
-
-function applyCleanContextMenu(menu: HTMLElement) {
-  const items: Array<{ label?: string; action?: () => void; divider?: boolean; danger?: boolean }> = [
-    { label: '打开聊天', action: () => window.electronAPI?.openChat?.() },
-    { label: '打开设置', action: () => window.electronAPI?.openSettings?.() },
-    { divider: true },
-    { label: '切换穿透', action: () => window.electronAPI?.toggleClickThrough?.() },
-    { divider: true },
-    { label: '退出 Deep Pet', action: () => window.electronAPI?.quitApp?.(), danger: true },
-  ]
-
-  menu.innerHTML = ''
-  for (const item of items) {
-    if (item.divider) {
-      const divider = document.createElement('div')
-      divider.className = 'd'
-      menu.appendChild(divider)
-      continue
-    }
-
-    const entry = document.createElement('div')
-    entry.className = 'i'
-    entry.textContent = item.label ?? ''
-    if (item.danger) {
-      entry.style.color = 'rgba(255, 170, 170, 0.95)'
-    }
-    entry.onclick = () => item.action?.()
-    menu.appendChild(entry)
   }
 }
 
@@ -883,16 +1054,27 @@ async function bootstrap() {
   const contextMenuEl = requireElement<HTMLDivElement>('ctx')
   const feedHighlightEl = requireElement<HTMLDivElement>('feed-highlight')
   const feedCardEl = requireElement<HTMLDivElement>('feed-card')
+  const runtimeFlags = (await window.electronAPI?.getRuntimeFlags?.()) ?? {
+    smokeTarget: null,
+    scenario: null,
+    isDev: false,
+    smokeRunId: null,
+    automationRunId: null,
+    autoExitMs: null,
+  }
+  const isFeedSmoke = runtimeFlags.smokeTarget === 'feed'
+  const isFeedStabilityScenario = runtimeFlags.scenario === 'stability-feed'
 
   let petPackage = resolveSelectedPetPackage()
   const speech = new SpeechBubbleController(speechEl, petPackage.productionProfile?.anchors.speechBubble)
   const speechPolicy = new CompanionSpeechPolicy()
-  const contextMenu = setupStableContextMenu(contextMenuEl)
   const feedCard = createStableFeedCardController(feedHighlightEl, feedCardEl)
   const proceduralScale = 15
   let textureSet = await buildRuntimeTextureSetForPetPackage(petPackage, proceduralScale)
   let currentSpeechKicker = getStableNamedKicker(petPackage.manifest.name)
   let lowDistractionMode = readCompanionPreferencesState().lowDistractionMode
+  let chatRuntimeState = readChatRuntimeState()
+  let settingsPreviewState = readCompanionSettingsPreviewState()
   const companion = new CompanionStateMachine()
   const stabilizer = new CompanionBehaviorStabilizer()
   const proactiveScheduler = new ProactiveInteractionScheduler()
@@ -902,10 +1084,11 @@ async function bootstrap() {
   let latestScreenSource = initialScreenPerception?.source ?? null
   let pendingFeedFile: File | null = null
   let isFeedAnalyzing = false
+  let lastBridgeAnimationAt = 0
 
   companion.setMemory(readCompanionMemory())
   companion.setScreenPerception(initialScreenPerception)
-  feedCard.setCopy(getStableFeedCardCopy(petPackage.manifest.name))
+  feedCard.setCopy(resolveFeedCardCopy(petPackage.manifest.name, petPackage.companionContent))
 
   const runtime = new PixiPetRuntime({
     mount,
@@ -914,11 +1097,25 @@ async function bootstrap() {
   })
 
   await runtime.init()
-  runtime.setLowDistractionMode(lowDistractionMode)
+  applyRuntimeCompanionState(runtime, {
+    lowDistractionMode,
+    chatRuntimeState,
+    previewState: settingsPreviewState,
+  })
   const initialSnapshot = stabilizer.stabilize(
     attachWorkModeToSnapshot(companion.getSnapshot(), workModeRuntime.getSignals()),
   )
   let latestSnapshot = initialSnapshot
+  const contextMenu = setupStableContextMenu(contextMenuEl, {
+    getSnapshot: () => latestSnapshot ?? null,
+  })
+
+  const getEffectiveRuntimeCompanionState = () =>
+    resolveRuntimeCompanionState({
+      lowDistractionMode,
+      chatRuntimeState,
+      previewState: settingsPreviewState,
+    })
 
   const speakWithPolicy = (
     source: SpeechSource,
@@ -927,12 +1124,17 @@ async function bootstrap() {
     duration: number,
     override?: Partial<SpeechPresentation>,
   ) => {
+    const effectiveRuntimeState = getEffectiveRuntimeCompanionState()
+    const effectiveLowDistractionMode = resolveEffectiveLowDistractionMode(
+      effectiveRuntimeState.effectiveLowDistractionMode,
+      effectiveRuntimeState.effectiveChatRuntimeState,
+    )
     const decision = speechPolicy.evaluate({
       source,
       snapshot,
       intent: { message, duration },
       now: Date.now(),
-      lowDistractionMode,
+      lowDistractionMode: effectiveLowDistractionMode,
     })
 
     if (!decision) {
@@ -952,9 +1154,27 @@ async function bootstrap() {
       decision.intent.duration,
       safeOverride ??
         {
-          ...getStableSpeechPresentation(snapshot, safeMessage),
+          ...getRuntimeAwareSpeechPresentation(
+            snapshot,
+            safeMessage,
+            effectiveRuntimeState.effectiveChatRuntimeState,
+            source,
+          ),
         },
     )
+    emitAutomationMetricEvent('speech.shown', {
+      tags: {
+        source,
+        tone: (safeOverride?.tone ?? getRuntimeAwareSpeechPresentation(
+          snapshot,
+          safeMessage,
+          effectiveRuntimeState.effectiveChatRuntimeState,
+          source,
+        ).tone),
+        scene: snapshot.scene.id,
+        activity: snapshot.activity,
+      },
+    })
     return true
   }
 
@@ -967,6 +1187,16 @@ async function bootstrap() {
     latestSnapshot = stabilizedSnapshot
     runtime.applyPresentation(resolvePetPresentation(stabilizedSnapshot, petPackage))
     return stabilizedSnapshot
+  }
+
+  const replaceRuntimePetPackage = async (nextPetPackage: BuiltInPetPackage) => {
+    petPackage = nextPetPackage
+    textureSet = await buildRuntimeTextureSetForPetPackage(petPackage, proceduralScale)
+    currentSpeechKicker = getStableNamedKicker(petPackage.manifest.name)
+    feedCard.setCopy(resolveFeedCardCopy(petPackage.manifest.name, petPackage.companionContent))
+    runtime.replaceTextureSet(textureSet)
+    speech.setAnchor(petPackage.productionProfile?.anchors.speechBubble)
+    refreshPresentation(companion.getSnapshot())
   }
 
   const playFeedConfirmMotion = () => {
@@ -983,6 +1213,28 @@ async function bootstrap() {
 
   const playFeedErrorMotion = () => {
     runtime.playStateSequence(FEED_ERROR_SEQUENCE)
+  }
+
+  const playPreviewAppliedMotion = () => {
+    runtime.playStateSequence(PREVIEW_APPLIED_SEQUENCE)
+  }
+
+  const playPreviewDismissedMotion = () => {
+    runtime.playStateSequence(PREVIEW_DISMISSED_SEQUENCE)
+  }
+
+  const maybePlaySceneBridgeMotion = (previous: CompanionSnapshot | null, next: CompanionSnapshot, now = Date.now()) => {
+    if (now - lastBridgeAnimationAt < 1_600) {
+      return
+    }
+
+    const sequence = resolveSceneBridgeSequence(petPackage, previous, next)
+    if (!sequence) {
+      return
+    }
+
+    lastBridgeAnimationAt = now
+    runtime.playStateSequence(sequence)
   }
 
   const analyzePendingFeed = async () => {
@@ -1012,6 +1264,12 @@ async function bootstrap() {
       emitCompanionFeedAnalysisResult(result, {
         idPrefix: 'feed',
       })
+      emitAutomationMetricEvent('feed.analysis.completed', {
+        tags: {
+          fileName: result.fileName,
+          scene: result.context.sceneId,
+        },
+      })
 
       playFeedResultMotion()
 
@@ -1033,7 +1291,7 @@ async function bootstrap() {
         })
       }
 
-      feedCard.showResult(result.fileName, result.briefSummary, () => {
+      feedCard.showResult(result.fileName, result.desktopSummary, () => {
         window.electronAPI?.openChat?.()
       })
     } catch (error: any) {
@@ -1049,6 +1307,131 @@ async function bootstrap() {
     }
   }
 
+  const runFeedSmoke = () => {
+    const fileName = 'smoke-notes.txt'
+    const detailedAnalysis = [
+      '这是一条自动化 smoke 生成的文件分析结果。',
+      '它用于确认桌宠结果卡片、桌面气泡、分析广播和聊天窗口接收链都能工作。',
+      '如果你能看到这条结果，说明文件投喂主链已经至少通过了基础自动验证。',
+    ].join('\n')
+
+    const context = buildCompanionChatContext(
+      latestSnapshot.activity,
+      latestSnapshot.activeWindow?.title ?? '',
+      latestSnapshot.activeWindow?.process ?? '',
+      latestScreenSummary,
+      latestScreenSource,
+    )
+    const briefSummary = buildCompanionBriefSummary(
+      detailedAnalysis,
+      '这是一条用于验证文件投喂链的样例结果。',
+      100,
+    )
+    const desktopSummary = buildCompanionDesktopSummary(
+      detailedAnalysis,
+      '这是一条用于验证桌面短反馈的样例结果。',
+      56,
+    )
+
+    feedCard.setDragActive(true)
+    playFeedResultMotion()
+    speech.show(`我先帮你看过《${fileName}》了。`, 2_600, {
+      tone: 'focus',
+      kicker: '已经喂给我了',
+    })
+    feedCard.showResult(fileName, desktopSummary, () => {
+      window.electronAPI?.openChat?.()
+    })
+
+    emitCompanionFeedAnalysisResult(
+      {
+        fileName,
+        desktopSummary,
+        briefSummary,
+        detailedAnalysis,
+        context,
+        actions: buildFeedFollowUpActionsForScene(fileName, detailedAnalysis, context),
+        desktopUtterance: buildFileAnalysisUtterance(fileName, desktopSummary, context.sceneId),
+      },
+      {
+        idPrefix: runtimeFlags.smokeRunId ? `smoke-feed-${runtimeFlags.smokeRunId}` : 'smoke-feed',
+        createdAt: Date.now(),
+      },
+    )
+    emitAutomationMetricEvent('feed.analysis.completed', {
+      tags: {
+        fileName,
+        scene: context.sceneId,
+        synthetic: true,
+      },
+    })
+
+    window.electronAPI?.emitSmokeCheckpoint?.('feed-result-ready')
+  }
+
+  const runFeedStabilityScenario = () => {
+    const fileName = 'stability-notes.txt'
+    const detailedAnalysis = [
+      '这是一条用于长驻稳定性验证的文件分析结果。',
+      '它用于确认文件投喂结果可以稳定出现在桌面侧，并继续流入聊天窗口。',
+      '如果这条结果被聊天面板接住，说明投喂和后续衔接链路在非 smoke 场景下也是通的。',
+    ].join('\n')
+
+    const context = buildCompanionChatContext(
+      latestSnapshot.activity,
+      latestSnapshot.activeWindow?.title ?? '',
+      latestSnapshot.activeWindow?.process ?? '',
+      latestScreenSummary,
+      latestScreenSource,
+    )
+    const briefSummary = buildCompanionBriefSummary(
+      detailedAnalysis,
+      '这是一条用于长驻文件投喂验证的样例结果。',
+      100,
+    )
+    const desktopSummary = buildCompanionDesktopSummary(
+      detailedAnalysis,
+      '这是一条用于长驻桌面反馈验证的样例结果。',
+      56,
+    )
+
+    feedCard.setDragActive(true)
+    playFeedResultMotion()
+    speech.show(`我先帮你看过《${fileName}》了。`, 2_600, {
+      tone: 'focus',
+      kicker: '已经喂给我了',
+    })
+    feedCard.showResult(fileName, desktopSummary, () => {
+      window.electronAPI?.openChat?.()
+    })
+
+    emitCompanionFeedAnalysisResult(
+      {
+        fileName,
+        desktopSummary,
+        briefSummary,
+        detailedAnalysis,
+        context,
+        actions: buildFeedFollowUpActionsForScene(fileName, detailedAnalysis, context),
+        desktopUtterance: buildFileAnalysisUtterance(fileName, desktopSummary, context.sceneId),
+      },
+      {
+        idPrefix: runtimeFlags.automationRunId
+          ? `stability-feed-${runtimeFlags.automationRunId}`
+          : 'stability-feed',
+        createdAt: Date.now(),
+      },
+    )
+    emitAutomationMetricEvent('feed.analysis.completed', {
+      tags: {
+        fileName,
+        scene: context.sceneId,
+        synthetic: true,
+        scenario: 'stability-feed',
+      },
+    })
+  }
+
   const unsubscribeMemory = subscribeCompanionMemory((memory) => {
     companion.setMemory(memory)
     refreshPresentation(companion.getSnapshot())
@@ -1060,18 +1443,77 @@ async function bootstrap() {
   })
 
   const unsubscribeSelectedPet = subscribeSelectedPet(async () => {
-    petPackage = resolveSelectedPetPackage()
-    textureSet = await buildRuntimeTextureSetForPetPackage(petPackage, proceduralScale)
-    currentSpeechKicker = getStableNamedKicker(petPackage.manifest.name)
-    feedCard.setCopy(getStableFeedCardCopy(petPackage.manifest.name))
-    runtime.replaceTextureSet(textureSet)
-    speech.setAnchor(petPackage.productionProfile?.anchors.speechBubble)
-    refreshPresentation(companion.getSnapshot())
+    if (settingsPreviewState.active && settingsPreviewState.selectedPetId) {
+      return
+    }
+    await replaceRuntimePetPackage(resolveSelectedPetPackage())
   })
 
   const unsubscribeCompanionPreferences = subscribeCompanionPreferences((state) => {
     lowDistractionMode = state.lowDistractionMode
-    runtime.setLowDistractionMode(lowDistractionMode)
+    applyRuntimeCompanionState(runtime, {
+      lowDistractionMode,
+      chatRuntimeState,
+      previewState: settingsPreviewState,
+    })
+  })
+
+  const unsubscribeChatRuntime = subscribeChatRuntimeState((state) => {
+    const previousRuntimeState = chatRuntimeState
+    chatRuntimeState = state
+    applyRuntimeCompanionState(runtime, {
+      lowDistractionMode,
+      chatRuntimeState,
+      previewState: settingsPreviewState,
+    })
+
+    const runtimeStateSpeech = buildChatRuntimeStateSpeech(previousRuntimeState, state, petPackage.manifest.name)
+    if (runtimeStateSpeech) {
+      speakWithPolicy(
+        'external',
+        latestSnapshot,
+        runtimeStateSpeech.message,
+        runtimeStateSpeech.duration,
+        runtimeStateSpeech.presentation,
+      )
+    }
+  })
+
+  const unsubscribeSettingsPreview = subscribeCompanionSettingsPreview(async (state) => {
+    const previousPreviewState = settingsPreviewState
+    settingsPreviewState = state
+
+    if (state.active && state.selectedPetId) {
+      if (!previousPreviewState.active || previousPreviewState.selectedPetId !== state.selectedPetId) {
+        await replaceRuntimePetPackage(loadPetPackageById(state.selectedPetId))
+      }
+    } else if (previousPreviewState.active && previousPreviewState.selectedPetId) {
+      await replaceRuntimePetPackage(resolveSelectedPetPackage())
+    }
+
+    applyRuntimeCompanionState(runtime, {
+      lowDistractionMode,
+      chatRuntimeState,
+      previewState: settingsPreviewState,
+    })
+
+    const previewSpeech = buildSettingsPreviewSpeech(previousPreviewState, state, petPackage.manifest.name)
+    if (!state.active && previousPreviewState.active) {
+      if (state.exitReason === 'applied') {
+        playPreviewAppliedMotion()
+      } else if (state.exitReason === 'dismissed') {
+        playPreviewDismissedMotion()
+      }
+    }
+    if (previewSpeech) {
+      speakWithPolicy(
+        'external',
+        latestSnapshot,
+        previewSpeech.message,
+        previewSpeech.duration,
+        previewSpeech.presentation,
+      )
+    }
   })
 
   const unsubscribeCompanionUtterance = subscribeCompanionUtterance((payload) => {
@@ -1098,12 +1540,15 @@ async function bootstrap() {
   const dragController = new PetDragController({
     element: runtime.canvas,
     onDragStart: () => {
+      emitAutomationMetricEvent('pet.drag.start')
       refreshPresentation(companion.handleDragStart().snapshot)
     },
     onDragEnd: () => {
+      emitAutomationMetricEvent('pet.drag.end')
       refreshPresentation(companion.handleDragEnd().snapshot)
     },
     onTap: () => {
+      emitAutomationMetricEvent('pet.tap')
       const result = companion.handleTap()
       const stabilizedSnapshot = refreshPresentation(result.snapshot)
       if (result.speech) {
@@ -1150,6 +1595,11 @@ async function bootstrap() {
     event.stopPropagation()
     feedCard.setDragActive(true)
     pendingFeedFile = files[0]
+    emitAutomationMetricEvent('feed.drop.received', {
+      tags: {
+        fileName: files[0].name,
+      },
+    })
     playFeedConfirmMotion()
     speech.show('要把这个喂给我吗？', 2_400, {
       tone: 'warm',
@@ -1187,10 +1637,27 @@ async function bootstrap() {
   })
 
   window.electronAPI?.onContextUpdate?.((info: { title: string; process: string; idleMs?: number }) => {
+    const previousSnapshot = latestSnapshot
     syncContextStoreFromWindowInfo(info)
     const result = companion.handleContext(info)
     captureCompanionRuntimeContext(result.snapshot.activity, result.snapshot.scene.id, info.title)
     const stabilizedSnapshot = refreshPresentation(result.snapshot)
+    if (
+      previousSnapshot.activity !== stabilizedSnapshot.activity ||
+      previousSnapshot.scene.id !== stabilizedSnapshot.scene.id ||
+      previousSnapshot.mode !== stabilizedSnapshot.mode ||
+      previousSnapshot.emotion !== stabilizedSnapshot.emotion
+    ) {
+      emitAutomationMetricEvent('context.transition', {
+        tags: {
+          activity: stabilizedSnapshot.activity,
+          scene: stabilizedSnapshot.scene.id,
+          mode: stabilizedSnapshot.mode,
+          emotion: stabilizedSnapshot.emotion,
+        },
+      })
+    }
+    maybePlaySceneBridgeMotion(previousSnapshot, stabilizedSnapshot, Date.now())
 
     if (result.speech) {
       speakWithPolicy(
@@ -1204,6 +1671,7 @@ async function bootstrap() {
   })
 
   const proactiveTimer = window.setInterval(() => {
+    const previousSnapshot = latestSnapshot
     const result = companion.handleTick()
     workModeRuntime.tick()
     const workModeSignals = workModeRuntime.getSignals()
@@ -1211,12 +1679,18 @@ async function bootstrap() {
     const stabilizedSnapshot = stabilizer.stabilize(snapshotWithWorkMode)
     latestSnapshot = stabilizedSnapshot
     runtime.applyPresentation(resolvePetPresentation(stabilizedSnapshot, petPackage))
+    maybePlaySceneBridgeMotion(previousSnapshot, stabilizedSnapshot, Date.now())
+    const effectiveRuntimeState = getEffectiveRuntimeCompanionState()
 
     const proactiveSpeech = proactiveScheduler.evaluate(
+      petPackage,
       stabilizedSnapshot,
       companion.getRuntimeSignals(),
       workModeSignals,
-      lowDistractionMode,
+      resolveEffectiveLowDistractionMode(
+        effectiveRuntimeState.effectiveLowDistractionMode,
+        effectiveRuntimeState.effectiveChatRuntimeState,
+      ),
     )
 
     if (proactiveSpeech) {
@@ -1234,6 +1708,13 @@ async function bootstrap() {
       )
 
       if (didSpeak) {
+        emitAutomationMetricEvent('proactive.prompt', {
+          tags: {
+            activity: stabilizedSnapshot.activity,
+            scene: stabilizedSnapshot.scene.id,
+            mode: stabilizedSnapshot.mode,
+          },
+        })
         const actionPayload = buildCompanionActionPayload(
           petPackage,
           stabilizedSnapshot,
@@ -1254,6 +1735,8 @@ async function bootstrap() {
     unsubscribeWorkMode()
     unsubscribeSelectedPet()
     unsubscribeCompanionPreferences()
+    unsubscribeSettingsPreview()
+    unsubscribeChatRuntime()
     unsubscribeCompanionUtterance()
     unsubscribeScreenPerception()
     dragController.destroy()
@@ -1280,6 +1763,30 @@ async function bootstrap() {
       { tone: 'warm', kicker: '已经在这儿了' },
     )
   }
+  emitAutomationMetricEvent('runtime.started', {
+    tags: {
+      smokeTarget: runtimeFlags.smokeTarget ?? 'none',
+      scenario: runtimeFlags.scenario ?? 'none',
+    },
+  })
+
+  if (isFeedSmoke) {
+    setTimeout(() => {
+      window.electronAPI?.openChat?.()
+      setTimeout(() => {
+        runFeedSmoke()
+      }, 500)
+    }, 700)
+  }
+
+  if (isFeedStabilityScenario) {
+    setTimeout(() => {
+      window.electronAPI?.openChat?.()
+      setTimeout(() => {
+        runFeedStabilityScenario()
+      }, 900)
+    }, 900)
+  }
 }
 
 async function hydrateInitialContextStore() {
@@ -1300,3 +1807,78 @@ function syncContextStoreFromWindowInfo(info: { title: string; process: string; 
 }
 
 void bootstrap()
+
+function resolveRuntimeCompanionState({
+  lowDistractionMode,
+  chatRuntimeState,
+  previewState,
+}: RuntimeCompanionState): {
+  effectiveLowDistractionMode: boolean
+  effectiveChatRuntimeState: ChatRuntimeState
+} {
+  const effectiveChatRuntimeState: ChatRuntimeState = previewState.active
+    ? {
+        enabled: previewState.chatEnabled ?? chatRuntimeState.enabled,
+        isConnected: previewState.chatConnected ?? chatRuntimeState.isConnected,
+      }
+    : chatRuntimeState
+
+  const effectiveLowDistractionMode = previewState.active && typeof previewState.lowDistractionMode === 'boolean'
+    ? previewState.lowDistractionMode
+    : lowDistractionMode
+
+  return {
+    effectiveLowDistractionMode,
+    effectiveChatRuntimeState,
+  }
+}
+
+function applyRuntimeCompanionState(runtime: PixiPetRuntime, state: RuntimeCompanionState) {
+  const resolved = resolveRuntimeCompanionState(state)
+  runtime.setLowDistractionMode(
+    resolveEffectiveLowDistractionMode(
+      resolved.effectiveLowDistractionMode,
+      resolved.effectiveChatRuntimeState,
+    ),
+  )
+  runtime.setCompanionPresenceMode(
+    resolveCompanionPresenceMode(
+      resolved.effectiveLowDistractionMode,
+      resolved.effectiveChatRuntimeState,
+    ),
+  )
+}
+
+function resolveEffectiveLowDistractionMode(
+  preferenceLowDistractionMode: boolean,
+  chatRuntimeState: ReturnType<typeof readChatRuntimeState>,
+): boolean {
+  if (preferenceLowDistractionMode) {
+    return true
+  }
+
+  if (!chatRuntimeState.enabled || !chatRuntimeState.isConnected) {
+    return true
+  }
+
+  return false
+}
+
+function resolveCompanionPresenceMode(
+  preferenceLowDistractionMode: boolean,
+  chatRuntimeState: ReturnType<typeof readChatRuntimeState>,
+): 'quiet' | 'connected' | 'ambient' {
+  if (preferenceLowDistractionMode) {
+    return 'quiet'
+  }
+
+  if (!chatRuntimeState.enabled || !chatRuntimeState.isConnected) {
+    return 'quiet'
+  }
+
+  if (chatRuntimeState.enabled && chatRuntimeState.isConnected) {
+    return 'connected'
+  }
+
+  return 'ambient'
+}

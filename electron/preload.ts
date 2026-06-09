@@ -1,4 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { CompanionActionPayload } from '../src/ai/CompanionActionBridge'
+import type { CompanionFeedAnalysisPayload } from '../src/ai/CompanionFeedBridge'
+import type { CompanionUtterancePayload } from '../src/ai/CompanionUtteranceBridge'
 import type { PluginAIChatExecutionRequest } from '../src/plugins/types'
 import type { AIConfig } from '../src/types/chat'
 
@@ -14,6 +17,35 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onShowChat: (callback: () => void) => {
     ipcRenderer.on('ui:show-chat', () => callback())
   },
+  getRuntimeFlags: (): Promise<{
+    smokeTarget: string | null
+    scenario: string | null
+    isDev: boolean
+    smokeRunId: string | null
+    automationRunId: string | null
+    autoExitMs: number | null
+  }> =>
+    ipcRenderer.invoke('app:get-runtime-flags'),
+  emitCompanionFeedBridgePayload: (payload: CompanionFeedAnalysisPayload) =>
+    ipcRenderer.send('bridge:feed:emit', payload),
+  readCompanionFeedBridgeHistory: (): Promise<CompanionFeedAnalysisPayload[]> =>
+    ipcRenderer.invoke('bridge:feed:list'),
+  onCompanionFeedBridgePayload: (callback: (payload: CompanionFeedAnalysisPayload) => void) => {
+    ipcRenderer.on('bridge:companion-feed-analysis', (_event, payload) => callback(payload))
+  },
+  emitCompanionActionBridgePayload: (payload: CompanionActionPayload) =>
+    ipcRenderer.send('bridge:action:emit', payload),
+  onCompanionActionBridgePayload: (callback: (payload: CompanionActionPayload) => void) => {
+    ipcRenderer.on('bridge:companion-action', (_event, payload) => callback(payload))
+  },
+  emitCompanionUtteranceBridgePayload: (payload: CompanionUtterancePayload) =>
+    ipcRenderer.send('bridge:utterance:emit', payload),
+  onCompanionUtteranceBridgePayload: (callback: (payload: CompanionUtterancePayload) => void) => {
+    ipcRenderer.on('bridge:companion-utterance', (_event, payload) => callback(payload))
+  },
+  emitSmokeCheckpoint: (label: string) => ipcRenderer.send('smoke:checkpoint', label),
+  emitAutomationMetricsEvent: (payload: unknown) => ipcRenderer.send('metrics:event', payload),
+  hideUIWindow: () => ipcRenderer.send('app:hide-ui'),
   quitApp: () => ipcRenderer.send('app:quit'),
   getActiveWindow: (): Promise<{ title: string; process: string; idleMs?: number }> =>
     ipcRenderer.invoke('context:get-active-window'),

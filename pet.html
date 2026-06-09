@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: deep-pet:; connect-src 'self' http://localhost:* https: ws: wss:; font-src 'self' data:; object-src 'none'; base-uri 'self';">
   <title>Deep Pet | bb7</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -313,36 +314,131 @@
     #ctx {
       position: absolute;
       display: none;
-      min-width: 190px;
-      padding: 6px;
+      width: 280px;
+      padding: 10px;
       border: 1px solid rgba(178, 205, 230, 0.24);
-      border-radius: 16px;
+      border-radius: 24px;
       background:
         radial-gradient(circle at top, rgba(255, 255, 255, 0.8), transparent 58%),
         linear-gradient(180deg, rgba(255, 251, 247, 0.96), rgba(241, 248, 255, 0.94));
-      backdrop-filter: blur(18px);
-      box-shadow: 0 18px 40px rgba(109, 143, 180, 0.18), 0 8px 18px rgba(153, 181, 207, 0.12);
+      backdrop-filter: blur(20px);
+      box-shadow: 0 22px 52px rgba(109, 143, 180, 0.22), 0 10px 22px rgba(153, 181, 207, 0.14);
       z-index: 20;
     }
     #ctx.show {
       display: block;
     }
-    #ctx .i {
-      padding: 10px 14px;
-      border-radius: 10px;
+    #ctx .ctx-hero {
+      padding: 10px 10px 12px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.58);
+      border: 1px solid rgba(171, 203, 231, 0.2);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.38);
+      margin-bottom: 10px;
+    }
+    #ctx .ctx-eyebrow {
+      margin-bottom: 4px;
+      color: rgba(102, 129, 152, 0.62);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.28em;
+    }
+    #ctx .ctx-title {
+      color: #49657f;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    #ctx .ctx-subtitle {
+      margin-top: 4px;
+      color: rgba(82, 106, 128, 0.88);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    #ctx .ctx-chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    #ctx .ctx-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 8px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.68);
+      border: 1px solid rgba(171, 203, 231, 0.22);
+      color: #62809c;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    #ctx .ctx-summary {
+      margin-top: 10px;
+      padding: 9px 10px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.64);
+      color: rgba(83, 108, 131, 0.88);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    #ctx .ctx-section {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    #ctx .ctx-section-title {
+      padding: 0 4px;
+      color: rgba(101, 128, 150, 0.62);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+    }
+    #ctx .ctx-item {
+      width: 100%;
+      padding: 12px 13px;
+      border: 1px solid rgba(171, 203, 231, 0.18);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.66);
+      text-align: left;
+      cursor: pointer;
+      transition: background 120ms ease, transform 120ms ease, box-shadow 120ms ease;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34);
+    }
+    #ctx .ctx-item:hover {
+      background: rgba(255, 255, 255, 0.84);
+      transform: translateY(-1px);
+      box-shadow: 0 10px 22px rgba(153, 181, 207, 0.12);
+    }
+    #ctx .ctx-item.primary {
+      border: none;
+      background: linear-gradient(135deg, rgba(142, 197, 236, 0.94), rgba(246, 195, 212, 0.88));
+      box-shadow: 0 12px 24px rgba(160, 184, 224, 0.2);
+    }
+    #ctx .ctx-item.primary .ctx-item-label,
+    #ctx .ctx-item.primary .ctx-item-meta {
+      color: #ffffff;
+    }
+    #ctx .ctx-item.danger .ctx-item-label {
+      color: #a86868;
+    }
+    #ctx .ctx-item.danger .ctx-item-meta {
+      color: rgba(168, 110, 110, 0.82);
+    }
+    #ctx .ctx-item-label {
       color: #4d6984;
       font-size: 13px;
-      cursor: pointer;
-      transition: background 120ms ease, transform 120ms ease;
+      font-weight: 700;
+      line-height: 1.4;
     }
-    #ctx .i:hover {
-      background: rgba(255, 255, 255, 0.72);
-      transform: translateY(-1px);
+    #ctx .ctx-item-meta {
+      margin-top: 4px;
+      color: rgba(92, 118, 143, 0.78);
+      font-size: 11px;
+      line-height: 1.5;
     }
-    #ctx .d {
-      height: 1px;
-      margin: 5px 8px;
-      background: rgba(170, 198, 222, 0.24);
+    #ctx button {
+      font: inherit;
     }
   </style>
 </head>

@@ -1,10 +1,16 @@
 import React, { useEffect, useState } from 'react'
+import { resolveSelectedPetPackage } from '../../pets/resolveSelectedPetPackage'
 import { usePetStore } from '../../store/petStore'
 
 const SpeechBubble: React.FC = () => {
   const speech = usePetStore((s) => s.speech)
   const [visible, setVisible] = useState(false)
   const [text, setText] = useState('')
+  const [petName, setPetName] = useState(() => resolveSelectedPetPackage().manifest.name || 'bb7')
+
+  useEffect(() => {
+    setPetName(resolveSelectedPetPackage().manifest.name || 'bb7')
+  }, [speech?.timestamp])
 
   useEffect(() => {
     if (speech) {
@@ -22,48 +28,72 @@ const SpeechBubble: React.FC = () => {
 
   if (!visible || !text) return null
 
-  const style: React.CSSProperties = {
+  const shellStyle: React.CSSProperties = {
     position: 'fixed',
-    bottom: '175px',
+    bottom: '170px',
     left: '50%',
-    transform: 'translateX(-50%)',
-    background: 'rgba(30, 20, 40, 0.85)',
-    backdropFilter: 'blur(8px)',
-    WebkitBackdropFilter: 'blur(8px)',
-    border: '1.5px solid rgba(192, 132, 252, 0.4)',
-    borderRadius: '14px',
-    padding: '10px 16px',
-    fontSize: '13px',
-    color: '#f1e8ff',
-    maxWidth: '200px',
-    textAlign: 'center',
-    lineHeight: 1.4,
+    transform: visible ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(8px)',
+    width: 'min(280px, calc(100vw - 32px))',
     zIndex: 99998,
-    boxShadow: '0 4px 20px rgba(0,0,0,0.3), 0 0 15px rgba(192, 132, 252, 0.15)',
-    whiteSpace: 'pre-wrap',
-    transition: 'opacity 0.3s ease, transform 0.3s ease',
     pointerEvents: 'none',
-    fontFamily: "'Segoe UI', system-ui, sans-serif",
+    transition: 'opacity 0.3s ease, transform 0.3s ease',
+    opacity: visible ? 1 : 0,
   }
 
-  // triangle pointer
+  const bubbleStyle: React.CSSProperties = {
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: '20px',
+    padding: '12px 14px 14px',
+    background:
+      'linear-gradient(180deg, rgba(255, 252, 247, 0.95), rgba(243, 249, 255, 0.92)), radial-gradient(circle at top right, rgba(246,195,212,0.18), transparent 34%)',
+    backdropFilter: 'blur(18px)',
+    WebkitBackdropFilter: 'blur(18px)',
+    border: '1px solid rgba(138, 191, 230, 0.24)',
+    boxShadow: '0 18px 42px rgba(74, 102, 128, 0.18), 0 6px 18px rgba(255, 214, 230, 0.12)',
+    color: '#4f6880',
+    textAlign: 'center',
+  }
+
   const pointerStyle: React.CSSProperties = {
     position: 'absolute',
     bottom: '-8px',
     left: '50%',
-    transform: 'translateX(-50%)',
-    width: 0,
-    height: 0,
-    borderLeft: '8px solid transparent',
-    borderRight: '8px solid transparent',
-    borderTop: '8px solid rgba(30, 20, 40, 0.85)',
-    filter: 'drop-shadow(0 1px 0 rgba(192, 132, 252, 0.4))',
+    transform: 'translateX(-50%) rotate(45deg)',
+    width: '18px',
+    height: '18px',
+    borderRight: '1px solid rgba(138, 191, 230, 0.24)',
+    borderBottom: '1px solid rgba(138, 191, 230, 0.24)',
+    background: 'linear-gradient(135deg, rgba(249, 252, 255, 0.96), rgba(243, 249, 255, 0.92))',
+    boxSizing: 'border-box',
   }
 
   return (
-    <div style={style}>
-      {text}
-      <div style={pointerStyle} />
+    <div style={shellStyle}>
+      <div style={bubbleStyle}>
+        <div
+          style={{
+            fontSize: '10px',
+            textTransform: 'uppercase',
+            letterSpacing: '0.28px',
+            color: 'rgba(103, 128, 151, 0.6)',
+            marginBottom: '6px',
+          }}
+        >
+          {petName}
+        </div>
+        <div
+          style={{
+            fontSize: '13px',
+            lineHeight: 1.6,
+            color: '#516b84',
+            whiteSpace: 'pre-wrap',
+          }}
+        >
+          {text}
+        </div>
+        <div style={pointerStyle} />
+      </div>
     </div>
   )
 }

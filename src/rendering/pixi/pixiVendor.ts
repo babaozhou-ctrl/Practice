@@ -1,6 +1,7 @@
 export type PixiNamespace = any
 
 const PIXI_SCRIPT_SELECTOR = 'script[data-deep-pet-pixi-vendor]'
+const PIXI_UNSAFE_EVAL_SCRIPT_SELECTOR = 'script[data-deep-pet-pixi-unsafe-eval]'
 
 let pixiLoadPromise: Promise<PixiNamespace> | null = null
 
@@ -11,18 +12,16 @@ export async function ensurePixiLoaded(): Promise<PixiNamespace> {
 
   if (!pixiLoadPromise) {
     pixiLoadPromise = new Promise<PixiNamespace>((resolve, reject) => {
-      const existing = document.querySelector<HTMLScriptElement>(PIXI_SCRIPT_SELECTOR)
-      if (existing) {
-        attachListeners(existing, resolve, reject)
-        return
-      }
+      void ensurePixiScriptsSequentially()
+        .then(() => {
+          if (window.PIXI) {
+            resolve(window.PIXI)
+            return
+          }
 
-      const script = document.createElement('script')
-      script.src = new URL('./vendor/pixi/pixi.min.js', window.location.href).toString()
-      script.async = false
-      script.dataset.deepPetPixiVendor = 'true'
-      attachListeners(script, resolve, reject)
-      document.head.appendChild(script)
+          reject(new Error('PixiJS scripts loaded but global namespace is missing.'))
+        })
+        .catch(reject)
     })
   }
 
@@ -39,22 +38,72 @@ export function getPixi(): PixiNamespace {
 
 function attachListeners(
   script: HTMLScriptElement,
-  resolve: (value: PixiNamespace) => void,
   reject: (reason?: unknown) => void,
 ) {
-  const onLoad = () => {
-    if (window.PIXI) {
-      resolve(window.PIXI)
-      return
-    }
-
-    reject(new Error('PixiJS script loaded but global namespace is missing.'))
-  }
-
   const onError = () => {
     reject(new Error(`Failed to load PixiJS from ${script.src}`))
   }
 
-  script.addEventListener('load', onLoad, { once: true })
   script.addEventListener('error', onError, { once: true })
+}
+
+async function ensurePixiScriptsSequentially(): Promise<void> {
+  await ensureScriptLoaded({
+    selector: PIXI_SCRIPT_SELECTOR,
+    src: './vendor/pixi/pixi.min.js',
+    datasetKey: 'deepPetPixiVendor',
+  })
+
+  await ensureScriptLoaded({
+    selector: PIXI_UNSAFE_EVAL_SCRIPT_SELECTOR,
+    src: './vendor/pixi/unsafe-eval.min.js',
+    datasetKey: 'deepPetPixiUnsafeEval',
+  })
+}
+
+async function ensureScriptLoaded({
+  selector,
+  src,
+  datasetKey,
+}: {
+  selector: string
+  src: string
+  datasetKey: string
+}): Promise<void> {
+  const existing = document.querySelector<HTMLScriptElement>(selector)
+  if (existing) {
+    if (hasScriptLoaded(existing)) {
+      return
+    }
+
+    await waitForScriptLoad(existing)
+    return
+  }
+
+  const script = document.createElement('script')
+  script.src = new URL(src, window.location.href).toString()
+  script.async = false
+  script.dataset[datasetKey] = 'true'
+  document.head.appendChild(script)
+  await waitForScriptLoad(script)
+}
+
+function waitForScriptLoad(script: HTMLScriptElement): Promise<void> {
+  if (hasScriptLoaded(script)) {
+    return Promise.resolve()
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    const onLoad = () => {
+      script.dataset.deepPetLoaded = 'true'
+      resolve()
+    }
+
+    attachListeners(script, reject)
+    script.addEventListener('load', onLoad, { once: true })
+  })
+}
+
+function hasScriptLoaded(script: HTMLScriptElement): boolean {
+  return script.dataset.deepPetLoaded === 'true'
 }

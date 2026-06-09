@@ -232,9 +232,58 @@ export interface PetCompanionContentAction {
   prompt: string
 }
 
+export interface PetCompanionProactiveSpeechEntry {
+  message: string
+  durationMs?: number
+}
+
 export interface PetCompanionContentEntry {
   title: string
   actions: PetCompanionContentAction[]
+  speech?: PetCompanionProactiveSpeechEntry
+}
+
+export interface PetCompanionProactiveTemplateContext {
+  petName: string
+  preferredName?: string | null
+  sceneLabel?: string | null
+  sharedAttention?: string | null
+  recentTopic?: string | null
+  recentFileName?: string | null
+  ritual?: string | null
+  activeWindowTitle?: string | null
+  workModeLabel?: string | null
+}
+
+export interface PetCompanionFeedCardProfile {
+  confirmTitle: string
+  thinkingTitle: string
+  resultTitle: string
+  errorTitle: string
+  confirmAcceptLabel: string
+  confirmRejectLabel: string
+  resultOpenChatLabel: string
+  resultLaterLabel: string
+  confirmBody: string
+  thinkingBody: string
+  resultBody: string
+}
+
+export interface PetCompanionFileAnalysisProfile {
+  desktopUtterance: string
+  desktopUtteranceByTone?: Record<string, string>
+}
+
+export interface PetCompanionBridgeSequenceStep {
+  state: 'IDLE' | 'HAPPY' | 'THINKING' | 'EXCITED'
+  holdMs: number
+}
+
+export interface PetCompanionBridgeMotionProfile {
+  focusToBreak?: PetCompanionBridgeSequenceStep[]
+  breakToFocus?: PetCompanionBridgeSequenceStep[]
+  focusToWatch?: PetCompanionBridgeSequenceStep[]
+  watchToFocus?: PetCompanionBridgeSequenceStep[]
 }
 
 export interface PetCompanionContentProfile {
@@ -247,8 +296,13 @@ export interface PetCompanionContentProfile {
     productiveSession: PetCompanionContentEntry
     lateNight: PetCompanionContentEntry
     watchTogether: PetCompanionContentEntry
+    socialCorner: PetCompanionContentEntry
+    recentFileCheckin: PetCompanionContentEntry
     gentleIdle: PetCompanionContentEntry
   }
+  feedCard?: PetCompanionFeedCardProfile
+  fileAnalysis?: PetCompanionFileAnalysisProfile
+  bridgeMotions?: PetCompanionBridgeMotionProfile
 }
 
 export interface PetAssetStatus {

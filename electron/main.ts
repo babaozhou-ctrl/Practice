@@ -2,6 +2,9 @@ import { app, BrowserWindow, desktopCapturer, ipcMain, Menu, Tray, nativeImage, 
 import { mkdirSync } from 'fs'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
+import type { CompanionActionPayload } from '../src/ai/CompanionActionBridge'
+import type { CompanionFeedAnalysisPayload } from '../src/ai/CompanionFeedBridge'
+import type { CompanionUtterancePayload } from '../src/ai/CompanionUtteranceBridge'
 import {
   listImportedPetPackages,
   resolveImportedPetAssetPath,
@@ -26,6 +29,7 @@ let petWindow: BrowserWindow | null = null
 let uiWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let contextPollInterval: ReturnType<typeof setInterval> | null = null
+let automationMetricsInterval: ReturnType<typeof setInterval> | null = null
 let lastWindowInfo = ''
 let lastAwayBucket = ''
 let isClickThrough = false
@@ -36,24 +40,356 @@ const APP_ICON_PATH = join(__dirname, '../build/icon.png')
 const PET_WINDOW_WIDTH = 300
 const PET_WINDOW_HEIGHT = 420
 const IMPORTED_PET_PROTOCOL = 'deep-pet'
+const IS_DEV_RUNTIME = process.argv.includes('--dev') || Boolean(process.env.VITE_DEV_SERVER_URL)
+const SMOKE_TARGET = process.env.DEEP_PET_SMOKE ?? ''
+const RUNTIME_SCENARIO = process.env.DEEP_PET_SCENARIO ?? ''
+const AUTO_EXIT_MS = parsePositiveInteger(process.env.DEEP_PET_AUTO_EXIT_MS)
+const IS_SMOKE_RUNTIME = SMOKE_TARGET.length > 0
+const IS_AUTOMATED_RUNTIME = IS_SMOKE_RUNTIME || RUNTIME_SCENARIO.length > 0 || AUTO_EXIT_MS !== null
+const REQUIRES_SMOKE_UI =
+  SMOKE_TARGET === 'chat' ||
+  SMOKE_TARGET === 'feed' ||
+  SMOKE_TARGET === 'settings' ||
+  SMOKE_TARGET === 'workmode' ||
+  SMOKE_TARGET === 'import'
+const SMOKE_RUN_ID = IS_SMOKE_RUNTIME ? `smoke-${Date.now()}` : null
+const AUTOMATION_RUN_ID = IS_AUTOMATED_RUNTIME ? `auto-${Date.now()}` : null
+const COMPANION_FEED_RELAY_CHANNEL = 'bridge:companion-feed-analysis'
+const COMPANION_ACTION_RELAY_CHANNEL = 'bridge:companion-action'
+const COMPANION_UTTERANCE_RELAY_CHANNEL = 'bridge:companion-utterance'
+const MAX_COMPANION_FEED_HISTORY = 24
+const AUTOMATION_METRICS_EVENT_CHANNEL = 'metrics:event'
+
+let smokePetReady = false
+let smokeUiReady = false
+let smokeFeedResultReady = false
+let smokeFeedChatReceived = false
+let smokeSettingsPanelReady = false
+let smokeWorkModeReady = false
+let smokeImportReady = false
+let companionFeedHistory: CompanionFeedAnalysisPayload[] = []
+let smokeFinishing = false
 
 prepareRuntimePaths()
 
 process.on('uncaughtException', (err) => {
   console.error('Uncaught exception:', err.message)
+  if (IS_SMOKE_RUNTIME) {
+    finishSmoke(1)
+  }
 })
 
 process.on('unhandledRejection', (reason) => {
   console.error('Unhandled rejection:', reason)
+  if (IS_SMOKE_RUNTIME) {
+    finishSmoke(1)
+  }
 })
+
+function finishSmoke(code = 0) {
+  if (!IS_SMOKE_RUNTIME || smokeFinishing) {
+    return
+  }
+
+  smokeFinishing = true
+
+  setTimeout(() => {
+    app.exit(code)
+  }, 2_000)
+
+  if (uiWindow && !uiWindow.isDestroyed()) {
+    uiWindow.close()
+  }
+
+  if (petWindow && !petWindow.isDestroyed()) {
+    petWindow.close()
+  }
+
+  setTimeout(() => {
+    app.quit()
+  }, 100)
+}
+
+function markSmokeReady(kind: 'pet' | 'ui') {
+  if (!IS_SMOKE_RUNTIME) {
+    return
+  }
+
+  if (kind === 'pet') {
+    smokePetReady = true
+  } else {
+    smokeUiReady = true
+  }
+
+  if (!REQUIRES_SMOKE_UI && smokePetReady) {
+    console.log('[deep-pet] smoke-ready')
+    finishSmoke()
+    return
+  }
+
+  if (REQUIRES_SMOKE_UI && smokePetReady && smokeUiReady) {
+    if (SMOKE_TARGET === 'feed') {
+      return
+    }
+    if (SMOKE_TARGET === 'settings') {
+      return
+    }
+    if (SMOKE_TARGET === 'workmode') {
+      return
+    }
+    if (SMOKE_TARGET === 'import') {
+      return
+    }
+    console.log('[deep-pet] smoke-ui-ready')
+    finishSmoke()
+  }
+}
+
+function markSmokeCheckpoint(label: string) {
+  if (!IS_SMOKE_RUNTIME) {
+    return
+  }
+
+  console.log(`[deep-pet] smoke:${label}`)
+
+  if (label === 'feed-result-ready') {
+    smokeFeedResultReady = true
+  }
+
+  if (label === 'feed-chat-received') {
+    smokeFeedChatReceived = true
+  }
+
+  if (label === 'settings-panel-ready') {
+    smokeSettingsPanelReady = true
+  }
+
+  if (label === 'workmode-ready') {
+    smokeWorkModeReady = true
+  }
+
+  if (label === 'import-ready') {
+    smokeImportReady = true
+  }
+
+  if (SMOKE_TARGET === 'settings' && smokePetReady && smokeUiReady && smokeSettingsPanelReady) {
+    console.log('[deep-pet] smoke-settings-ready')
+    finishSmoke()
+    return
+  }
+
+  if (SMOKE_TARGET === 'workmode' && smokePetReady && smokeUiReady && smokeWorkModeReady) {
+    console.log('[deep-pet] smoke-workmode-ready')
+    finishSmoke()
+    return
+  }
+
+  if (SMOKE_TARGET === 'import' && smokePetReady && smokeUiReady && smokeImportReady) {
+    console.log('[deep-pet] smoke-import-ready')
+    finishSmoke()
+    return
+  }
+
+  if (SMOKE_TARGET !== 'feed') {
+    return
+  }
+
+  if (smokePetReady && smokeUiReady && smokeFeedResultReady && smokeFeedChatReceived) {
+    console.log('[deep-pet] smoke-feed-ready')
+    finishSmoke()
+  }
+}
 
 function prepareRuntimePaths() {
   try {
-    const sessionDataPath = join(app.getPath('userData'), 'session-data')
+    if (IS_SMOKE_RUNTIME) {
+      const smokeUserDataPath = join(
+        app.getPath('temp'),
+        'deep-pet-smoke',
+        SMOKE_TARGET || 'default',
+        SMOKE_RUN_ID ?? 'run',
+      )
+      mkdirSync(smokeUserDataPath, { recursive: true })
+      app.setPath('userData', smokeUserDataPath)
+    }
+
+    const userDataPath = app.getPath('userData')
+    const sessionDataPath = join(userDataPath, 'session-data')
+
     mkdirSync(sessionDataPath, { recursive: true })
+
     app.setPath('sessionData', sessionDataPath)
   } catch (error) {
     console.warn('Failed to prepare runtime paths:', error)
+  }
+}
+
+function parsePositiveInteger(value: string | undefined): number | null {
+  if (!value) {
+    return null
+  }
+
+  const parsed = Number.parseInt(value, 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null
+  }
+
+  return parsed
+}
+
+function normalizeCompanionFeedPayload(
+  payload: CompanionFeedAnalysisPayload | null | undefined,
+): CompanionFeedAnalysisPayload | null {
+  if (
+    !payload ||
+    typeof payload.id !== 'string' ||
+    typeof payload.fileName !== 'string' ||
+    typeof payload.briefSummary !== 'string' ||
+    typeof payload.detailedAnalysis !== 'string' ||
+    typeof payload.desktopUtterance !== 'string' ||
+    typeof payload.createdAt !== 'number' ||
+    !payload.context
+  ) {
+    return null
+  }
+
+  const id = payload.id.trim()
+  const fileName = payload.fileName.trim()
+  const briefSummary = payload.briefSummary.trim()
+  const detailedAnalysis = payload.detailedAnalysis.trim()
+  const desktopUtterance = payload.desktopUtterance.trim()
+
+  if (!id || !fileName || !briefSummary || !detailedAnalysis || !desktopUtterance || !Number.isFinite(payload.createdAt)) {
+    return null
+  }
+
+  return {
+    ...payload,
+    id,
+    fileName,
+    briefSummary,
+    detailedAnalysis,
+    desktopUtterance,
+    actions: Array.isArray(payload.actions) ? payload.actions : [],
+  }
+}
+
+function normalizeCompanionActionPayload(
+  payload: CompanionActionPayload | null | undefined,
+): CompanionActionPayload | null {
+  if (
+    !payload ||
+    typeof payload.id !== 'string' ||
+    typeof payload.title !== 'string' ||
+    typeof payload.message !== 'string'
+  ) {
+    return null
+  }
+
+  const id = payload.id.trim()
+  const title = payload.title.trim()
+  const message = payload.message.trim()
+
+  if (!id || !title || !message) {
+    return null
+  }
+
+  return {
+    ...payload,
+    id,
+    title,
+    message,
+    actions: Array.isArray(payload.actions) ? payload.actions : [],
+  }
+}
+
+function normalizeCompanionUtterancePayload(
+  payload: CompanionUtterancePayload | null | undefined,
+): CompanionUtterancePayload | null {
+  if (!payload || typeof payload.message !== 'string') {
+    return null
+  }
+
+  const message = payload.message.replace(/\s+/g, ' ').trim()
+  if (!message) {
+    return null
+  }
+
+  return {
+    ...payload,
+    message,
+    duration:
+      typeof payload.duration === 'number' && Number.isFinite(payload.duration)
+        ? Math.max(1_600, Math.round(payload.duration))
+        : undefined,
+  }
+}
+
+function normalizeAutomationMetricsEvent(
+  payload: unknown,
+): { name: string; value?: number | null; tags?: Record<string, string | number | boolean | null> } | null {
+  if (!payload || typeof payload !== 'object') {
+    return null
+  }
+
+  const candidate = payload as {
+    name?: unknown
+    value?: unknown
+    tags?: unknown
+  }
+
+  if (typeof candidate.name !== 'string' || !candidate.name.trim()) {
+    return null
+  }
+
+  const normalizedValue =
+    typeof candidate.value === 'number' && Number.isFinite(candidate.value) ? candidate.value : null
+  const normalizedTags: Record<string, string | number | boolean | null> = {}
+
+  if (candidate.tags && typeof candidate.tags === 'object') {
+    for (const [key, rawValue] of Object.entries(candidate.tags as Record<string, unknown>)) {
+      if (!key.trim()) {
+        continue
+      }
+
+      if (
+        typeof rawValue === 'string' ||
+        typeof rawValue === 'number' ||
+        typeof rawValue === 'boolean' ||
+        rawValue === null
+      ) {
+        normalizedTags[key] = rawValue
+      }
+    }
+  }
+
+  return {
+    name: candidate.name.trim(),
+    value: normalizedValue,
+    tags: Object.keys(normalizedTags).length > 0 ? normalizedTags : undefined,
+  }
+}
+
+function upsertCompanionFeedHistory(payload: CompanionFeedAnalysisPayload) {
+  companionFeedHistory = [...companionFeedHistory.filter((entry) => entry.id !== payload.id), payload]
+    .sort((left, right) => left.createdAt - right.createdAt)
+    .slice(-MAX_COMPANION_FEED_HISTORY)
+}
+
+function getOpenRendererWindows(): BrowserWindow[] {
+  return [petWindow, uiWindow].filter((windowRef): windowRef is BrowserWindow => Boolean(windowRef && !windowRef.isDestroyed()))
+}
+
+function relayToOtherWindows(
+  channel: string,
+  payload: unknown,
+  senderId?: number,
+) {
+  for (const windowRef of getOpenRendererWindows()) {
+    if (typeof senderId === 'number' && windowRef.webContents.id === senderId) {
+      continue
+    }
+    windowRef.webContents.send(channel, payload)
   }
 }
 
@@ -93,6 +429,29 @@ function registerImportedPetProtocol() {
   })
 }
 
+function attachWindowDiagnostics(windowRef: BrowserWindow, label: 'pet' | 'ui') {
+  if (!IS_AUTOMATED_RUNTIME && !IS_DEV_RUNTIME) {
+    return
+  }
+
+  windowRef.webContents.on('console-message', (_event, level, message) => {
+    const prefix = `[deep-pet] ${label} console:${level}`
+    if (level >= 2) {
+      console.error(prefix, message)
+      return
+    }
+    console.log(prefix, message)
+  })
+
+  windowRef.webContents.on('render-process-gone', (_event, details) => {
+    console.error(`[deep-pet] ${label} render gone:`, details.reason)
+  })
+
+  windowRef.webContents.on('unresponsive', () => {
+    console.error(`[deep-pet] ${label} became unresponsive`)
+  })
+}
+
 function createPetWindow() {
   const { x, y } = getDefaultPosition()
   petWindow = new BrowserWindow({
@@ -116,6 +475,7 @@ function createPetWindow() {
   })
 
   petWindow.setIgnoreMouseEvents(false)
+  attachWindowDiagnostics(petWindow, 'pet')
 
   if (process.env.VITE_DEV_SERVER_URL) {
     petWindow.loadURL(process.env.VITE_DEV_SERVER_URL + 'pet.html')
@@ -123,12 +483,26 @@ function createPetWindow() {
     petWindow.loadFile(join(__dirname, '../dist/pet.html'))
   }
 
+  petWindow.webContents.on('did-finish-load', () => {
+    if (IS_DEV_RUNTIME) {
+      console.log('[deep-pet] pet window loaded')
+    }
+    markSmokeReady('pet')
+  })
+
+  petWindow.webContents.on('did-fail-load', (_event, code, description) => {
+    console.error('[deep-pet] pet window failed to load:', code, description)
+    if (IS_SMOKE_RUNTIME) {
+      app.exit(1)
+    }
+  })
+
   petWindow.on('closed', () => {
     petWindow = null
     app.quit()
   })
 
-  if (process.argv.includes('--dev')) {
+  if (IS_DEV_RUNTIME) {
     petWindow.webContents.openDevTools({ mode: 'detach' })
   }
 }
@@ -148,6 +522,7 @@ function createUIWindow() {
       nodeIntegration: false,
     },
   })
+  attachWindowDiagnostics(uiWindow, 'ui')
 
   if (process.env.VITE_DEV_SERVER_URL) {
     uiWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
@@ -155,13 +530,24 @@ function createUIWindow() {
     uiWindow.loadFile(join(__dirname, '../dist/index.html'))
   }
 
-  uiWindow.on('closed', () => {
-    uiWindow = null
-  })
-
   uiWindow.webContents.on('did-finish-load', () => {
+    if (IS_DEV_RUNTIME) {
+      console.log('[deep-pet] ui window loaded')
+    }
     const info = detectActiveWindow()
     broadcastContextUpdate(info)
+    markSmokeReady('ui')
+  })
+
+  uiWindow.webContents.on('did-fail-load', (_event, code, description) => {
+    console.error('[deep-pet] ui window failed to load:', code, description)
+    if (IS_SMOKE_RUNTIME) {
+      app.exit(1)
+    }
+  })
+
+  uiWindow.on('closed', () => {
+    uiWindow = null
   })
 }
 
@@ -196,6 +582,57 @@ function showUIWindowAndNotify(channel?: 'ui:show-settings' | 'ui:show-chat') {
   }
 
   uiWindow.webContents.once('did-finish-load', notify)
+}
+
+function startRuntimeScenario() {
+  if (IS_SMOKE_RUNTIME) {
+    return
+  }
+
+  switch (RUNTIME_SCENARIO) {
+    case 'stability-chat':
+      setTimeout(() => {
+        showUIWindowAndNotify('ui:show-chat')
+      }, 250)
+      break
+    case 'stability-feed':
+      setTimeout(() => {
+        showUIWindowAndNotify('ui:show-chat')
+      }, 250)
+      break
+    case 'stability-settings':
+      setTimeout(() => {
+        showUIWindowAndNotify('ui:show-settings')
+      }, 250)
+      break
+    case 'stability-import':
+      setTimeout(() => {
+        showUIWindowAndNotify('ui:show-settings')
+      }, 250)
+      break
+    default:
+      break
+  }
+}
+
+function scheduleAutomatedRuntimeExit() {
+  if (AUTO_EXIT_MS === null || IS_SMOKE_RUNTIME) {
+    return
+  }
+
+  setTimeout(() => {
+    if (uiWindow && !uiWindow.isDestroyed()) {
+      uiWindow.close()
+    }
+
+    if (petWindow && !petWindow.isDestroyed()) {
+      petWindow.close()
+    }
+
+    setTimeout(() => {
+      app.quit()
+    }, 100)
+  }, AUTO_EXIT_MS)
 }
 
 function getDefaultPosition() {
@@ -241,6 +678,12 @@ function setupIPC() {
     showUIWindowAndNotify('ui:show-chat')
   })
 
+  ipcMain.on('app:hide-ui', () => {
+    if (uiWindow && !uiWindow.isDestroyed()) {
+      uiWindow.hide()
+    }
+  })
+
   ipcMain.handle('context:get-active-window', async () => detectActiveWindow())
   ipcMain.handle('screen:capture-primary', async () => capturePrimaryDisplay())
   ipcMain.handle('documents:extract-text', async (_event, payload) => extractDocumentText(payload))
@@ -263,44 +706,70 @@ function setupIPC() {
   )
   ipcMain.handle('plugins:run-ai-health-check', async (_event, payload) => runPluginAIHealthCheck(payload))
   ipcMain.handle('plugins:cancel-ai-chat', async (_event, payload) => cancelPluginAIChat(payload.requestId))
+  ipcMain.handle('app:get-runtime-flags', async () => ({
+    smokeTarget: SMOKE_TARGET || null,
+    scenario: RUNTIME_SCENARIO || null,
+    isDev: IS_DEV_RUNTIME,
+    smokeRunId: SMOKE_RUN_ID,
+    automationRunId: AUTOMATION_RUN_ID,
+    autoExitMs: AUTO_EXIT_MS,
+  }))
+  ipcMain.handle('bridge:feed:list', async () => companionFeedHistory)
+  ipcMain.on(AUTOMATION_METRICS_EVENT_CHANNEL, (_event, payload) => {
+    if (!IS_AUTOMATED_RUNTIME) {
+      return
+    }
+
+    const normalized = normalizeAutomationMetricsEvent(payload)
+    if (!normalized) {
+      return
+    }
+
+    const valueSegment =
+      typeof normalized.value === 'number' && Number.isFinite(normalized.value)
+        ? ` value:${normalized.value}`
+        : ''
+    const tagSegment = normalized.tags
+      ? ` tags:${JSON.stringify(normalized.tags)}`
+      : ''
+
+    console.log(`[deep-pet] event name:${normalized.name}${valueSegment}${tagSegment}`)
+  })
+  ipcMain.on('bridge:feed:emit', (event, payload: CompanionFeedAnalysisPayload) => {
+    const normalized = normalizeCompanionFeedPayload(payload)
+    if (!normalized) {
+      return
+    }
+    upsertCompanionFeedHistory(normalized)
+    relayToOtherWindows(COMPANION_FEED_RELAY_CHANNEL, normalized, event.sender.id)
+  })
+  ipcMain.on('bridge:action:emit', (event, payload: CompanionActionPayload) => {
+    const normalized = normalizeCompanionActionPayload(payload)
+    if (!normalized) {
+      return
+    }
+    relayToOtherWindows(COMPANION_ACTION_RELAY_CHANNEL, normalized, event.sender.id)
+  })
+  ipcMain.on('bridge:utterance:emit', (event, payload: CompanionUtterancePayload) => {
+    const normalized = normalizeCompanionUtterancePayload(payload)
+    if (!normalized) {
+      return
+    }
+    relayToOtherWindows(COMPANION_UTTERANCE_RELAY_CHANNEL, normalized, event.sender.id)
+  })
+  ipcMain.on('smoke:checkpoint', (_event, label: string) => {
+    if (typeof label === 'string' && label.trim()) {
+      markSmokeCheckpoint(label.trim())
+    }
+  })
   ipcMain.on('app:quit', () => app.quit())
 }
 
-function setupTray() {
-  const trayIcon = nativeImage.createFromPath(APP_ICON_PATH)
-  tray = new Tray(trayIcon.isEmpty() ? nativeImage.createEmpty() : trayIcon)
-  tray.setToolTip('Deep Pet · bb7')
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      {
-        label: '允许点击穿透',
-        type: 'checkbox',
-        checked: isClickThrough,
-        click: () => {
-          isClickThrough = !isClickThrough
-          if (petWindow) {
-            petWindow.setIgnoreMouseEvents(isClickThrough, { forward: true })
-          }
-          broadcastClickThroughChanged(isClickThrough)
-        },
-      },
-      { type: 'separator' },
-      {
-        label: '打开聊天',
-        click: () => {
-          showUIWindowAndNotify('ui:show-chat')
-        },
-      },
-      {
-        label: '打开设置',
-        click: () => {
-          showUIWindowAndNotify('ui:show-settings')
-        },
-      },
-      { type: 'separator' },
-      { label: '退出 Deep Pet', click: () => app.quit() },
-    ]),
-  )
+function syncClickThroughState() {
+  if (petWindow) {
+    petWindow.setIgnoreMouseEvents(isClickThrough, { forward: true })
+  }
+  broadcastClickThroughChanged(isClickThrough)
 }
 
 function setupStableTray() {
@@ -315,10 +784,7 @@ function setupStableTray() {
         checked: isClickThrough,
         click: () => {
           isClickThrough = !isClickThrough
-          if (petWindow) {
-            petWindow.setIgnoreMouseEvents(isClickThrough, { forward: true })
-          }
-          broadcastClickThroughChanged(isClickThrough)
+          syncClickThroughState()
         },
       },
       { type: 'separator' },
@@ -360,6 +826,38 @@ function startContextPolling() {
     } catch {
       // Ignore transient context polling failures.
     }
+  }, 5000)
+}
+
+function startAutomationMetricsLogging() {
+  if (!IS_AUTOMATED_RUNTIME) {
+    return
+  }
+
+  if (automationMetricsInterval) {
+    clearInterval(automationMetricsInterval)
+  }
+
+  const logMetrics = async () => {
+    try {
+      const metrics = await app.getAppMetrics()
+      const processMetrics = metrics.filter((entry) => entry.type === 'Browser' || entry.type === 'Tab')
+      const workingSetKb = processMetrics.reduce(
+        (sum, entry) => sum + (entry.memory?.workingSetSize ?? 0),
+        0,
+      )
+      const workingSetMb = workingSetKb / 1024
+      console.log(
+        `[deep-pet] metrics process-count:${processMetrics.length} memory-mb:${workingSetMb.toFixed(2)}`,
+      )
+    } catch (error) {
+      console.warn('[deep-pet] metrics collection failed:', error)
+    }
+  }
+
+  void logMetrics()
+  automationMetricsInterval = setInterval(() => {
+    void logMetrics()
   }, 5000)
 }
 
@@ -414,7 +912,7 @@ async function capturePrimaryDisplay(): Promise<string | null> {
   }
 }
 
-const gotSingleInstanceLock = app.requestSingleInstanceLock()
+const gotSingleInstanceLock = IS_SMOKE_RUNTIME ? true : app.requestSingleInstanceLock()
 
 if (!gotSingleInstanceLock) {
   app.quit()
@@ -436,15 +934,37 @@ if (!gotSingleInstanceLock) {
   app.whenReady().then(() => {
     app.setAppUserModelId(APP_ID)
     registerImportedPetProtocol()
-    createPetWindow()
     setupIPC()
+    createPetWindow()
     setupStableTray()
     startContextPolling()
+    startAutomationMetricsLogging()
+    startRuntimeScenario()
+    scheduleAutomatedRuntimeExit()
+    if (REQUIRES_SMOKE_UI) {
+      setTimeout(() => {
+        if (SMOKE_TARGET === 'settings') {
+          showUIWindowAndNotify('ui:show-settings')
+          return
+        }
+        if (SMOKE_TARGET === 'workmode') {
+          showUIWindowAndNotify('ui:show-settings')
+          return
+        }
+        if (SMOKE_TARGET === 'import') {
+          showUIWindowAndNotify('ui:show-settings')
+          return
+        }
+
+        showUIWindowAndNotify('ui:show-chat')
+      }, 250)
+    }
   })
 }
 
 app.on('window-all-closed', () => {
   if (contextPollInterval) clearInterval(contextPollInterval)
+  if (automationMetricsInterval) clearInterval(automationMetricsInterval)
   if (process.platform !== 'darwin') app.quit()
 })
 

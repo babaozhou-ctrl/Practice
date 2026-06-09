@@ -49,7 +49,16 @@ export function buildCompanionBriefSummary(text: string, fallback: string, maxCh
   return clipSentence(stitched, maxChars)
 }
 
-function resolveFileAnalysisLead(fileName: string, sceneId?: string | null): string {
+export function buildCompanionDesktopSummary(text: string, fallback: string, maxChars = 56): string {
+  const lines = meaningfulLines(text)
+  if (lines.length === 0) {
+    return clipSentence(fallback, maxChars)
+  }
+
+  return clipSentence(lines[0], maxChars)
+}
+
+export function resolveFileAnalysisLead(fileName: string, sceneId?: string | null): string {
   switch (sceneId) {
     case 'deep_focus':
     case 'steady_focus':
@@ -68,10 +77,10 @@ function resolveFileAnalysisLead(fileName: string, sceneId?: string | null): str
 
 export function buildFileAnalysisUtterance(
   fileName: string,
-  briefSummary: string,
+  desktopSummary: string,
   sceneId?: string | null,
 ): string {
-  const lead = summarizeForCompanionSpeech(briefSummary, `我先看了看《${fileName}》。`, 30)
+  const lead = summarizeForCompanionSpeech(desktopSummary, `我先看了看《${fileName}》。`, 30)
   return `${resolveFileAnalysisLead(fileName, sceneId)}。${lead}`
 }
 

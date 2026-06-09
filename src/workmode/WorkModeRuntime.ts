@@ -51,11 +51,15 @@ export class WorkModeRuntime {
   }
 
   startFocus(now = Date.now()): WorkModeState {
-    return this.commit(this.buildPhaseState('focus', this.state, now))
+    const next = cloneWorkModeState(this.state)
+    next.config.enabled = true
+    return this.commit(this.buildPhaseState('focus', next, now))
   }
 
   startBreak(now = Date.now(), kind: 'short_break' | 'long_break' = 'short_break'): WorkModeState {
-    return this.commit(this.buildPhaseState(kind, this.state, now))
+    const next = cloneWorkModeState(this.state)
+    next.config.enabled = true
+    return this.commit(this.buildPhaseState(kind, next, now))
   }
 
   pause(now = Date.now()): WorkModeState {

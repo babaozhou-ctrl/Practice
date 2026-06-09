@@ -8,6 +8,7 @@
     "dev": "vite",
     "desktop:dev": "node scripts/dev-electron.mjs",
     "build": "node scripts/build-release.mjs --mode=build",
+    "smoke:desktop": "node scripts/smoke-desktop.mjs",
     "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
     "preview": "vite preview",
     "electron:dev": "node scripts/dev-electron.mjs",

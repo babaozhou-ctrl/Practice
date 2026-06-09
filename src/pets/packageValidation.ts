@@ -30,6 +30,8 @@ const REQUIRED_PROACTIVE_KEYS = [
   'productiveSession',
   'lateNight',
   'watchTogether',
+  'socialCorner',
+  'recentFileCheckin',
   'gentleIdle',
 ] as const
 
@@ -237,6 +239,10 @@ function validateCompanionContent(
     errors.push('companion-content.json 缺少非空的 version。')
   }
 
+  validateFeedCardContent(companionContent, errors)
+  validateFileAnalysisContent(companionContent, errors)
+  validateBridgeMotionsContent(companionContent, errors)
+
   for (const key of REQUIRED_PROACTIVE_KEYS) {
     const entry = companionContent.proactive?.[key]
     if (!entry) {
@@ -247,6 +253,17 @@ function validateCompanionContent(
     if (!entry.title?.trim()) {
       errors.push(`companion-content.json 的 proactive.${key}.title 不能为空。`)
     }
+    if (entry.speech) {
+      if (!entry.speech.message?.trim()) {
+        errors.push(`companion-content.json 的 proactive.${key}.speech.message 不能为空。`)
+      }
+      if (
+        entry.speech.durationMs !== undefined &&
+        (typeof entry.speech.durationMs !== 'number' || entry.speech.durationMs <= 0)
+      ) {
+        errors.push(`companion-content.json 的 proactive.${key}.speech.durationMs 必须是大于 0 的数字。`)
+      }
+    }
     if (!Array.isArray(entry.actions) || entry.actions.length === 0) {
       errors.push(`companion-content.json 的 proactive.${key}.actions 至少要有一个动作。`)
       continue
@@ -256,6 +273,81 @@ function validateCompanionContent(
       if (!action.id?.trim() || !action.label?.trim() || !action.prompt?.trim()) {
         errors.push(`companion-content.json 的 proactive.${key}.actions 里存在缺少 id/label/prompt 的动作。`)
         break
+      }
+    }
+  }
+}
+
+function validateFeedCardContent(
+  companionContent: PetCompanionContentProfile,
+  errors: string[],
+) {
+  const feedCard = companionContent.feedCard
+  if (!feedCard) {
+    return
+  }
+
+  const requiredFields: Array<keyof NonNullable<PetCompanionContentProfile['feedCard']>> = [
+    'confirmTitle',
+    'thinkingTitle',
+    'resultTitle',
+    'errorTitle',
+    'confirmAcceptLabel',
+    'confirmRejectLabel',
+    'resultOpenChatLabel',
+    'resultLaterLabel',
+    'confirmBody',
+    'thinkingBody',
+    'resultBody',
+  ]
+
+  for (const field of requiredFields) {
+    if (!feedCard[field]?.trim()) {
+      errors.push(`companion-content.json 的 feedCard.${field} 不能为空。`)
+    }
+  }
+}
+
+function validateFileAnalysisContent(
+  companionContent: PetCompanionContentProfile,
+  errors: string[],
+) {
+  const fileAnalysis = companionContent.fileAnalysis
+  if (!fileAnalysis) {
+    return
+  }
+
+  if (!fileAnalysis.desktopUtterance?.trim()) {
+    errors.push('companion-content.json 的 fileAnalysis.desktopUtterance 不能为空。')
+  }
+}
+
+function validateBridgeMotionsContent(
+  companionContent: PetCompanionContentProfile,
+  errors: string[],
+) {
+  const bridgeMotions = companionContent.bridgeMotions
+  if (!bridgeMotions) {
+    return
+  }
+
+  const allowedStates = new Set(['IDLE', 'HAPPY', 'THINKING', 'EXCITED'])
+  for (const [key, sequence] of Object.entries(bridgeMotions)) {
+    if (!sequence) {
+      continue
+    }
+
+    if (!Array.isArray(sequence) || sequence.length === 0) {
+      errors.push(`companion-content.json 的 bridgeMotions.${key} 至少要有一个 step。`)
+      continue
+    }
+
+    for (const step of sequence) {
+      if (!allowedStates.has(step.state)) {
+        errors.push(`companion-content.json 的 bridgeMotions.${key} 包含不支持的 state：${step.state}。`)
+      }
+      if (typeof step.holdMs !== 'number' || step.holdMs <= 0) {
+        errors.push(`companion-content.json 的 bridgeMotions.${key} 里存在无效的 holdMs。`)
       }
     }
   }

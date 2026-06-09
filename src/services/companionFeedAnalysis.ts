@@ -1,14 +1,21 @@
 import { buildCompanionChatContext } from '../ai/CompanionContextAdapter'
-import { buildCompanionBriefSummary, buildFileAnalysisUtterance } from '../ai/CompanionDesktopSummary'
+import {
+  buildCompanionBriefSummary,
+  buildCompanionDesktopSummary,
+  buildFileAnalysisUtterance,
+  resolveFileAnalysisLead,
+} from '../ai/CompanionDesktopSummary'
 import { captureCompanionFileAnalysis } from '../ai/CompanionMemoryStore'
 import { resolveAIChatProvider, resolveFileAnalysisProvider } from '../plugins/PluginCapabilityRegistry'
 import { usePluginProviderStore } from '../plugins/PluginProviderStore'
+import { resolveSelectedPetPackage } from '../pets/resolveSelectedPetPackage'
 import { readChatConfig } from '../store/chatStore'
 import type { ChatMessageAction, CompanionChatContext } from '../types/chat'
 import type { ActivityType } from '../types/context'
 
 export interface CompanionFeedAnalysisResult {
   fileName: string
+  desktopSummary: string
   briefSummary: string
   detailedAnalysis: string
   context: CompanionChatContext
@@ -183,16 +190,31 @@ export async function analyzeFileForCompanionFeed(
     `《${file.name}》里有几处值得继续看。`,
     100,
   )
+  const desktopSummary = buildCompanionDesktopSummary(
+    detailedAnalysis,
+    `《${file.name}》里有一两处值得接着看。`,
+    56,
+  )
 
   captureCompanionFileAnalysis(file.name, briefSummary, detailedAnalysis, context.sceneId)
 
+  const petPackage = resolveSelectedPetPackage()
+  const desktopUtterance = resolveFileAnalysisDesktopUtterance(
+    petPackage.manifest.name || 'bb7',
+    petPackage.companionContent?.fileAnalysis?.desktopUtterance,
+    file.name,
+    desktopSummary,
+    context.sceneId,
+  )
+
   return {
     fileName: file.name,
+    desktopSummary,
     briefSummary,
     detailedAnalysis,
     context,
     actions: buildFeedFollowUpActionsForScene(file.name, detailedAnalysis, context),
-    desktopUtterance: buildFileAnalysisUtterance(file.name, briefSummary, context.sceneId),
+    desktopUtterance,
   }
 }
 
@@ -233,4 +255,25 @@ function resolveSceneInstruction(context: CompanionChatContext): string {
     return '先像一起看内容那样帮我讲重点，可以有一点轻微反应，但别变成正式报告。'
   }
   return '先用陪伴式的语气帮我讲重点，不要像生硬的工具简报。'
+}
+
+function resolveFileAnalysisDesktopUtterance(
+  petName: string,
+  template: string | null | undefined,
+  fileName: string,
+  desktopSummary: string,
+  sceneId: string,
+): string {
+  const normalizedTemplate = template?.trim()
+  if (!normalizedTemplate) {
+    return buildFileAnalysisUtterance(fileName, desktopSummary, sceneId)
+  }
+
+  const lead = resolveFileAnalysisLead(fileName, sceneId)
+
+  return normalizedTemplate
+    .replace(/\{\{petName\}\}/g, petName)
+    .replace(/\{\{fileName\}\}/g, fileName)
+    .replace(/\{\{desktopSummary\}\}/g, desktopSummary)
+    .replace(/\{\{lead\}\}/g, lead)
 }

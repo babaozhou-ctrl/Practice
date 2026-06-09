@@ -1,4 +1,7 @@
 import type { SpriteDefinition } from '../../types/animation'
+import type { CompanionActionPayload } from '../../ai/CompanionActionBridge'
+import type { CompanionFeedAnalysisPayload } from '../../ai/CompanionFeedBridge'
+import type { CompanionUtterancePayload } from '../../ai/CompanionUtteranceBridge'
 import type { AIConfig } from '../../types/chat'
 import type { PluginAIChatExecutionRequest } from '../../plugins/types'
 import type { PluginDiscoveryRecord } from '../../plugins/runtime/types'
@@ -39,6 +42,24 @@ declare global {
       openChat?: () => void
       openSettings?: () => void
       onShowChat?: (callback: () => void) => void
+        getRuntimeFlags?: () => Promise<{
+          smokeTarget: string | null
+          scenario: string | null
+          isDev: boolean
+          smokeRunId: string | null
+          automationRunId: string | null
+          autoExitMs: number | null
+        }>
+      emitCompanionFeedBridgePayload?: (payload: CompanionFeedAnalysisPayload) => void
+      readCompanionFeedBridgeHistory?: () => Promise<CompanionFeedAnalysisPayload[]>
+      onCompanionFeedBridgePayload?: (callback: (payload: CompanionFeedAnalysisPayload) => void) => void
+      emitCompanionActionBridgePayload?: (payload: CompanionActionPayload) => void
+      onCompanionActionBridgePayload?: (callback: (payload: CompanionActionPayload) => void) => void
+      emitCompanionUtteranceBridgePayload?: (payload: CompanionUtterancePayload) => void
+        onCompanionUtteranceBridgePayload?: (callback: (payload: CompanionUtterancePayload) => void) => void
+        emitSmokeCheckpoint?: (label: string) => void
+        emitAutomationMetricsEvent?: (payload: unknown) => void
+        hideUIWindow?: () => void
       quitApp?: () => void
       capturePrimaryScreen?: () => Promise<string | null>
       extractDocumentText?: (payload: {

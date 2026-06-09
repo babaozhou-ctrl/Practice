@@ -3,6 +3,8 @@ import { ChatMessage, AIConfig } from '../types/chat'
 
 const CHAT_CONFIG_STORAGE_KEY = 'deep-pet.chat-config.v1'
 const CHAT_CONFIG_EVENT = 'deep-pet:chat-config-sync'
+const CHAT_RUNTIME_STORAGE_KEY = 'deep-pet.chat-runtime.v1'
+const CHAT_RUNTIME_EVENT = 'deep-pet:chat-runtime-sync'
 
 const DEFAULT_CHAT_CONFIG: AIConfig = {
   endpoint: 'https://api.deepseek.com/v1/chat/completions',
@@ -11,6 +13,16 @@ const DEFAULT_CHAT_CONFIG: AIConfig = {
   temperature: 0.8,
   maxTokens: 1024,
   enabled: false,
+}
+
+export interface ChatRuntimeState {
+  enabled: boolean
+  isConnected: boolean
+}
+
+const DEFAULT_CHAT_RUNTIME_STATE: ChatRuntimeState = {
+  enabled: DEFAULT_CHAT_CONFIG.enabled,
+  isConnected: false,
 }
 
 interface ChatStore {
@@ -26,6 +38,13 @@ interface ChatStore {
   setConfig: (config: Partial<AIConfig>) => void
   setStreaming: (v: boolean) => void
   setConnected: (v: boolean) => void
+}
+
+function normalizeChatRuntimeState(value: Partial<ChatRuntimeState> | null | undefined): ChatRuntimeState {
+  return {
+    enabled: Boolean(value?.enabled ?? DEFAULT_CHAT_RUNTIME_STATE.enabled),
+    isConnected: Boolean(value?.isConnected ?? DEFAULT_CHAT_RUNTIME_STATE.isConnected),
+  }
 }
 
 function normalizeChatConfig(value: Partial<AIConfig> | null | undefined): AIConfig {
@@ -68,6 +87,32 @@ export function readChatConfig(): AIConfig {
   }
 }
 
+export function readChatRuntimeState(): ChatRuntimeState {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      return {
+        ...DEFAULT_CHAT_RUNTIME_STATE,
+        enabled: readChatConfig().enabled,
+      }
+    }
+
+    const raw = window.localStorage.getItem(CHAT_RUNTIME_STORAGE_KEY)
+    if (!raw) {
+      return {
+        ...DEFAULT_CHAT_RUNTIME_STATE,
+        enabled: readChatConfig().enabled,
+      }
+    }
+
+    return normalizeChatRuntimeState(JSON.parse(raw) as Partial<ChatRuntimeState>)
+  } catch {
+    return {
+      ...DEFAULT_CHAT_RUNTIME_STATE,
+      enabled: readChatConfig().enabled,
+    }
+  }
+}
+
 function writeChatConfig(config: AIConfig) {
   const normalized = normalizeChatConfig(config)
 
@@ -84,13 +129,76 @@ function writeChatConfig(config: AIConfig) {
   }
 }
 
+function writeChatRuntimeState(state: ChatRuntimeState) {
+  const normalized = normalizeChatRuntimeState(state)
+
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(CHAT_RUNTIME_STORAGE_KEY, JSON.stringify(normalized))
+    }
+  } catch {
+    // Ignore persistence failures and keep the in-memory state usable.
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(CHAT_RUNTIME_EVENT, { detail: normalized }))
+  }
+}
+
+export function subscribeChatRuntimeState(listener: (state: ChatRuntimeState) => void): () => void {
+  if (typeof window === 'undefined') {
+    return () => undefined
+  }
+
+  const emitCurrent = () => listener(readChatRuntimeState())
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === CHAT_RUNTIME_STORAGE_KEY || event.key === CHAT_CONFIG_STORAGE_KEY) {
+      emitCurrent()
+    }
+  }
+  const onInternal = (event: Event) => {
+    const detail = (event as CustomEvent<ChatRuntimeState>).detail
+    if (detail) {
+      listener(normalizeChatRuntimeState(detail))
+      return
+    }
+    emitCurrent()
+  }
+
+  window.addEventListener('storage', onStorage)
+  window.addEventListener(CHAT_RUNTIME_EVENT, onInternal as EventListener)
+  window.addEventListener(CHAT_CONFIG_EVENT, emitCurrent as EventListener)
+  emitCurrent()
+
+  return () => {
+    window.removeEventListener('storage', onStorage)
+    window.removeEventListener(CHAT_RUNTIME_EVENT, onInternal as EventListener)
+    window.removeEventListener(CHAT_CONFIG_EVENT, emitCurrent as EventListener)
+  }
+}
+
+function syncChatRuntimeState(partial: Partial<ChatRuntimeState>) {
+  const current = readChatRuntimeState()
+  writeChatRuntimeState({
+    ...current,
+    ...partial,
+  })
+}
+
 export const useChatStore = create<ChatStore>((set) => ({
   messages: [],
   config: readChatConfig(),
   isStreaming: false,
-  isConnected: false,
+  isConnected: readChatRuntimeState().isConnected,
 
-  addMessage: (msg) => set((s) => ({ messages: [...s.messages, msg] })),
+  addMessage: (msg) =>
+    set((s) => {
+      if (s.messages.some((message) => message.id === msg.id)) {
+        return s
+      }
+
+      return { messages: [...s.messages, msg] }
+    }),
   appendToLastMessage: (content) =>
     set((s) => {
       const msgs = [...s.messages]
@@ -116,8 +224,16 @@ export const useChatStore = create<ChatStore>((set) => ({
     set((s) => {
       const nextConfig = normalizeChatConfig({ ...s.config, ...partial })
       writeChatConfig(nextConfig)
+      syncChatRuntimeState({ enabled: nextConfig.enabled })
       return { config: nextConfig }
     }),
   setStreaming: (v) => set({ isStreaming: v }),
-  setConnected: (v) => set({ isConnected: v }),
+  setConnected: (v) =>
+    set((s) => {
+      syncChatRuntimeState({
+        enabled: s.config.enabled,
+        isConnected: v,
+      })
+      return { isConnected: v }
+    }),
 }))

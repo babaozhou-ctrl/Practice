@@ -15,6 +15,7 @@ export function emitCompanionUtterance(payload: CompanionUtterancePayload) {
 
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(COMPANION_UTTERANCE_EVENT, { detail: normalized }))
+    window.electronAPI?.emitCompanionUtteranceBridgePayload?.(normalized)
   }
 
   getBroadcastChannel()?.postMessage(normalized)
@@ -45,6 +46,14 @@ export function subscribeCompanionUtterance(
     }
   }
   channel?.addEventListener('message', onMessage as EventListener)
+
+  const onElectronBridge = (payload: CompanionUtterancePayload) => {
+    const normalized = normalizePayload(payload)
+    if (normalized) {
+      listener(normalized)
+    }
+  }
+  window.electronAPI?.onCompanionUtteranceBridgePayload?.(onElectronBridge)
 
   return () => {
     window.removeEventListener(COMPANION_UTTERANCE_EVENT, onInternal as EventListener)

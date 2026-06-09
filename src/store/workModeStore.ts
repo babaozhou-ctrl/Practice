@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { WorkModeConfig, WorkModeState } from '../types/workMode'
 import { getDefaultWorkModeState, readWorkModeState, subscribeWorkMode, updateWorkModeState } from '../workmode/WorkModeStore'
+import { WorkModeRuntime } from '../workmode/WorkModeRuntime'
 
 interface WorkModeStore extends WorkModeState {
   hydrate: () => void
@@ -34,52 +35,26 @@ export const useWorkModeStore = create<WorkModeStore>((set) => ({
   },
 
   startFocus: () => {
-    const now = Date.now()
-    const state = updateWorkModeState((current) => ({
-      ...current,
-      snapshot: {
-        ...current.snapshot,
-        phase: 'focus',
-        phaseStartedAt: now,
-        phaseEndsAt: now + current.config.focusMinutes * 60_000,
-        updatedAt: now,
-      },
-    }))
+    const runtime = new WorkModeRuntime(readWorkModeState())
+    const state = runtime.startFocus()
     set(state)
   },
 
   startBreak: () => {
-    const now = Date.now()
-    const state = updateWorkModeState((current) => ({
-      ...current,
-      snapshot: {
-        ...current.snapshot,
-        phase: 'short_break',
-        phaseStartedAt: now,
-        phaseEndsAt: now + current.config.shortBreakMinutes * 60_000,
-        isMutedUntilBreak: false,
-        updatedAt: now,
-      },
-    }))
+    const runtime = new WorkModeRuntime(readWorkModeState())
+    const state = runtime.startBreak()
     set(state)
   },
 
   pause: () => {
-    const now = Date.now()
-    const state = updateWorkModeState((current) => ({
-      ...current,
-      snapshot: {
-        ...current.snapshot,
-        phase: 'paused',
-        phaseEndsAt: null,
-        updatedAt: now,
-      },
-    }))
+    const runtime = new WorkModeRuntime(readWorkModeState())
+    const state = runtime.pause()
     set(state)
   },
 
   reset: () => {
-    const state = updateWorkModeState(() => getDefaultWorkModeState())
+    const runtime = new WorkModeRuntime(readWorkModeState())
+    const state = runtime.reset()
     set(state)
   },
 }))

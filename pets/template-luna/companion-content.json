@@ -1,5 +1,21 @@
 {
   "version": "1.0.0",
+  "feedCard": {
+    "confirmTitle": "Luna 接住文件啦",
+    "thinkingTitle": "Luna 正在看呢",
+    "resultTitle": "Luna 看完啦",
+    "errorTitle": "Luna 这次没接稳",
+    "confirmAcceptLabel": "交给你",
+    "confirmRejectLabel": "先放一下",
+    "resultOpenChatLabel": "继续聊这个",
+    "resultLaterLabel": "先记着",
+    "confirmBody": "要把《{{fileName}}》交给{{petName}}吗？我会先轻轻看一遍，先在桌面留几句短短的小结，再把更完整的整理放进聊天里陪你继续往下看。",
+    "thinkingBody": "{{petName}}先抱着《{{fileName}}》看一会儿。稍微等我一下，我先在桌面轻轻告诉你最值得在意的那几句，再把更完整的整理放到聊天里。",
+    "resultBody": "《{{fileName}}》我先替你顺过一遍了。\n{{desktopSummary}}\n\n更完整的整理已经在聊天里等你了，你想继续的话，{{petName}}就陪你往下看。"
+  },
+  "fileAnalysis": {
+    "desktopUtterance": "{{lead}}。{{desktopSummary}}"
+  },
   "proactive": {
     "focusEnding": {
       "title": "专注快收尾了",

@@ -6,6 +6,7 @@ import { buildChatReplyUtterance } from '../../ai/CompanionDesktopSummary'
 import {
   emitCompanionFeedAnalysisResult,
   readCompanionFeedAnalyses,
+  readCompanionFeedAnalysesFromBridge,
   subscribeCompanionFeedAnalysis,
 } from '../../ai/CompanionFeedBridge'
 import { emitCompanionUtterance } from '../../ai/CompanionUtteranceBridge'
@@ -29,15 +30,44 @@ const FILE_ACCEPT =
 const MAX_COMPANION_ACTION_HISTORY = 24
 const MAX_FEED_ANALYSIS_HISTORY = 24
 
+const ACTIVITY_LABELS: Record<string, string> = {
+  CODING: '在写东西',
+  GAMING: '在玩游戏',
+  WATCHING: '在看内容',
+  CHATTING: '在聊天',
+  BROWSING: '在浏览',
+  READING: '在阅读',
+  IDLE: '暂时安静下来',
+  OTHER: '在桌面上待着',
+}
+
+function buildFeedMessageId(payloadId: string) {
+  return `feed-analysis-${payloadId}`
+}
+
 function buildFeedMessageContent(fileName: string, briefSummary: string, detailedAnalysis: string) {
   return [
-    `我先帮你把《${fileName}》顺了一遍。`,
+    `《${fileName}》我已经替你看过一遍了。`,
     '',
-    `先给你桌面上那种几句话的小结：${briefSummary}`,
+    `先留一份更完整的整理给你：${briefSummary}`,
     '',
-    '如果你想继续往下看，我把更完整的整理也放在这里了：',
+    '如果你现在想继续往下看，可以直接顺着这份内容接着聊：',
     detailedAnalysis,
   ].join('\n')
+}
+
+function emitAutomationMetricEvent(
+  name: string,
+  options?: {
+    value?: number
+    tags?: Record<string, string | number | boolean | null>
+  },
+) {
+  window.electronAPI?.emitAutomationMetricsEvent?.({
+    name,
+    value: options?.value,
+    tags: options?.tags,
+  })
 }
 
 const ChatPanel: React.FC<Props> = ({ onClose }) => {
@@ -55,6 +85,14 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
   const [dragDepth, setDragDepth] = useState(0)
   const [client] = useState(() => new ChatClient(config, aiChatProviderId))
   const [petName, setPetName] = useState(() => resolveSelectedPetPackage().manifest.name || 'bb7')
+  const smokeFeedCheckpointRef = useRef<string | null>(null)
+  const activityLabel = ACTIVITY_LABELS[activity] ?? '在桌面上待着'
+  const screenSummaryLabel = screenPerception?.summary?.trim() || null
+  const activeWindowLabel = windowTitle?.trim() || windowProcess?.trim() || '当前桌面'
+  const conversationStatusLabel = isStreaming ? `${petName} 正在回应你` : `${petName} 在这里陪你`
+  const ambientSummary = screenSummaryLabel
+    ? `你们现在一起看着：${screenSummaryLabel}`
+    : `${petName} 留意到你现在${activityLabel}。`
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -109,26 +147,22 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
   }, [addMessage])
 
   useEffect(() => {
-    for (const payload of readCompanionFeedAnalyses()) {
-      if (recentFeedAnalysisIdsRef.current.includes(payload.id)) {
-        continue
+    let cancelled = false
+    let unsubscribe: () => void = () => undefined
+
+    const handleFeedPayload = (
+      payload: ReturnType<typeof readCompanionFeedAnalyses>[number],
+      options?: { primeInput?: boolean; smokeRunId?: string | null; automationRunId?: string | null },
+    ) => {
+      if (options?.automationRunId) {
+        const matchesAutomationRun =
+          payload.id.startsWith(`stability-feed-${options.automationRunId}`) ||
+          payload.id.startsWith(`chat-feed-${options.automationRunId}`)
+        if (!matchesAutomationRun) {
+          return
+        }
       }
 
-      recentFeedAnalysisIdsRef.current = [payload.id, ...recentFeedAnalysisIdsRef.current].slice(
-        0,
-        MAX_FEED_ANALYSIS_HISTORY,
-      )
-
-      addMessage({
-        id: `feed-analysis-history-${payload.id}`,
-        role: 'system',
-        content: buildFeedMessageContent(payload.fileName, payload.briefSummary, payload.detailedAnalysis),
-        timestamp: payload.createdAt,
-        actions: payload.actions,
-      })
-    }
-
-    return subscribeCompanionFeedAnalysis((payload) => {
       if (recentFeedAnalysisIdsRef.current.includes(payload.id)) {
         return
       }
@@ -139,15 +173,74 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
       )
 
       addMessage({
-        id: `feed-analysis-${payload.id}`,
+        id: buildFeedMessageId(payload.id),
         role: 'system',
         content: buildFeedMessageContent(payload.fileName, payload.briefSummary, payload.detailedAnalysis),
         timestamp: payload.createdAt,
         actions: payload.actions,
       })
+      emitAutomationMetricEvent('chat.feed.received', {
+        tags: {
+          fileName: payload.fileName,
+          scene: payload.context.sceneId,
+          source: payload.id.startsWith('chat-feed-')
+            ? 'chat'
+            : payload.id.startsWith('smoke-feed-')
+              ? 'smoke'
+              : 'desktop',
+        },
+      })
 
-      setInput(buildFeedAnalysisPromptForScene(payload.fileName, payload.detailedAnalysis, payload.context))
-    })
+      if (options?.primeInput) {
+        setInput(buildFeedAnalysisPromptForScene(payload.fileName, payload.detailedAnalysis, payload.context))
+      }
+
+      if (
+        options?.smokeRunId &&
+        payload.id.startsWith(`smoke-feed-${options.smokeRunId}`) &&
+        smokeFeedCheckpointRef.current !== payload.id
+      ) {
+        smokeFeedCheckpointRef.current = payload.id
+        window.electronAPI?.emitSmokeCheckpoint?.('feed-chat-received')
+      }
+    }
+
+    void (async () => {
+      const runtimeFlags = await window.electronAPI?.getRuntimeFlags?.()
+      if (cancelled) {
+        return
+      }
+
+      const smokeRunId = runtimeFlags?.smokeTarget === 'feed' ? runtimeFlags.smokeRunId : null
+      const automationRunId = runtimeFlags?.scenario === 'stability-feed' ? runtimeFlags.automationRunId : null
+      const isAutomationScenario = Boolean(runtimeFlags?.scenario)
+
+      if (isAutomationScenario && runtimeFlags?.scenario !== 'stability-feed') {
+        return
+      }
+
+      const hydratedPayloads = [
+        ...readCompanionFeedAnalyses(),
+        ...(await readCompanionFeedAnalysesFromBridge()),
+      ].sort((left, right) => left.createdAt - right.createdAt)
+
+      for (const payload of hydratedPayloads) {
+        handleFeedPayload(payload, { smokeRunId, automationRunId })
+      }
+
+      unsubscribe = subscribeCompanionFeedAnalysis((payload) => {
+        handleFeedPayload(payload, {
+          primeInput: true,
+          smokeRunId,
+          automationRunId,
+        })
+      })
+    })()
+
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
   }, [addMessage])
 
   const buildContext = useCallback((): CompanionChatContext => {
@@ -355,20 +448,21 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
   const styles: Record<string, React.CSSProperties> = {
     panel: {
       position: 'fixed',
-      bottom: '180px',
-      right: '20px',
-      width: '320px',
-      height: '440px',
-      background: 'linear-gradient(180deg, rgba(255, 252, 247, 0.94), rgba(243, 249, 255, 0.9))',
-      backdropFilter: 'blur(18px)',
-      WebkitBackdropFilter: 'blur(18px)',
-      border: '1px solid rgba(138, 191, 230, 0.34)',
-      borderRadius: '18px',
+      bottom: '170px',
+      right: '18px',
+      width: 'min(392px, calc(100vw - 24px))',
+      height: 'min(620px, calc(100vh - 210px))',
+      background:
+        'linear-gradient(180deg, rgba(255, 252, 247, 0.96), rgba(243, 249, 255, 0.92)), radial-gradient(circle at top right, rgba(246,195,212,0.18), transparent 34%)',
+      backdropFilter: 'blur(22px)',
+      WebkitBackdropFilter: 'blur(22px)',
+      border: '1px solid rgba(138, 191, 230, 0.28)',
+      borderRadius: '26px',
       display: 'flex',
       flexDirection: 'column',
       zIndex: 10000,
       overflow: 'hidden',
-      boxShadow: '0 14px 38px rgba(74, 102, 128, 0.18), 0 6px 16px rgba(255, 214, 230, 0.18)',
+      boxShadow: '0 24px 72px rgba(74, 102, 128, 0.22), 0 8px 28px rgba(255, 214, 230, 0.16)',
       opacity: visible ? 1 : 0,
       transform: visible ? 'translateY(0)' : 'translateY(12px)',
       transition: 'opacity 0.35s ease, transform 0.35s ease',
@@ -376,94 +470,172 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
       outlineOffset: isFileDragActive ? '-2px' : 0,
     },
     header: {
-      padding: '14px 18px 10px',
+      padding: '16px 18px 12px',
       display: 'flex',
       justifyContent: 'space-between',
-      alignItems: 'center',
+      alignItems: 'flex-start',
+      gap: '12px',
       color: '#4c6983',
-      fontSize: '14px',
-      fontWeight: 600,
-      letterSpacing: '0.3px',
+      borderBottom: '1px solid rgba(138, 191, 230, 0.12)',
+      background:
+        'linear-gradient(180deg, rgba(255,255,255,0.78), rgba(247,252,255,0.58)), radial-gradient(circle at top right, rgba(182,217,243,0.16), transparent 32%)',
     },
     titleWrap: {
       display: 'flex',
       flexDirection: 'column',
-      gap: '2px',
+      gap: '4px',
       minWidth: 0,
+    },
+    titleMain: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      flexWrap: 'wrap',
     },
     titleHint: {
       fontSize: '11px',
-      color: 'rgba(104, 132, 157, 0.7)',
-      fontWeight: 500,
+      color: 'rgba(104, 132, 157, 0.74)',
+      fontWeight: 600,
+      letterSpacing: '0.16px',
     },
     closeBtn: {
-      background: 'none',
-      border: 'none',
+      width: '34px',
+      height: '34px',
+      borderRadius: '999px',
+      background: 'rgba(255,255,255,0.74)',
+      border: '1px solid rgba(138, 191, 230, 0.18)',
       color: '#7c99b3',
       cursor: 'pointer',
       fontSize: '18px',
       lineHeight: 1,
       padding: 0,
+      flex: '0 0 auto',
+    },
+    statusStrip: {
+      display: 'grid',
+      gap: '10px',
+      padding: '12px 16px 10px',
+      borderBottom: '1px solid rgba(138, 191, 230, 0.1)',
+      background: 'rgba(255,255,255,0.36)',
+    },
+    summaryCard: {
+      padding: '12px 13px',
+      borderRadius: '18px',
+      background: 'rgba(255,255,255,0.74)',
+      border: '1px solid rgba(138, 191, 230, 0.12)',
+      boxShadow: '0 10px 24px rgba(120, 153, 181, 0.06)',
+    },
+    chipRow: {
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: '6px',
+    },
+    chip: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      padding: '5px 9px',
+      borderRadius: '999px',
+      background: 'rgba(255,255,255,0.72)',
+      border: '1px solid rgba(138, 191, 230, 0.14)',
+      color: '#60809b',
+      fontSize: '10px',
+      fontWeight: 700,
+      letterSpacing: '0.12px',
     },
     msgs: {
       flex: 1,
-      padding: '8px 14px',
+      padding: '12px 16px',
       overflowY: 'auto',
       display: 'flex',
       flexDirection: 'column',
-      gap: '8px',
+      gap: '12px',
+      background:
+        'linear-gradient(180deg, rgba(250,252,255,0.28), rgba(255,255,255,0.16)), radial-gradient(circle at bottom left, rgba(171,209,237,0.08), transparent 24%)',
     },
     empty: {
-      color: 'rgba(104, 132, 157, 0.62)',
+      color: 'rgba(92, 118, 143, 0.72)',
       fontSize: '12px',
-      textAlign: 'center',
-      padding: '24px',
-      lineHeight: 1.6,
+      lineHeight: 1.7,
+      padding: '14px 0 0',
+    },
+    emptyCard: {
+      padding: '14px',
+      borderRadius: '18px',
+      background: 'rgba(255,255,255,0.68)',
+      border: '1px solid rgba(138, 191, 230, 0.12)',
+      boxShadow: '0 10px 24px rgba(120, 153, 181, 0.06)',
     },
     inputRow: {
-      padding: '10px 14px 14px',
+      padding: '12px 14px 14px',
+      display: 'grid',
+      gap: '10px',
+      borderTop: '1px solid rgba(138, 191, 230, 0.12)',
+      background:
+        'linear-gradient(180deg, rgba(250,252,255,0.84), rgba(255,255,255,0.94)), radial-gradient(circle at top right, rgba(246,195,212,0.12), transparent 28%)',
+    },
+    inputCard: {
+      padding: '12px',
+      borderRadius: '18px',
+      border: '1px solid rgba(138, 191, 230, 0.16)',
+      background: 'rgba(255,255,255,0.74)',
+      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.46)',
+    },
+    inputToolbar: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: '8px',
+      marginBottom: '8px',
+      flexWrap: 'wrap',
+    },
+    inputActionsRow: {
       display: 'flex',
       gap: '8px',
-      alignItems: 'flex-end',
+      alignItems: 'center',
     },
     input: {
       flex: 1,
-      padding: '9px 14px',
-      borderRadius: '12px',
-      border: '1px solid rgba(138, 191, 230, 0.28)',
-      background: 'rgba(255, 255, 255, 0.72)',
+      width: '100%',
+      minHeight: '72px',
+      padding: '4px 0 0',
+      borderRadius: '0',
+      border: 'none',
+      background: 'transparent',
       color: '#49657f',
       fontSize: '13px',
       outline: 'none',
       resize: 'none',
       fontFamily: 'inherit',
+      lineHeight: 1.66,
     },
     sendBtn: {
-      minWidth: '64px',
-      padding: '9px 16px',
-      borderRadius: '12px',
+      minWidth: '88px',
+      padding: '10px 16px',
+      borderRadius: '14px',
       border: 'none',
       background: isStreaming ? 'rgba(189, 213, 231, 0.72)' : 'linear-gradient(135deg, #8ec5ec, #f6c3d4)',
       color: isStreaming ? 'rgba(73, 101, 127, 0.72)' : '#ffffff',
       fontSize: '13px',
-      fontWeight: 600,
+      fontWeight: 700,
       cursor: isStreaming ? 'not-allowed' : 'pointer',
       transition: 'opacity 0.2s, transform 0.2s',
+      boxShadow: isStreaming ? 'none' : '0 12px 24px rgba(125, 184, 232, 0.18)',
     },
     utilityBtn: {
-      minWidth: '44px',
-      padding: '9px 10px',
+      minWidth: '56px',
+      padding: '9px 12px',
       borderRadius: '12px',
-      border: '1px solid rgba(138, 191, 230, 0.28)',
-      background: 'rgba(255, 255, 255, 0.72)',
+      border: '1px solid rgba(138, 191, 230, 0.22)',
+      background: 'rgba(255, 255, 255, 0.76)',
       color: '#56728b',
       fontSize: '12px',
+      fontWeight: 600,
       cursor: 'pointer',
     },
     dropOverlay: {
       position: 'absolute',
-      inset: '10px',
-      borderRadius: '14px',
+      inset: '12px',
+      borderRadius: '20px',
       border: '1.5px dashed rgba(123, 189, 240, 0.85)',
       background: 'linear-gradient(180deg, rgba(244, 251, 255, 0.92), rgba(255, 246, 250, 0.9))',
       display: 'flex',
@@ -482,14 +654,30 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
     dropHint: {
       fontSize: '11px',
       color: 'rgba(84, 115, 141, 0.72)',
-      maxWidth: '220px',
-      lineHeight: 1.5,
+      maxWidth: '260px',
+      lineHeight: 1.6,
     },
     capabilityHint: {
-      padding: '0 14px 10px',
       fontSize: '11px',
-      lineHeight: 1.4,
+      lineHeight: 1.5,
       color: 'rgba(92, 118, 143, 0.78)',
+    },
+    inputHintRow: {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: '10px',
+      flexWrap: 'wrap',
+    },
+    capabilityBadge: {
+      display: 'inline-flex',
+      alignItems: 'center',
+      padding: '4px 8px',
+      borderRadius: '999px',
+      background: 'rgba(142, 197, 236, 0.12)',
+      color: '#64819a',
+      fontSize: '11px',
+      fontWeight: 600,
     },
   }
 
@@ -512,25 +700,60 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
       )}
       <div style={styles.header}>
         <div style={styles.titleWrap}>
-          <span>{petName}</span>
-          <span style={styles.titleHint}>在这里陪你待一会儿</span>
+          <div style={styles.titleMain}>
+            <span style={{ fontSize: '16px', fontWeight: 700, color: '#48627c' }}>{petName}</span>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: '5px 9px',
+                borderRadius: '999px',
+                background: isStreaming ? 'rgba(255, 245, 234, 0.82)' : 'rgba(236, 247, 255, 0.82)',
+                border: isStreaming ? '1px solid rgba(240, 194, 150, 0.22)' : '1px solid rgba(125, 184, 232, 0.2)',
+                color: isStreaming ? '#a07a56' : '#5f7e98',
+                fontSize: '10px',
+                fontWeight: 700,
+                letterSpacing: '0.12px',
+              }}
+            >
+              {isStreaming ? '正在回应' : '陪伴中'}
+            </span>
+          </div>
+          <span style={styles.titleHint}>{conversationStatusLabel}</span>
         </div>
         <button onClick={onClose} style={styles.closeBtn}>
           ×
         </button>
       </div>
+      <div style={styles.statusStrip}>
+        <div style={styles.summaryCard}>
+          <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'rgba(103, 128, 151, 0.58)', marginBottom: '6px' }}>
+            Shared Moment
+          </div>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: '#4f6880', marginBottom: '5px' }}>{activeWindowLabel}</div>
+          <div style={{ fontSize: '12px', lineHeight: 1.64, color: 'rgba(92, 118, 143, 0.82)' }}>{ambientSummary}</div>
+        </div>
+        <div style={styles.chipRow}>
+          <span style={styles.chip}>当前状态 · {activityLabel}</span>
+          <span style={styles.chip}>{config.enabled ? 'AI 对话已打开' : '现在更偏安静陪伴'}</span>
+          <span style={styles.chip}>{canAnalyzeFiles ? '支持文件投喂' : '文件分析未接入'}</span>
+        </div>
+      </div>
       <div style={styles.msgs}>
         {messages.length === 0 && (
           <div style={styles.empty}>
-            我在这儿，慢慢说也可以。
-            <br />
-            想聊天就和我说一句，想投喂文件也可以直接拖进来。
+            <div style={styles.emptyCard}>
+              我在这儿，慢慢说也可以。
+              <br />
+              想聊天就和我说一句，想投喂文件也可以直接拖进来。
+            </div>
           </div>
         )}
         {messages.map((message) => (
           <MessageBubble
             key={message.id}
             message={message}
+            assistantName={petName}
             onActionSelect={(targetMessage, actionId) => {
               void handleMessageActionSelect(targetMessage, actionId)
             }}
@@ -538,50 +761,59 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
         ))}
         <div ref={messagesEndRef} />
       </div>
-      {canAnalyzeFiles && (
-        <div style={styles.capabilityHint}>
-          可以点 <strong>投喂</strong>，也可以把文件直接拖进这个面板。
-        </div>
-      )}
       <div style={styles.inputRow}>
-        {canAnalyzeFiles && (
-          <>
-            <input
-              ref={fileInputRef}
-              type="file"
-              style={{ display: 'none' }}
-              accept={FILE_ACCEPT}
-              onChange={(event) => {
-                void analyzeFiles(event.target.files)
-                event.currentTarget.value = ''
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              style={styles.utilityBtn}
-              disabled={isStreaming}
-            >
-              投喂
-            </button>
-          </>
-        )}
-        <textarea
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={`想和 ${petName} 说点什么？`}
-          rows={1}
-          style={styles.input}
-        />
+        <div style={styles.inputCard}>
+          <div style={styles.inputToolbar}>
+            <div style={{ fontSize: '11px', color: 'rgba(103, 128, 151, 0.66)' }}>和 {petName} 说一句现在的想法</div>
+            <div style={styles.inputActionsRow}>
+              {canAnalyzeFiles && (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    style={{ display: 'none' }}
+                    accept={FILE_ACCEPT}
+                    onChange={(event) => {
+                      void analyzeFiles(event.target.files)
+                      event.currentTarget.value = ''
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    style={styles.utilityBtn}
+                    disabled={isStreaming}
+                  >
+                    投喂
+                  </button>
+                </>
+              )}
+              {isStreaming && (
+                <button type="button" onClick={stopStreaming} style={styles.utilityBtn}>
+                  先停一下
+                </button>
+              )}
+            </div>
+          </div>
+          <textarea
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={`想和 ${petName} 说点什么？`}
+            rows={3}
+            style={styles.input}
+          />
+        </div>
+        <div style={styles.inputHintRow}>
+          <div style={styles.capabilityHint}>
+            按 `Enter` 发送，`Shift + Enter` 换行。
+            {canAnalyzeFiles ? ' 也可以把文件直接拖进来。' : ''}
+          </div>
+          {canAnalyzeFiles && <span style={styles.capabilityBadge}>支持文件投喂</span>}
+        </div>
         <button onClick={() => void sendMessage()} style={styles.sendBtn} disabled={isStreaming}>
-          {isStreaming ? '回应中' : '发给它'}
+          {isStreaming ? '正在陪你整理' : `发给 ${petName}`}
         </button>
-        {isStreaming && (
-          <button type="button" onClick={stopStreaming} style={styles.utilityBtn}>
-            先停一下
-          </button>
-        )}
       </div>
     </div>
   )

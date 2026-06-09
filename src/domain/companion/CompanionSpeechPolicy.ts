@@ -40,12 +40,12 @@ const SPEECH_PRIORITY: Record<SpeechSource, number> = {
 const SOURCE_COOLDOWN_MS: Record<SpeechSource, number> = {
   startup: 60_000,
   tap: 900,
-  context: 6_500,
-  proactive: 18_000,
+  context: 14_000,
+  proactive: 24_000,
   external: 4_500,
 }
 
-const GLOBAL_GAP_MS = 1_400
+const GLOBAL_GAP_MS = 2_200
 const REPLACE_AFTER_MS = 650
 const DUPLICATE_WINDOW_MS = 90_000
 const MAX_RECENT_ITEMS = 10
@@ -263,9 +263,9 @@ function clamp(value: number, min: number, max: number): number {
 function resolveLowDistractionCooldownMultiplier(source: SpeechSource): number {
   switch (source) {
     case 'proactive':
-      return 2.2
+      return 2.5
     case 'context':
-      return 1.7
+      return 2.2
     case 'external':
       return 1.35
     case 'startup':

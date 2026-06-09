@@ -19,6 +19,7 @@ export function emitCompanionAction(payload: CompanionActionPayload) {
 
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(COMPANION_ACTION_EVENT, { detail: normalized }))
+    window.electronAPI?.emitCompanionActionBridgePayload?.(normalized)
   }
 
   getBroadcastChannel()?.postMessage(normalized)
@@ -49,6 +50,14 @@ export function subscribeCompanionAction(
     }
   }
   channel?.addEventListener('message', onMessage as EventListener)
+
+  const onElectronBridge = (payload: CompanionActionPayload) => {
+    const normalized = normalizePayload(payload)
+    if (normalized) {
+      listener(normalized)
+    }
+  }
+  window.electronAPI?.onCompanionActionBridgePayload?.(onElectronBridge)
 
   return () => {
     window.removeEventListener(COMPANION_ACTION_EVENT, onInternal as EventListener)

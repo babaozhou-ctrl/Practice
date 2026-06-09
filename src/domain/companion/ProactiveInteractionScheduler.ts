@@ -1,6 +1,8 @@
 import type { WorkModeSignals } from '../../types/workMode'
 import type { SpeechIntent } from './types'
 import type { CompanionActivity, CompanionRuntimeSignals, CompanionSnapshot, InteractionMode } from './types'
+import type { BuiltInPetPackage } from '../../shared/types/petPackage'
+import { buildProactiveTemplateContext, renderProactiveTemplate, resolveSharedAttention } from './CompanionProactiveTemplate'
 
 interface SchedulerState {
   lastPromptAt: number
@@ -22,13 +24,14 @@ export class ProactiveInteractionScheduler {
   }
 
   evaluate(
+    petPackage: BuiltInPetPackage | null,
     snapshot: CompanionSnapshot,
     signals: CompanionRuntimeSignals,
     workMode: WorkModeSignals,
     lowDistractionMode = false,
     now = Date.now(),
   ): SpeechIntent | undefined {
-    const candidate = this.pickCandidate(snapshot, signals, workMode, lowDistractionMode, now)
+    const candidate = this.pickCandidate(petPackage, snapshot, signals, workMode, lowDistractionMode, now)
     if (!candidate) {
       return undefined
     }
@@ -40,6 +43,7 @@ export class ProactiveInteractionScheduler {
   }
 
   private pickCandidate(
+    petPackage: BuiltInPetPackage | null,
     snapshot: CompanionSnapshot,
     signals: CompanionRuntimeSignals,
     workMode: WorkModeSignals,
@@ -61,6 +65,7 @@ export class ProactiveInteractionScheduler {
     const screenShort = snapshot.screenContext.shortSummary
     const screenDomain = snapshot.screenContext.domain
     const sharedAttention = resolveSharedAttention(snapshot)
+    const templateContext = buildProactiveTemplateContext(petPackage, snapshot, workMode, name)
 
     const baseContextKey = [
       sceneId,
@@ -80,10 +85,11 @@ export class ProactiveInteractionScheduler {
       this.state.lastPromptContextKey === `${category}|${baseContextKey}`
 
     if (workMode.enabled && workMode.isFocusActive && workMode.msRemaining !== null && workMode.msRemaining <= 2 * 60_000) {
+      const configuredSpeech = resolveConfiguredProactiveSpeech(petPackage, 'focusEnding', templateContext)
       return {
         category: 'focus-ending',
         contextKey: `focus-ending|${baseContextKey}`,
-        intent: {
+        intent: configuredSpeech ?? {
           message: name
             ? `${name}，这一轮快收尾了。我们再稳一会儿，就去休息。`
             : '这一轮快收尾了。我们再稳一会儿，就去休息。',
@@ -93,10 +99,11 @@ export class ProactiveInteractionScheduler {
     }
 
     if (workMode.enabled && workMode.isBreakActive && workMode.msRemaining !== null && workMode.msRemaining <= 90_000) {
+      const configuredSpeech = resolveConfiguredProactiveSpeech(petPackage, 'breakEnding', templateContext)
       return {
         category: 'break-ending',
         contextKey: `break-ending|${baseContextKey}`,
-        intent: {
+        intent: configuredSpeech ?? {
           message: name
             ? `${name}，休息差不多了。等你准备好，我们慢慢回到节奏里。`
             : '休息差不多了。等你准备好，我们慢慢回到节奏里。',
@@ -106,10 +113,11 @@ export class ProactiveInteractionScheduler {
     }
 
     if (workMode.enabled && workMode.overworkLevel === 'firm') {
+      const configuredSpeech = resolveConfiguredProactiveSpeech(petPackage, 'overworkFirm', templateContext)
       return {
         category: 'overwork-firm',
         contextKey: `overwork-firm|${baseContextKey}`,
-        intent: {
+        intent: configuredSpeech ?? {
           message: name
             ? `${name}，你今天已经撑很久了。这次我想认真提醒你，先停一下也没关系。`
             : '你今天已经撑很久了。这次我想认真提醒你，先停一下也没关系。',
@@ -119,10 +127,11 @@ export class ProactiveInteractionScheduler {
     }
 
     if (workMode.enabled && workMode.overworkLevel === 'gentle' && workMode.isFocusActive) {
+      const configuredSpeech = resolveConfiguredProactiveSpeech(petPackage, 'overworkGentle', templateContext)
       return {
         category: 'overwork-gentle',
         contextKey: `overwork-gentle|${baseContextKey}`,
-        intent: {
+        intent: configuredSpeech ?? {
           message: name
             ? `${name}，你今天已经很努力了。下一个空档里，我们认真歇一会儿吧。`
             : '你今天已经很努力了。下一个空档里，我们认真歇一会儿吧。',
@@ -144,10 +153,11 @@ export class ProactiveInteractionScheduler {
         return null
       }
 
+      const configuredSpeech = resolveConfiguredProactiveSpeech(petPackage, 'recentFileCheckin', templateContext)
       return {
         category: 'recent-file-checkin',
         contextKey: `recent-file-checkin|${baseContextKey}`,
-        intent: {
+        intent: configuredSpeech ?? {
           message: name
             ? `${name}，我还记得我们刚一起看过《${trimForSpeech(recentFile.fileName, 20)}》。如果你想继续，我可以接着陪你顺下去。`
             : `我还记得我们刚一起看过《${trimForSpeech(recentFile.fileName, 20)}》。如果你想继续，我可以接着陪你顺下去。`,
@@ -157,6 +167,7 @@ export class ProactiveInteractionScheduler {
     }
 
     if (signals.productiveSessionMs >= 52 * 60_000 && isProductiveScene(snapshot)) {
+      const configuredSpeech = resolveConfiguredProactiveSpeech(petPackage, 'productiveSession', templateContext)
       if (ritual) {
         if (shouldSkipForRepeat('productive-ritual')) {
           return null
@@ -164,7 +175,7 @@ export class ProactiveInteractionScheduler {
         return {
           category: 'productive-ritual',
           contextKey: `productive-ritual|${baseContextKey}`,
-          intent: {
+          intent: configuredSpeech ?? {
             message: name
               ? `${name}，你已经专注挺久了。要不要按你平时“${trimForSpeech(ritual, 18)}”的节奏缓一缓？`
               : `你已经专注挺久了。要不要按你平时“${trimForSpeech(ritual, 18)}”的节奏缓一缓？`,
@@ -180,7 +191,7 @@ export class ProactiveInteractionScheduler {
         return {
           category: 'productive-screen-code',
           contextKey: `productive-screen-code|${baseContextKey}`,
-          intent: {
+          intent: configuredSpeech ?? {
             message: `你已经盯着“${trimForSpeech(sharedAttention, 22)}”挺久了。要不要先动一动，再回来把它收干净？`,
             duration: 3800,
           },
@@ -194,7 +205,7 @@ export class ProactiveInteractionScheduler {
         return {
           category: 'productive-topic',
           contextKey: `productive-topic|${baseContextKey}`,
-          intent: {
+          intent: configuredSpeech ?? {
             message: name
               ? `${name}，这阵子你一直在忙“${trimForSpeech(recentTopic, 20)}”。起身松一下，我继续陪你收尾。`
               : `这阵子你一直在忙“${trimForSpeech(recentTopic, 20)}”。起身松一下，我继续陪你收尾。`,
@@ -210,7 +221,7 @@ export class ProactiveInteractionScheduler {
       return {
         category: 'productive-default',
         contextKey: `productive-default|${baseContextKey}`,
-        intent: {
+        intent: configuredSpeech ?? {
           message: name
             ? `${name}，你已经专注很久了。要不要起来活动一下？`
             : '你已经专注很久了。要不要起来活动一下？',
@@ -223,6 +234,7 @@ export class ProactiveInteractionScheduler {
       sceneId === 'late_night_wind_down' ||
       (lateNight && ['coding', 'browsing', 'idle', 'other', 'reading'].includes(snapshot.activity))
     ) {
+      const configuredSpeech = resolveConfiguredProactiveSpeech(petPackage, 'lateNight', templateContext)
       if (ritual) {
         if (shouldSkipForRepeat('late-night-ritual')) {
           return null
@@ -230,7 +242,7 @@ export class ProactiveInteractionScheduler {
         return {
           category: 'late-night-ritual',
           contextKey: `late-night-ritual|${baseContextKey}`,
-          intent: {
+          intent: configuredSpeech ?? {
             message: name
               ? `${name}，已经有点晚了。如果你准备按“${trimForSpeech(ritual, 18)}”的节奏慢慢收尾，我会轻一点陪着你。`
               : `已经有点晚了。如果你准备按“${trimForSpeech(ritual, 18)}”的节奏慢慢收尾，我会轻一点陪着你。`,
@@ -246,7 +258,7 @@ export class ProactiveInteractionScheduler {
         return {
           category: 'late-night-attention',
           contextKey: `late-night-attention|${baseContextKey}`,
-          intent: {
+          intent: configuredSpeech ?? {
             message: `已经有点晚了。我看到你还陪在“${trimForSpeech(sharedAttention, 20)}”这边，我们慢一点也没关系。`,
             duration: 4000,
           },
@@ -260,7 +272,7 @@ export class ProactiveInteractionScheduler {
       return {
         category: 'late-night-default',
         contextKey: `late-night-default|${baseContextKey}`,
-        intent: {
+        intent: configuredSpeech ?? {
           message: name
             ? `${name}，已经有点晚了。我会轻一点陪着你，但也想提醒你别太累。`
             : '已经有点晚了。我会轻一点陪着你，但也想提醒你别太累。',
@@ -279,10 +291,11 @@ export class ProactiveInteractionScheduler {
       }
 
       const sharedViewTopic = sharedAttention || recentTopic || activeTitle
+      const configuredSpeech = resolveConfiguredProactiveSpeech(petPackage, 'watchTogether', templateContext)
       return {
         category: 'watch-together',
         contextKey: `watch-together|${baseContextKey}`,
-        intent: {
+        intent: configuredSpeech ?? {
           message: sharedViewTopic
             ? `这会儿像是在一起看“${trimForSpeech(sharedViewTopic, 22)}”。我就在旁边陪你。`
             : '这会儿像是在一起看点什么。我就在旁边陪你。',
@@ -301,10 +314,11 @@ export class ProactiveInteractionScheduler {
       }
 
       const socialTopic = sharedAttention || activeTitle
+      const configuredSpeech = resolveConfiguredProactiveSpeech(petPackage, 'socialCorner', templateContext)
       return {
         category: 'social-corner',
         contextKey: `social-corner|${baseContextKey}`,
-        intent: {
+        intent: configuredSpeech ?? {
           message: socialTopic
             ? `你像是在围着“${trimForSpeech(socialTopic, 20)}”聊天。我轻一点待在旁边，不打乱你的节奏。`
             : '你像是在和谁聊天。我轻一点待在旁边，不打乱你的节奏。',
@@ -323,10 +337,11 @@ export class ProactiveInteractionScheduler {
         return null
       }
 
+      const configuredSpeech = resolveConfiguredProactiveSpeech(petPackage, 'gentleIdle', templateContext)
       return {
         category: 'gentle-check-in',
         contextKey: `gentle-check-in|${baseContextKey}`,
-        intent: {
+        intent: configuredSpeech ?? {
           message: sharedAttention
             ? `桌面现在很安静，我就陪你待在“${trimForSpeech(sharedAttention, 20)}”旁边。`
             : activeTitle
@@ -410,18 +425,6 @@ function isIdlePresenceScene(snapshot: CompanionSnapshot): boolean {
   return snapshot.scene.id === 'quiet_idle' || snapshot.scene.id === 'ambient_presence' || snapshot.activity === 'idle'
 }
 
-function resolveSharedAttention(snapshot: CompanionSnapshot): string | null {
-  const recentFile = snapshot.memory?.recentFileAnalyses?.[0]
-
-  return (
-    snapshot.screenContext.shortSummary?.trim() ||
-    (recentFile ? `刚刚一起看过的《${recentFile.fileName}》` : null) ||
-    snapshot.memory?.recentTopics?.[0]?.trim() ||
-    snapshot.activeWindow?.title?.trim() ||
-    null
-  )
-}
-
 function trimForSpeech(value: string, maxLength: number): string {
   const normalized = value.trim()
   if (normalized.length <= maxLength) {
@@ -441,4 +444,30 @@ function resolveRecentFile(snapshot: CompanionSnapshot) {
   }
 
   return recent
+}
+
+function resolveConfiguredProactiveSpeech(
+  petPackage: BuiltInPetPackage | null,
+  key:
+    | 'focusEnding'
+    | 'breakEnding'
+    | 'overworkFirm'
+    | 'overworkGentle'
+    | 'productiveSession'
+    | 'lateNight'
+    | 'watchTogether'
+    | 'socialCorner'
+    | 'recentFileCheckin'
+    | 'gentleIdle',
+  templateContext: Parameters<typeof renderProactiveTemplate>[1],
+): SpeechIntent | null {
+  const speech = petPackage?.companionContent?.proactive?.[key]?.speech
+  if (!speech?.message?.trim()) {
+    return null
+  }
+
+  return {
+    message: renderProactiveTemplate(speech.message, templateContext),
+    duration: speech.durationMs && speech.durationMs > 0 ? speech.durationMs : 3400,
+  }
 }

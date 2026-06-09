@@ -56,6 +56,10 @@ const SOFT_AWAY_IDLE_MS = 90_000
 const DEEP_AWAY_IDLE_MS = 6 * 60_000
 const RETURN_FROM_AWAY_IDLE_MS = 20_000
 const RECENT_FILE_WINDOW_MS = 40 * 60_000
+const CONTEXT_REACTION_BASE_COOLDOWN_MS = 45_000
+const CONTEXT_REACTION_QUIET_COOLDOWN_MS = 120_000
+const MIN_ACTIVITY_HOLD_BEFORE_CONTEXT_SPEECH_MS = 35_000
+const MIN_SCENE_HOLD_BEFORE_CONTEXT_SPEECH_MS = 28_000
 
 const ACTIVITY_TO_EVENT: Record<CompanionActivity, ActivityEvent> = {
   idle: 'to_idle',
@@ -377,13 +381,14 @@ export class CompanionStateMachine {
       return undefined
     }
 
-    const cooldownMs = mode === 'quiet' ? 90_000 : 20_000
+    const cooldownMs = mode === 'quiet' ? CONTEXT_REACTION_QUIET_COOLDOWN_MS : CONTEXT_REACTION_BASE_COOLDOWN_MS
     if (now - this.lastReactionAt < cooldownMs) return undefined
-    if (mode === 'quiet' && this.interruptionBudget < 60) return undefined
-    if (this.interruptionBudget < 22) return undefined
+    if (mode === 'quiet' && this.interruptionBudget < 72) return undefined
+    if (mode === 'focus_guardian' && this.interruptionBudget < 58) return undefined
+    if (this.interruptionBudget < 34) return undefined
 
     this.lastReactionAt = now
-    this.interruptionBudget = Math.max(0, this.interruptionBudget - (mode === 'quiet' ? 8 : 14))
+    this.interruptionBudget = Math.max(0, this.interruptionBudget - (mode === 'quiet' ? 6 : 11))
 
     const message =
       this.pickMemoryAwareReaction(activity, emotion) ??
@@ -410,14 +415,24 @@ export class CompanionStateMachine {
     const userIdleMs = this.activeWindow?.idleMs ?? 0
     const likelyNoisyContext = activeTitle.length > 0 && activeTitle.length < 4
     const lateNight = isLateNight(now)
+    const currentSnapshot = this.getSnapshot(now)
+    const activityHeldForMs = Math.max(0, now - this.activityEnteredAt)
+    const sceneHeldForMs = Math.max(0, now - this.modeEnteredAt)
+    const sceneId = currentSnapshot.scene.id
 
     if (this.transientAction === 'dragging') return false
     if (userIdleMs >= SOFT_AWAY_IDLE_MS) return false
     if (likelyNoisyContext && activity === 'other') return false
     if (activity === 'gaming' && mode === 'quiet') return false
+    if (mode === 'quiet') return false
+    if (mode === 'focus_guardian') return false
     if (activity === 'browsing' && emotion === 'idle') return false
     if (activity === 'other' && emotion === 'idle') return false
     if (activity === 'idle' && emotion === 'idle' && mode === 'observing') return false
+    if (activity === 'idle' && emotion === 'thinking') return false
+    if (sceneId === 'ambient_presence' || sceneId === 'quiet_idle' || sceneId === 'deep_focus') return false
+    if (activityHeldForMs < MIN_ACTIVITY_HOLD_BEFORE_CONTEXT_SPEECH_MS) return false
+    if (sceneHeldForMs < MIN_SCENE_HOLD_BEFORE_CONTEXT_SPEECH_MS) return false
     if (lateNight && emotion === 'sleepy' && activity !== 'coding' && activity !== 'reading') return false
     return true
   }
