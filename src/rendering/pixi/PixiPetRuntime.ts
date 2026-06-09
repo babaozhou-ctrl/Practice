@@ -31,6 +31,11 @@ export interface PixiPetStateSequenceStep {
   clipName?: string | null
 }
 
+export interface PetHitTestResult {
+  hit: boolean
+  alpha: number
+}
+
 interface BlinkMotionProfile {
   intervalScale: number
   holdScale: number
@@ -54,6 +59,7 @@ interface MotionBlendProfile {
   swayScale: number
   rotationScale: number
   earScale: number
+  tailScale: number
   blinkScale: number
   restOffsetY: number
   settleBlend: number
@@ -73,6 +79,9 @@ export class PixiPetRuntime {
   private readonly petRoot: any
   private readonly transitionSprite: any
   private readonly petSprite: any
+  private tickerListener: ((ticker: any) => void) | null = null
+  private initialized = false
+  private destroyed = false
 
   private currentState: AnimationState = 'IDLE'
   private currentClipName: string | null = null
@@ -135,6 +144,10 @@ export class PixiPetRuntime {
   }
 
   async init() {
+    if (this.destroyed || this.initialized) {
+      return
+    }
+
     await this.app.init({
       width: this.width,
       height: this.height,
@@ -150,7 +163,7 @@ export class PixiPetRuntime {
     this.app.canvas.style.position = 'absolute'
     this.app.canvas.style.left = '0'
     this.app.canvas.style.top = '0'
-    this.app.canvas.style.cursor = 'grab'
+    this.app.canvas.style.cursor = 'default'
     this.app.canvas.style.userSelect = 'none'
     this.app.canvas.style.imageRendering = 'pixelated'
 
@@ -158,14 +171,68 @@ export class PixiPetRuntime {
     this.app.stage.addChild(this.stageRoot)
     this.setState('IDLE')
 
-    this.app.ticker.add((ticker: any) => {
+    this.tickerListener = (ticker: any) => {
       const deltaMs = ticker.deltaMS ?? 16
       this.update(deltaMs)
-    })
+    }
+    this.app.ticker.add(this.tickerListener)
+    this.initialized = true
   }
 
   get canvas(): HTMLCanvasElement {
     return this.app.canvas as HTMLCanvasElement
+  }
+
+  hitTestCanvasPoint(clientX: number, clientY: number): PetHitTestResult {
+    if (this.destroyed || !this.initialized) {
+      return { hit: false, alpha: 0 }
+    }
+
+    const canvas = this.app.canvas as HTMLCanvasElement | undefined
+    if (!canvas) {
+      return { hit: false, alpha: 0 }
+    }
+
+    const rect = canvas.getBoundingClientRect()
+    const localX = clientX - rect.left
+    const localY = clientY - rect.top
+    if (localX < 0 || localY < 0 || localX > rect.width || localY > rect.height) {
+      return { hit: false, alpha: 0 }
+    }
+    const texture = this.petSprite.texture
+    if (!texture || this.petSprite.alpha <= 0.01 || this.petRoot.alpha <= 0.01) {
+      return { hit: false, alpha: 0 }
+    }
+
+    this.petRoot.updateTransform?.({})
+    this.petSprite.updateTransform?.({})
+
+    const rendererWidth = Math.max(canvas.width, 1)
+    const rendererHeight = Math.max(canvas.height, 1)
+    const stageX = (localX / Math.max(rect.width, 1)) * rendererWidth
+    const stageY = (localY / Math.max(rect.height, 1)) * rendererHeight
+
+    const localPoint = this.petSprite.toLocal?.({ x: stageX, y: stageY }, this.app.stage)
+    if (!localPoint || !Number.isFinite(localPoint.x) || !Number.isFinite(localPoint.y)) {
+      return { hit: false, alpha: 0 }
+    }
+
+    const anchorX = typeof this.petSprite.anchor?.x === 'number' ? this.petSprite.anchor.x : 0
+    const anchorY = typeof this.petSprite.anchor?.y === 'number' ? this.petSprite.anchor.y : 0
+    const textureX = localPoint.x + texture.width * anchorX
+    const textureY = localPoint.y + texture.height * anchorY
+
+    if (textureX < 0 || textureY < 0 || textureX >= texture.width || textureY >= texture.height) {
+      return { hit: false, alpha: 0 }
+    }
+
+    const alpha = this.textureSet.hitTestAlphaAt
+      ? this.textureSet.hitTestAlphaAt(texture, textureX, textureY)
+      : 255
+    return {
+      hit: alpha >= 20,
+      alpha,
+    }
   }
 
   setState(nextState: AnimationState, clipName?: string) {
@@ -318,7 +385,24 @@ export class PixiPetRuntime {
   }
 
   destroy() {
+    if (this.destroyed) {
+      return
+    }
+
+    this.destroyed = true
+    this.initialized = false
     this.clearStateSequence(false)
+    if (this.tickerListener) {
+      this.app.ticker?.remove?.(this.tickerListener)
+      this.tickerListener = null
+    }
+    this.app.ticker?.stop?.()
+
+    const canvas = this.app.canvas as HTMLCanvasElement | undefined
+    if (canvas?.parentElement === this.mount) {
+      this.mount.removeChild(canvas)
+    }
+
     this.app.destroy(true, { children: true })
   }
 
@@ -343,6 +427,17 @@ export class PixiPetRuntime {
   }
 
   private update(deltaMs: number) {
+    if (
+      this.destroyed ||
+      !this.initialized ||
+      !this.petRoot?.position?.set ||
+      !this.petRoot?.scale?.set ||
+      !this.petSprite?.scale?.set ||
+      !this.transitionSprite?.scale?.set
+    ) {
+      return
+    }
+
     this.globalElapsedMs += deltaMs
     this.updateRuntimeMotionState(deltaMs)
 
@@ -434,6 +529,7 @@ export class PixiPetRuntime {
     let extraRotate = Math.sin(t / 2800) * 0.0028
     let extraYOffset = 0
     let blinkScaleY = 1
+    const isMusicListening = scene?.flags?.includes('music_listening') ?? false
 
     if (emotion === 'happy' || emotion === 'excited') {
       bounce = Math.abs(Math.sin(t / 260)) * 2.2
@@ -445,6 +541,16 @@ export class PixiPetRuntime {
       bounce = Math.sin(t / 1900) * 0.18
       extraScaleY = Math.sin(t / 1400) * 0.004
       extraSway = Math.sin(t / 2800) * 0.18
+    }
+
+    if (isMusicListening) {
+      const pulseWave = Math.sin(t / 560)
+      const swayWave = Math.sin(t / 940)
+      const accentWave = Math.sin(t / 280) * 0.5 + 0.5
+      bounce += pulseWave * 0.32 + accentWave * 0.16
+      extraSway += swayWave * 0.34
+      extraRotate += Math.sin(t / 1040) * 0.0044
+      extraScaleY += 0.0046 + pulseWave * 0.0034
     }
 
     if (mode === 'quiet') {
@@ -507,7 +613,7 @@ export class PixiPetRuntime {
     blinkScaleY = micro.blink ? this.computeBlinkScale(micro.blink as PetMicroMotionBlink, t, blinkMotion) : 1
     extraYOffset += breathMotion * motionProfile.breathScale
     extraSway += centerShift * motionProfile.swayScale
-    extraRotate += tailRotation * motionProfile.rotationScale + earRotation * motionProfile.earScale
+    extraRotate += tailRotation * motionProfile.tailScale + earRotation * motionProfile.earScale
     blinkScaleY = 1 - (1 - blinkScaleY) * motionProfile.blinkScale
     extraYOffset += motionProfile.restOffsetY
 
@@ -720,6 +826,7 @@ function resolveWorkModeMotionProfile(
     swayScale: lerp(1, 0.58, lowDistractionBlend),
     rotationScale: lerp(1, 0.5, lowDistractionBlend),
     earScale: lerp(1, 0.52, lowDistractionBlend),
+    tailScale: lerp(1, 0.56, lowDistractionBlend),
     blinkScale: lerp(1, 0.96, lowDistractionBlend),
   }
 
@@ -730,6 +837,7 @@ function resolveWorkModeMotionProfile(
     swayScale: baseProfile.swayScale * lowDistractionMultiplier.swayScale,
     rotationScale: baseProfile.rotationScale * lowDistractionMultiplier.rotationScale,
     earScale: baseProfile.earScale * lowDistractionMultiplier.earScale,
+    tailScale: baseProfile.tailScale * lowDistractionMultiplier.tailScale,
     blinkScale: baseProfile.blinkScale * lowDistractionMultiplier.blinkScale,
     restOffsetY: 0,
     settleBlend: lerp(0.22, 0.16, lowDistractionBlend),
@@ -744,6 +852,7 @@ function resolveBaseWorkModeMotionProfile(workMode: ResolvedPetPresentation['sna
       swayScale: 0.38,
       rotationScale: 0.3,
       earScale: 0.55,
+      tailScale: 0.42,
       blinkScale: 1,
       restOffsetY: 0,
       settleBlend: 0.18,
@@ -758,6 +867,7 @@ function resolveBaseWorkModeMotionProfile(workMode: ResolvedPetPresentation['sna
         swayScale: 0.62,
         rotationScale: 0.56,
         earScale: 0.78,
+        tailScale: 0.74,
         blinkScale: 1.08,
         restOffsetY: -0.4,
         settleBlend: 0.21,
@@ -770,6 +880,7 @@ function resolveBaseWorkModeMotionProfile(workMode: ResolvedPetPresentation['sna
       swayScale: 0.56,
       rotationScale: 0.48,
       earScale: 0.66,
+      tailScale: 0.62,
       blinkScale: 1.04,
       restOffsetY: -0.2,
       settleBlend: 0.2,
@@ -784,6 +895,7 @@ function resolveBaseWorkModeMotionProfile(workMode: ResolvedPetPresentation['sna
         swayScale: 0.45,
         rotationScale: 0.42,
         earScale: 0.58,
+        tailScale: 0.52,
         blinkScale: 1.24,
         restOffsetY: 0.35,
         settleBlend: 0.18,
@@ -797,6 +909,7 @@ function resolveBaseWorkModeMotionProfile(workMode: ResolvedPetPresentation['sna
         swayScale: 0.58,
         rotationScale: 0.62,
         earScale: 0.72,
+        tailScale: 0.68,
         blinkScale: 1.16,
         restOffsetY: 0.15,
         settleBlend: 0.2,
@@ -809,6 +922,7 @@ function resolveBaseWorkModeMotionProfile(workMode: ResolvedPetPresentation['sna
       swayScale: 0.34,
       rotationScale: 0.36,
       earScale: 0.42,
+      tailScale: 0.32,
       blinkScale: 0.92,
       restOffsetY: 0,
       settleBlend: 0.17,
@@ -822,6 +936,7 @@ function resolveBaseWorkModeMotionProfile(workMode: ResolvedPetPresentation['sna
       swayScale: 0.6,
       rotationScale: 0.58,
       earScale: 0.74,
+      tailScale: 0.64,
       blinkScale: 1.2,
       restOffsetY: 0.2,
       settleBlend: 0.19,
@@ -834,6 +949,7 @@ function resolveBaseWorkModeMotionProfile(workMode: ResolvedPetPresentation['sna
     swayScale: 0.52,
     rotationScale: 0.46,
     earScale: 0.68,
+    tailScale: 0.58,
     blinkScale: 1,
     restOffsetY: 0,
     settleBlend: 0.18,
@@ -853,6 +969,7 @@ function resolveSceneMotionProfile(
         swayScale: quietMultiplier,
         rotationScale: quietMultiplier,
         earScale: quietMultiplier,
+        tailScale: quietMultiplier,
         blinkScale: 1,
         restOffsetY: 0,
         settleBlend: lerp(0.22, 0.18, lowDistractionBlend),
@@ -867,6 +984,7 @@ function resolveSceneMotionProfile(
         swayScale: 0.12,
         rotationScale: 0.12,
         earScale: 0.18,
+        tailScale: 0.16,
         blinkScale: 1.28,
         restOffsetY: 0.8,
         settleBlend: 0.12,
@@ -878,6 +996,7 @@ function resolveSceneMotionProfile(
         swayScale: 0.26 * quietMultiplier,
         rotationScale: 0.28 * quietMultiplier,
         earScale: 0.36 * quietMultiplier,
+        tailScale: 0.3 * quietMultiplier,
         blinkScale: 1.08,
         restOffsetY: 0.1,
         settleBlend: 0.15,
@@ -889,17 +1008,32 @@ function resolveSceneMotionProfile(
         swayScale: 0.42 * quietMultiplier,
         rotationScale: 0.4 * quietMultiplier,
         earScale: 0.5 * quietMultiplier,
+        tailScale: 0.42 * quietMultiplier,
         blinkScale: 1.04,
         restOffsetY: 0,
         settleBlend: 0.18,
       }
     case 'watch_together':
+      if (scene.flags?.includes('music_listening')) {
+        return {
+          bounceScale: 0.82 * quietMultiplier,
+          breathScale: 1.04,
+          swayScale: 1.06,
+          rotationScale: 0.88,
+          earScale: 1.02,
+          tailScale: 1.16,
+          blinkScale: 0.96,
+          restOffsetY: -0.18,
+          settleBlend: 0.26,
+        }
+      }
       return {
         bounceScale: 0.64 * quietMultiplier,
         breathScale: 0.94,
         swayScale: 0.78,
         rotationScale: 0.68,
         earScale: 0.8,
+        tailScale: 0.84,
         blinkScale: 0.98,
         restOffsetY: -0.12,
         settleBlend: 0.24,
@@ -911,6 +1045,7 @@ function resolveSceneMotionProfile(
         swayScale: 0.92 * quietMultiplier,
         rotationScale: 0.84 * quietMultiplier,
         earScale: 1,
+        tailScale: 0.9 * quietMultiplier,
         blinkScale: 0.94,
         restOffsetY: -0.18,
         settleBlend: 0.26,
@@ -922,6 +1057,7 @@ function resolveSceneMotionProfile(
         swayScale: 0.32 * quietMultiplier,
         rotationScale: 0.34 * quietMultiplier,
         earScale: 0.42 * quietMultiplier,
+        tailScale: 0.3 * quietMultiplier,
         blinkScale: 0.9,
         restOffsetY: -0.06,
         settleBlend: 0.16,
@@ -933,6 +1069,7 @@ function resolveSceneMotionProfile(
         swayScale: 0.22 * quietMultiplier,
         rotationScale: 0.24 * quietMultiplier,
         earScale: 0.34 * quietMultiplier,
+        tailScale: 0.24 * quietMultiplier,
         blinkScale: 1.12,
         restOffsetY: 0,
         settleBlend: 0.15,
@@ -944,6 +1081,7 @@ function resolveSceneMotionProfile(
         swayScale: 0.18,
         rotationScale: 0.16,
         earScale: 0.24,
+        tailScale: 0.18,
         blinkScale: 1.22,
         restOffsetY: 0.25,
         settleBlend: 0.13,
@@ -955,6 +1093,7 @@ function resolveSceneMotionProfile(
         swayScale: 0.24 * quietMultiplier,
         rotationScale: 0.22 * quietMultiplier,
         earScale: 0.34 * quietMultiplier,
+        tailScale: 0.28 * quietMultiplier,
         blinkScale: 1.12,
         restOffsetY: 0.08,
         settleBlend: 0.16,
@@ -966,6 +1105,7 @@ function resolveSceneMotionProfile(
         swayScale: 0.66 * quietMultiplier,
         rotationScale: 0.6 * quietMultiplier,
         earScale: 0.72 * quietMultiplier,
+        tailScale: 0.68 * quietMultiplier,
         blinkScale: 1,
         restOffsetY: 0,
         settleBlend: 0.22,
@@ -977,6 +1117,7 @@ function resolveSceneMotionProfile(
         swayScale: 0.5 * quietMultiplier,
         rotationScale: 0.46 * quietMultiplier,
         earScale: 0.58 * quietMultiplier,
+        tailScale: 0.5 * quietMultiplier,
         blinkScale: 1,
         restOffsetY: 0,
         settleBlend: lerp(0.22, 0.18, lowDistractionBlend),
@@ -993,6 +1134,7 @@ function resolvePresenceMotionProfile(mode: 'quiet' | 'connected' | 'ambient') {
         swayScale: 0.52,
         rotationScale: 0.42,
         earScale: 0.54,
+        tailScale: 0.48,
         blinkScale: 1.06,
         restOffsetY: 0.05,
         settleBlend: 0.12,
@@ -1004,6 +1146,7 @@ function resolvePresenceMotionProfile(mode: 'quiet' | 'connected' | 'ambient') {
         swayScale: 0.82,
         rotationScale: 0.78,
         earScale: 0.92,
+        tailScale: 0.94,
         blinkScale: 0.98,
         restOffsetY: 0,
         settleBlend: 0.18,
@@ -1015,6 +1158,7 @@ function resolvePresenceMotionProfile(mode: 'quiet' | 'connected' | 'ambient') {
         swayScale: 0.68,
         rotationScale: 0.62,
         earScale: 0.72,
+        tailScale: 0.72,
         blinkScale: 1,
         restOffsetY: 0,
         settleBlend: 0.16,
@@ -1110,6 +1254,12 @@ function resolveEarMotionProfile(
     amplitudeScale *= 1.08
   }
 
+  if (scene?.flags?.includes('music_listening')) {
+    intervalScale *= 0.76
+    durationScale *= 0.92
+    amplitudeScale *= 1.18
+  }
+
   if (scene?.id === 'deep_focus' || scene?.id === 'steady_focus' || scene?.id === 'late_night_wind_down') {
     intervalScale *= 1.16
     amplitudeScale *= 0.8
@@ -1162,6 +1312,11 @@ function resolveTailMotionProfile(
     amplitudeScale *= 1.06
   }
 
+  if (scene?.flags?.includes('music_listening')) {
+    durationScale *= 0.88
+    amplitudeScale *= 1.24
+  }
+
   if (scene?.id === 'deep_focus' || scene?.id === 'reading_nook' || scene?.id === 'quiet_idle') {
     durationScale *= 1.08
     amplitudeScale *= 0.88
@@ -1198,6 +1353,7 @@ function mergeMotionProfiles(
     swayScale: left.swayScale * right.swayScale,
     rotationScale: left.rotationScale * right.rotationScale,
     earScale: left.earScale * right.earScale,
+    tailScale: left.tailScale * right.tailScale,
     blinkScale: left.blinkScale * right.blinkScale,
     restOffsetY: left.restOffsetY + right.restOffsetY,
     settleBlend: Math.min(0.28, Math.max(0.1, (left.settleBlend + right.settleBlend) / 2)),
@@ -1211,6 +1367,7 @@ function blendMotionProfiles(left: MotionBlendProfile, right: MotionBlendProfile
     swayScale: lerp(left.swayScale, right.swayScale, alpha),
     rotationScale: lerp(left.rotationScale, right.rotationScale, alpha),
     earScale: lerp(left.earScale, right.earScale, alpha),
+    tailScale: lerp(left.tailScale, right.tailScale, alpha),
     blinkScale: lerp(left.blinkScale, right.blinkScale, alpha),
     restOffsetY: lerp(left.restOffsetY, right.restOffsetY, alpha),
     settleBlend: lerp(left.settleBlend, right.settleBlend, alpha),

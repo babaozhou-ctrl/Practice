@@ -64,6 +64,7 @@ export class ProactiveInteractionScheduler {
     const sceneId = snapshot.scene.id
     const screenShort = snapshot.screenContext.shortSummary
     const screenDomain = snapshot.screenContext.domain
+    const isMusicListening = snapshot.scene.flags.includes('music_listening')
     const sharedAttention = resolveSharedAttention(snapshot)
     const templateContext = buildProactiveTemplateContext(petPackage, snapshot, workMode, name)
 
@@ -283,23 +284,40 @@ export class ProactiveInteractionScheduler {
 
     if (
       (sceneId === 'watch_together' || screenDomain === 'video') &&
-      snapshot.mode === 'reactive' &&
+      (snapshot.mode === 'reactive' || (isMusicListening && snapshot.mode === 'observing')) &&
       signals.timeSinceLastContextMs > 4 * 60_000
     ) {
-      if (shouldSkipForRepeat('watch-together')) {
+      const promptCategory = isMusicListening ? 'listen-together' : 'watch-together'
+      if (shouldSkipForRepeat(promptCategory)) {
         return null
       }
 
       const sharedViewTopic = sharedAttention || recentTopic || activeTitle
-      const configuredSpeech = resolveConfiguredProactiveSpeech(petPackage, 'watchTogether', templateContext)
+      const configuredSpeech = isMusicListening
+        ? null
+        : resolveConfiguredProactiveSpeech(petPackage, 'watchTogether', templateContext)
+
+      if (isMusicListening) {
+        return {
+          category: promptCategory,
+          contextKey: `${promptCategory}|${baseContextKey}`,
+          intent: {
+            message: sharedViewTopic
+              ? `这会儿像是在陪你一起听“${trimForSpeech(sharedViewTopic, 22)}”。我就轻轻待在旁边。`
+              : '这会儿像是在陪你一起听着什么。我就轻轻待在旁边。',
+            duration: 2800,
+          },
+        }
+      }
+
       return {
-        category: 'watch-together',
-        contextKey: `watch-together|${baseContextKey}`,
+        category: promptCategory,
+        contextKey: `${promptCategory}|${baseContextKey}`,
         intent: configuredSpeech ?? {
           message: sharedViewTopic
             ? `这会儿像是在一起看“${trimForSpeech(sharedViewTopic, 22)}”。我就在旁边陪你。`
             : '这会儿像是在一起看点什么。我就在旁边陪你。',
-          duration: 3200,
+          duration: isMusicListening ? 2800 : 3200,
         },
       }
     }
@@ -388,20 +406,20 @@ function getModeCooldown(
   lowDistractionMode: boolean,
 ): number {
   if (workMode.enabled && workMode.isFocusActive) {
-    return lowDistractionMode ? 24 * 60_000 : 14 * 60_000
+    return lowDistractionMode ? 32 * 60_000 : 18 * 60_000
   }
 
   switch (mode) {
     case 'quiet':
-      return lowDistractionMode ? 46 * 60_000 : 32 * 60_000
+      return lowDistractionMode ? 60 * 60_000 : 42 * 60_000
     case 'focus_guardian':
-      return lowDistractionMode ? 34 * 60_000 : 24 * 60_000
+      return lowDistractionMode ? 42 * 60_000 : 28 * 60_000
     case 'reactive':
-      return lowDistractionMode ? 30 * 60_000 : 20 * 60_000
+      return lowDistractionMode ? 42 * 60_000 : 28 * 60_000
     case 'proactive':
-      return lowDistractionMode ? 26 * 60_000 : 16 * 60_000
+      return lowDistractionMode ? 36 * 60_000 : 24 * 60_000
     default:
-      return lowDistractionMode ? 28 * 60_000 : 18 * 60_000
+      return lowDistractionMode ? 38 * 60_000 : 26 * 60_000
   }
 }
 

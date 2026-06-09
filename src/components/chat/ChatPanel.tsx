@@ -73,6 +73,7 @@ function emitAutomationMetricEvent(
 const ChatPanel: React.FC<Props> = ({ onClose }) => {
   const { messages, config, addMessage, appendToLastMessage, setStreaming, isStreaming } = useChatStore()
   const activity = useContextStore((state) => state.activity)
+  const activeWindow = useContextStore((state) => state.activeWindow)
   const windowTitle = useContextStore((state) => state.activeWindow.title)
   const windowProcess = useContextStore((state) => state.activeWindow.process)
   const screenPerception = useContextStore((state) => state.screenPerception)
@@ -250,8 +251,9 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
       windowProcess,
       screenPerception?.summary ?? null,
       screenPerception?.source ?? null,
+      activeWindow,
     )
-  }, [activity, screenPerception?.source, screenPerception?.summary, windowProcess, windowTitle])
+  }, [activity, activeWindow, screenPerception?.source, screenPerception?.summary, windowProcess, windowTitle])
 
   const isFileDragPayload = useCallback((dataTransfer?: DataTransfer | null) => {
     if (!dataTransfer) return false

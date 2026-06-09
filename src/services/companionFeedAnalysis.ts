@@ -153,6 +153,12 @@ export async function analyzeFileForCompanionFeed(
     windowProcess: string
     screenSummary?: string | null
     screenSource?: CompanionChatContext['screenSource']
+    activeWindowInfo?: {
+      mediaPlaying?: boolean
+      mediaTitle?: string
+      mediaArtist?: string
+      mediaSource?: string
+    } | null
   },
 ): Promise<CompanionFeedAnalysisResult> {
   const providers = usePluginProviderStore.getState()
@@ -165,6 +171,7 @@ export async function analyzeFileForCompanionFeed(
     options.windowProcess,
     options.screenSummary ?? null,
     options.screenSource ?? null,
+    options.activeWindowInfo ?? null,
   )
 
   const content = await fileAnalysisProvider.readFile(file)
@@ -221,7 +228,7 @@ export async function analyzeFileForCompanionFeed(
 function resolveSceneIntro(context: CompanionChatContext, fileName: string): string {
   switch (context.sceneId) {
     case 'deep_focus':
-      return `我知道你还在专注里，陪你稳稳地看一眼《${fileName}》。`
+      return `我知道你还在专注里，陪你稳稳地看看《${fileName}》。`
     case 'steady_focus':
       return `你现在还在工作状态里，我们高效一点，但别太生硬地看《${fileName}》。`
     case 'reading_nook':

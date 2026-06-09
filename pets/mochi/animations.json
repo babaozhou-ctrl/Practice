@@ -80,6 +80,26 @@
       },
       "additive": ["breath", "blink", "ear_twitch", "center_shift"]
     },
+    "listening_loop": {
+      "type": "atlas",
+      "fps": 6,
+      "loop": true,
+      "frames": ["watching_00", "watching_01", "watching_02", "watching_03"],
+      "frameDurationsMs": [240, 180, 150, 230],
+      "motionProfile": {
+        "restOffsetY": 0,
+        "bouncePx": 0.55,
+        "bouncePeriodMs": 760,
+        "swayPx": 1.4,
+        "swayPeriodMs": 1180,
+        "rotateDeg": 1.65,
+        "rotatePeriodMs": 1260,
+        "scaleYAmount": 0.015,
+        "scaleYPeriodMs": 760,
+        "settleAlpha": 0.22
+      },
+      "additive": ["breath", "blink", "ear_twitch", "tail_sway", "center_shift"]
+    },
     "chatting_loop": {
       "type": "atlas",
       "fps": 9,

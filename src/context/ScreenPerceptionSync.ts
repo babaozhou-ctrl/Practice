@@ -256,14 +256,35 @@ export function stopScreenPerceptionLoop() {
   }
 }
 
-function buildWindowContextSummary(info: { title: string; process: string; idleMs?: number }): string | null {
+function buildWindowContextSummary(info: {
+  title: string
+  process: string
+  idleMs?: number
+  mediaPlaying?: boolean
+  mediaTitle?: string
+  mediaArtist?: string
+  mediaSource?: string
+}): string | null {
   const title = normalizeTitle(info.title)
   const process = (info.process || '').trim()
   const activity = classifyActivity({
     title,
     process,
     idleMs: info.idleMs,
+    mediaPlaying: info.mediaPlaying,
+    mediaTitle: info.mediaTitle,
+    mediaArtist: info.mediaArtist,
+    mediaSource: info.mediaSource,
   })
+
+  const mediaTitle = normalizeTitle(info.mediaTitle ?? '')
+  const mediaArtist = normalizeTitle(info.mediaArtist ?? '')
+  const mediaSource = normalizeTitle(info.mediaSource ?? '')
+  const mediaDescription = mediaTitle
+    ? mediaArtist
+      ? `${mediaTitle} by ${mediaArtist}`
+      : mediaTitle
+    : mediaSource
 
   if (!title && !process) {
     return null
@@ -271,10 +292,18 @@ function buildWindowContextSummary(info: { title: string; process: string; idleM
 
   switch (activity) {
     case 'CODING':
+      if (info.mediaPlaying && mediaDescription) {
+        return title
+          ? `coding in ${title} while listening to ${mediaDescription}`
+          : `coding while listening to ${mediaDescription}`
+      }
       return title
         ? `code editor focused on ${title}`
         : `code editor in ${process || 'development workspace'}`
     case 'WATCHING':
+      if (info.mediaPlaying && mediaDescription) {
+        return `music playback active around ${mediaDescription}`
+      }
       return title
         ? `video content playing around ${title}`
         : `video player active in ${process || 'media app'}`
@@ -291,6 +320,11 @@ function buildWindowContextSummary(info: { title: string; process: string; idleM
         ? `game session active around ${title}`
         : `game session open in ${process || 'game launcher'}`
     case 'BROWSING':
+      if (info.mediaPlaying && mediaDescription) {
+        return title
+          ? `browsing ${title} while listening to ${mediaDescription}`
+          : `browsing while listening to ${mediaDescription}`
+      }
       return title
         ? `browsing page about ${title}`
         : `browser tab active in ${process || 'browser'}`

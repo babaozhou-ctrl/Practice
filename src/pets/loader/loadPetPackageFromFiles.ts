@@ -32,6 +32,7 @@ const DEFAULT_CLIP_BINDINGS: BuiltInPetPackage['bindings']['clipToAnimationState
   thinking_loop: 'THINKING',
   coding_loop: 'CODING',
   watching_loop: 'WATCHING',
+  listening_loop: 'WATCHING',
   chatting_loop: 'CHATTING',
   gaming_loop: 'GAMING',
   sleep_loop: 'SLEEPING',

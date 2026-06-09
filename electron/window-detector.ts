@@ -7,9 +7,13 @@ interface WindowInfo {
   title: string;
   process: string;
   idleMs?: number;
+  mediaPlaying?: boolean;
+  mediaTitle?: string;
+  mediaArtist?: string;
+  mediaSource?: string;
 }
 
-let lastResult: WindowInfo = { title: "", process: "", idleMs: 0 };
+let lastResult: WindowInfo = { title: "", process: "", idleMs: 0, mediaPlaying: false };
 let lastResultStr = "";
 
 export function detectActiveWindow(): WindowInfo {
@@ -42,6 +46,7 @@ export function detectActiveWindow(): WindowInfo {
       '  public static extern uint GetTickCount();',
       '}',
       '"@',
+      'Add-Type -AssemblyName System.Runtime.WindowsRuntime',
       '$hwnd = [Win32]::GetForegroundWindow()',
       '$sb = New-Object System.Text.StringBuilder 256',
       '[Win32]::GetWindowText($hwnd, $sb, 256) | Out-Null',
@@ -55,7 +60,45 @@ export function detectActiveWindow(): WindowInfo {
       'if ([Win32]::GetLastInputInfo([ref]$lii)) {',
       '  $idleMs = [Math]::Max(0, [int64][Win32]::GetTickCount() - [int64]$lii.dwTime)',
       '}',
-      'Write-Output "$title|||$proc|||$idleMs"',
+      '$mediaPlaying = $false',
+      '$mediaTitle = ""',
+      '$mediaArtist = ""',
+      '$mediaSource = ""',
+      'try {',
+      "  $managerType = [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media.Control, ContentType=WindowsRuntime]",
+      '  $op = $managerType::RequestAsync()',
+      "  $asTaskMethod = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.IsGenericMethodDefinition -and $_.GetGenericArguments().Count -eq 1 -and $_.GetParameters().Count -eq 1 } | Select-Object -First 1",
+      '  if ($asTaskMethod) {',
+      '    $genericAsTask = $asTaskMethod.MakeGenericMethod($managerType)',
+      '    $task = $genericAsTask.Invoke($null, @($op))',
+      '    $manager = $task.GetAwaiter().GetResult()',
+      '    $sessions = $manager.GetSessions()',
+      '    foreach ($session in $sessions) {',
+      '      try {',
+      '        $playbackInfo = $session.GetPlaybackInfo()',
+      '        if ($null -eq $playbackInfo) { continue }',
+      '        $status = [int]$playbackInfo.PlaybackStatus',
+      '        if ($status -ne 4) { continue }',
+      '        $mediaPlaying = $true',
+      '        $mediaSource = $session.SourceAppUserModelId',
+      '        try {',
+      '          $mediaOp = $session.TryGetMediaPropertiesAsync()',
+      "          $mediaTaskMethod = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.IsGenericMethodDefinition -and $_.GetGenericArguments().Count -eq 1 -and $_.GetParameters().Count -eq 1 } | Select-Object -First 1",
+      '          if ($mediaTaskMethod) {',
+      '            $mediaTask = $mediaTaskMethod.MakeGenericMethod([Windows.Media.MediaProperties.GlobalSystemMediaTransportControlsSessionMediaProperties, Windows.Media, ContentType=WindowsRuntime]).Invoke($null, @($mediaOp))',
+      '            $media = $mediaTask.GetAwaiter().GetResult()',
+      '            if ($media) {',
+      '              $mediaTitle = $media.Title',
+      '              $mediaArtist = $media.Artist',
+      '            }',
+      '          }',
+      '        } catch {}',
+      '        break',
+      '      } catch {}',
+      '    }',
+      '  }',
+      '} catch {}',
+      'Write-Output "$title|||$proc|||$idleMs|||$mediaPlaying|||$mediaTitle|||$mediaArtist|||$mediaSource"',
     ];
     const psScript = psLines.join("\n");
 
@@ -74,9 +117,22 @@ export function detectActiveWindow(): WindowInfo {
       title: (parts[0] || "").trim(),
       process: (parts[1] || "").trim(),
       idleMs: Math.max(0, Number((parts[2] || "0").trim()) || 0),
+      mediaPlaying: ((parts[3] || "").trim().toLowerCase() === "true"),
+      mediaTitle: (parts[4] || "").trim(),
+      mediaArtist: (parts[5] || "").trim(),
+      mediaSource: (parts[6] || "").trim(),
     };
 
-    const str = info.title + "||" + info.process;
+    const str =
+      info.title +
+      "||" +
+      info.process +
+      "||" +
+      String(Boolean(info.mediaPlaying)) +
+      "||" +
+      (info.mediaSource || "") +
+      "||" +
+      (info.mediaTitle || "");
     if (str !== lastResultStr) {
       lastResultStr = str;
       lastResult = info;

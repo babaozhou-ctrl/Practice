@@ -16,12 +16,13 @@ export function resolvePetPresentation(
   }
 
   const petStateKey = resolvePetStateKey(snapshot)
-  const config = petPackage.states.states[petStateKey] ?? petPackage.states.states.idle
+  const resolvedStateKey = resolveBuiltInStateOverride(petStateKey, snapshot, petPackage)
+  const config = petPackage.states.states[resolvedStateKey] ?? petPackage.states.states[petStateKey] ?? petPackage.states.states.idle
   const clip = petPackage.animations.clips[config.baseClip]
   const animationState = petPackage.bindings.clipToAnimationState[config.baseClip] ?? 'IDLE'
 
   return {
-    petStateKey,
+    petStateKey: resolvedStateKey,
     clipName: config.baseClip,
     animationState,
     loop: clip?.loop ?? true,
@@ -34,6 +35,30 @@ export function resolvePetPresentation(
     transitionsFrom: resolveTransitions(config.transitions ?? {}, petPackage),
     snapshot,
   }
+}
+
+function resolveBuiltInStateOverride(
+  petStateKey: string,
+  snapshot: CompanionSnapshot | StabilizedCompanionSnapshot,
+  petPackage: BuiltInPetPackage,
+): string {
+  if (
+    petStateKey === 'coding' &&
+    snapshot.scene.flags.includes('music_listening') &&
+    petPackage.states.states.listening
+  ) {
+    return 'listening'
+  }
+
+  if (
+    petStateKey === 'watching_video' &&
+    snapshot.scene.flags.includes('music_listening') &&
+    petPackage.states.states.listening
+  ) {
+    return 'listening'
+  }
+
+  return petStateKey
 }
 
 function resolveTransientPresentation(

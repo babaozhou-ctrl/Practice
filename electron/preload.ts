@@ -8,6 +8,15 @@ import type { AIConfig } from '../src/types/chat'
 contextBridge.exposeInMainWorld('electronAPI', {
   movePet: (x: number, y: number) => ipcRenderer.send('pet:moved', x, y),
   getPosition: (): Promise<{ x: number; y: number }> => ipcRenderer.invoke('pet:get-position'),
+  setMenuExpanded: (
+    expandedOrOptions:
+      | boolean
+      | {
+          expanded: boolean
+          width?: number
+          height?: number
+        },
+  ): Promise<boolean> => ipcRenderer.invoke('pet:set-menu-expanded', expandedOrOptions),
   toggleClickThrough: () => ipcRenderer.send('pet:toggle-clickthrough'),
   openChat: () => ipcRenderer.send('pet:open-chat'),
   openSettings: () => ipcRenderer.send('pet:open-settings'),
@@ -47,7 +56,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   emitAutomationMetricsEvent: (payload: unknown) => ipcRenderer.send('metrics:event', payload),
   hideUIWindow: () => ipcRenderer.send('app:hide-ui'),
   quitApp: () => ipcRenderer.send('app:quit'),
-  getActiveWindow: (): Promise<{ title: string; process: string; idleMs?: number }> =>
+  getActiveWindow: (): Promise<{ title: string; process: string; idleMs?: number; mediaPlaying?: boolean; mediaTitle?: string; mediaArtist?: string; mediaSource?: string }> =>
     ipcRenderer.invoke('context:get-active-window'),
   capturePrimaryScreen: (): Promise<string | null> =>
     ipcRenderer.invoke('screen:capture-primary'),
@@ -100,10 +109,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onStateChange: (callback: (state: string) => void) => {
     ipcRenderer.on('pet:state', (_event, state) => callback(state))
   },
-  onWindowUpdate: (callback: (info: { title: string; process: string; idleMs?: number }) => void) => {
+  onWindowUpdate: (callback: (info: { title: string; process: string; idleMs?: number; mediaPlaying?: boolean; mediaTitle?: string; mediaArtist?: string; mediaSource?: string }) => void) => {
     ipcRenderer.on('context:window-update', (_event, info) => callback(info))
   },
-  onContextUpdate: (callback: (info: { title: string; process: string; idleMs?: number }) => void) => {
+  onContextUpdate: (callback: (info: { title: string; process: string; idleMs?: number; mediaPlaying?: boolean; mediaTitle?: string; mediaArtist?: string; mediaSource?: string }) => void) => {
     ipcRenderer.on('context:update', (_event, info) => callback(info))
   },
   onClickThroughChanged: (callback: (value: boolean) => void) => {

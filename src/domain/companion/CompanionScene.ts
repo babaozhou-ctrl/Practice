@@ -1,3 +1,4 @@
+import { looksLikeMusicPlayback } from '../../context/ActivityClassifier'
 import type { ActiveWindowInfo } from '../../types/context'
 import type { WorkModeSignals } from '../../types/workMode'
 import type { ScreenContextSignals } from './ScreenPerceptionSemantics'
@@ -46,6 +47,7 @@ export function resolveCompanionScene(
   const lateNight = isLateNight(now)
   const focusMinutes = Math.floor((input.workMode?.phaseElapsedMs ?? 0) / 60_000)
   const screenContext = input.screenContext ?? null
+  const musicListening = input.activeWindow ? looksLikeMusicPlayback(input.activeWindow) : false
   const flags = new Set<string>()
 
   if (lateNight) flags.add('late_night')
@@ -56,6 +58,9 @@ export function resolveCompanionScene(
   if (input.emotion === 'sleepy') flags.add('low_energy')
   if (screenContext?.domain && screenContext.domain !== 'none') {
     flags.add(`screen_${screenContext.domain}`)
+  }
+  if (musicListening) {
+    flags.add('music_listening')
   }
 
   if (idleMs >= AWAY_IDLE_MS) {
@@ -84,7 +89,7 @@ export function resolveCompanionScene(
 
   if (screenContext?.domain === 'video' && input.activity !== 'gaming') {
     flags.add('co_viewing')
-    return createScene('watch_together', '一起看内容', 'steady', 'shared_reaction', flags)
+    return createScene('watch_together', musicListening ? '一起听着' : '一起看内容', 'steady', musicListening ? 'shared_rhythm' : 'shared_reaction', flags)
   }
 
   if (screenContext?.domain === 'social' && input.activity !== 'gaming') {
@@ -99,7 +104,7 @@ export function resolveCompanionScene(
 
   if (input.activity === 'watching_video') {
     flags.add('co_viewing')
-    return createScene('watch_together', '一起看内容', 'steady', 'shared_reaction', flags)
+    return createScene('watch_together', musicListening ? '一起听着' : '一起看内容', 'steady', musicListening ? 'shared_rhythm' : 'shared_reaction', flags)
   }
 
   if (input.activity === 'chatting') {

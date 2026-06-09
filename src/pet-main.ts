@@ -26,6 +26,7 @@ import { CompanionSpeechPolicy, type SpeechSource } from './domain/companion/Com
 import { CompanionStateMachine } from './domain/companion/CompanionStateMachine'
 import { ProactiveInteractionScheduler } from './domain/companion/ProactiveInteractionScheduler'
 import { attachWorkModeToSnapshot } from './domain/companion/attachWorkModeToSnapshot'
+import { normalizeCompanionSnapshot } from './domain/companion/normalizeCompanionSnapshot'
 import type { CompanionSnapshot } from './domain/companion/types'
 import { readCompanionPreferencesState, subscribeCompanionPreferences } from './preferences/CompanionPreferencesStore'
 import { subscribeSelectedPet } from './pets/PetSelectionStore'
@@ -99,6 +100,15 @@ const DEFAULT_SCENE_SHIFT_TO_WATCH_SEQUENCE = [
   { state: 'HAPPY' as const, holdMs: 240 },
   { state: 'IDLE' as const, holdMs: 220 },
 ]
+const DEFAULT_SCENE_SHIFT_TO_LISTEN_SEQUENCE = [
+  { state: 'HAPPY' as const, holdMs: 240 },
+  { state: 'THINKING' as const, holdMs: 220 },
+  { state: 'HAPPY' as const, holdMs: 240 },
+]
+const DEFAULT_SCENE_SHIFT_FROM_LISTEN_SEQUENCE = [
+  { state: 'THINKING' as const, holdMs: 220 },
+  { state: 'IDLE' as const, holdMs: 260 },
+]
 const FEED_THINKING_LINES = [
   '那我先抱走啦，稍微想一想。',
   '好哦，我先替你看一会儿。',
@@ -137,6 +147,27 @@ interface FeedCardCopy {
   confirmBody: string
   thinkingBody: string
   resultBody: string
+}
+
+function normalizeSpeechAnchor(
+  anchor: { x?: number; y?: number } | null | undefined,
+): { x: number; y: number } | null {
+  if (!anchor) {
+    return null
+  }
+
+  const { x, y } = anchor
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    return null
+  }
+
+  const safeX = x as number
+  const safeY = y as number
+
+  return {
+    x: Math.min(1, Math.max(0, safeX)),
+    y: Math.min(1, Math.max(0, safeY)),
+  }
 }
 
 interface RuntimeCompanionState {
@@ -222,6 +253,18 @@ class SpeechBubbleController {
   private activeUntil = 0
   private timer: number | null = null
 
+  private applyAnchor(anchor?: { x?: number; y?: number } | null) {
+    const normalizedAnchor = normalizeSpeechAnchor(anchor)
+    if (!normalizedAnchor) {
+      this.element.style.left = ''
+      this.element.style.top = ''
+      return
+    }
+
+    this.element.style.left = `${Math.round(normalizedAnchor.x * 100)}%`
+    this.element.style.top = `${Math.round(normalizedAnchor.y * 100)}%`
+  }
+
   constructor(
     element: HTMLElement,
     anchor?: {
@@ -246,17 +289,11 @@ class SpeechBubbleController {
 
     this.kickerEl = kickerEl
     this.textEl = textEl
-
-    if (anchor) {
-      this.element.style.left = `${Math.round(anchor.x * 100)}%`
-      this.element.style.top = `${Math.round(anchor.y * 100)}%`
-    }
+    this.applyAnchor(anchor)
   }
 
   setAnchor(anchor?: { x: number; y: number }) {
-    if (!anchor) return
-    this.element.style.left = `${Math.round(anchor.x * 100)}%`
-    this.element.style.top = `${Math.round(anchor.y * 100)}%`
+    this.applyAnchor(anchor)
   }
 
   show(message: string, duration = 4_000, presentation?: Partial<SpeechPresentation>) {
@@ -325,6 +362,7 @@ function getStableSpeechKicker(
   snapshot: ReturnType<CompanionStateMachine['getSnapshot']>,
   message: string,
 ): string {
+  const isMusicListening = snapshot.scene.flags.includes('music_listening')
   if (snapshot.transientAction === 'tap_affection') return '\u6478\u6478\u6536\u5230'
   if (snapshot.transientAction === 'welcome_back') return '\u4f60\u56de\u6765\u5566'
   if (snapshot.transientAction === 'dragging') return '\u8ddf\u7740\u4f60\u8d70'
@@ -338,7 +376,7 @@ function getStableSpeechKicker(
     case 'reading_nook':
       return '\u4e00\u8d77\u8bfb\u7740'
     case 'watch_together':
-      return '\u966a\u4f60\u4e00\u8d77\u770b'
+      return isMusicListening ? '\u966a\u4f60\u4e00\u8d77\u542c' : '\u966a\u4f60\u4e00\u8d77\u770b'
     case 'social_corner':
       return '\u5728\u4f60\u65c1\u8fb9'
     case 'play_session':
@@ -641,6 +679,8 @@ function resolveSceneBridgeSequence(
   const nextSceneId = next.scene.id
   const previousPhase = previous.workMode?.phase ?? 'idle'
   const nextPhase = next.workMode?.phase ?? 'idle'
+  const previousMusicListening = previous.scene.flags.includes('music_listening')
+  const nextMusicListening = next.scene.flags.includes('music_listening')
 
   if (previousPhase !== nextPhase) {
     if (nextPhase === 'short_break' || nextPhase === 'long_break') {
@@ -649,6 +689,12 @@ function resolveSceneBridgeSequence(
     if (nextPhase === 'focus') {
       return resolveConfiguredBridgeSequence(petPackage, 'breakToFocus')
     }
+  }
+
+  if (previousMusicListening !== nextMusicListening) {
+    return nextMusicListening
+      ? DEFAULT_SCENE_SHIFT_TO_LISTEN_SEQUENCE
+      : DEFAULT_SCENE_SHIFT_FROM_LISTEN_SEQUENCE
   }
 
   if (previousSceneId !== nextSceneId) {
@@ -897,7 +943,55 @@ function createStableFeedCardController(
 }
 
 function setupStableContextMenu(menu: HTMLElement, options: { getSnapshot: () => CompanionSnapshot | null }) {
-  const hide = () => menu.classList.remove('show')
+  const menuStage = document.getElementById('pet-stage') as HTMLElement | null
+  const menuShell = document.getElementById('pet-shell') as HTMLElement | null
+  const menuStageMinExpandedWidth = 360
+  const menuStageMinExpandedHeight = 560
+  const menuStageWidthPadding = 56
+  const menuStageHeightPadding = 40
+  const menuBaseWidth = 300
+  const menuBaseHeight = 420
+  const menuMargin = 14
+  const waitForMenuLayout = () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
+
+  const syncMenuStage = (expanded: boolean, stageSize?: { width: number; height: number }) => {
+    if (!menuStage) {
+      return
+    }
+
+    if (!expanded) {
+      menuStage.style.width = ''
+      menuStage.style.height = ''
+      if (menuShell) {
+        menuShell.style.left = ''
+        menuShell.style.bottom = ''
+      }
+      return
+    }
+
+    const resolvedWidth = Math.max(menuStageMinExpandedWidth, Math.round(stageSize?.width ?? menuStageMinExpandedWidth))
+    const resolvedHeight = Math.max(menuStageMinExpandedHeight, Math.round(stageSize?.height ?? menuStageMinExpandedHeight))
+
+    menuStage.style.width = `${resolvedWidth}px`
+    menuStage.style.height = `${resolvedHeight}px`
+
+    if (menuShell) {
+      menuShell.style.left = `${Math.round(resolvedWidth / 2)}px`
+      menuShell.style.bottom = '0px'
+    }
+  }
+
+  const hide = () => {
+    menu.classList.remove('show')
+    menu.style.visibility = ''
+    menu.style.maxHeight = ''
+    menu.style.maxWidth = ''
+    menu.style.left = ''
+    menu.style.top = ''
+    menu.scrollTop = 0
+    syncMenuStage(false)
+    void window.electronAPI?.setMenuExpanded?.(false)
+  }
   menu.innerHTML = ''
 
   const buildChip = (content: string) => {
@@ -1029,15 +1123,51 @@ function setupStableContextMenu(menu: HTMLElement, options: { getSnapshot: () =>
   render()
 
   return {
-    show(x: number, y: number) {
+    async show(x: number, y: number) {
       render()
-      const rect = menu.getBoundingClientRect()
-      const margin = 14
-      const left = Math.min(x, window.innerWidth - rect.width - margin)
-      const top = Math.min(y, window.innerHeight - rect.height - margin)
-      menu.style.left = `${Math.max(margin, left)}px`
-      menu.style.top = `${Math.max(margin, top)}px`
+      menu.style.visibility = 'hidden'
       menu.classList.add('show')
+
+      const estimatedWidth = Math.max(menu.offsetWidth, 280)
+      const estimatedHeight = Math.max(menu.scrollHeight, menu.offsetHeight, 320)
+      const expandedStageSize = {
+        width: Math.max(menuStageMinExpandedWidth, estimatedWidth + menuStageWidthPadding),
+        height: Math.max(menuStageMinExpandedHeight, estimatedHeight + menuStageHeightPadding),
+      }
+
+      syncMenuStage(true, expandedStageSize)
+      await window.electronAPI?.setMenuExpanded?.({
+        expanded: true,
+        width: expandedStageSize.width,
+        height: expandedStageSize.height,
+      })
+      await waitForMenuLayout()
+
+      const viewportWidth = window.innerWidth
+      const viewportHeight = window.innerHeight
+      const anchorOffsetX = Math.max(0, Math.round((viewportWidth - menuBaseWidth) / 2))
+      const anchorOffsetY = Math.max(0, viewportHeight - menuBaseHeight)
+      const anchorX = x + anchorOffsetX
+      const anchorY = y + anchorOffsetY
+      menu.scrollTop = 0
+      const maxMenuHeight = Math.max(220, viewportHeight - menuMargin * 2)
+      const maxMenuWidth = Math.max(240, viewportWidth - menuMargin * 2)
+      menu.style.maxHeight = `${maxMenuHeight}px`
+      menu.style.maxWidth = `${maxMenuWidth}px`
+      await waitForMenuLayout()
+
+      const rect = menu.getBoundingClientRect()
+      const availableWidth = window.innerWidth
+      const availableHeight = window.innerHeight
+      const preferLeft = anchorX + rect.width + menuMargin > availableWidth
+      const preferAbove = anchorY + rect.height + menuMargin > availableHeight
+      const preferredLeft = preferLeft ? anchorX - rect.width : anchorX
+      const preferredTop = preferAbove ? anchorY - rect.height : anchorY
+      const left = Math.min(Math.max(menuMargin, preferredLeft), Math.max(menuMargin, availableWidth - rect.width - menuMargin))
+      const top = Math.min(Math.max(menuMargin, preferredTop), Math.max(menuMargin, availableHeight - rect.height - menuMargin))
+      menu.style.left = `${left}px`
+      menu.style.top = `${top}px`
+      menu.style.visibility = 'visible'
     },
     hide,
   }
@@ -1181,9 +1311,9 @@ async function bootstrap() {
   runtime.applyPresentation(resolvePetPresentation(initialSnapshot, petPackage))
 
   const refreshPresentation = (snapshot: CompanionSnapshot) => {
-    const stabilizedSnapshot = stabilizer.stabilize(
+    const stabilizedSnapshot = normalizeCompanionSnapshot(stabilizer.stabilize(
       attachWorkModeToSnapshot(snapshot, workModeRuntime.getSignals()),
-    )
+    ))
     latestSnapshot = stabilizedSnapshot
     runtime.applyPresentation(resolvePetPresentation(stabilizedSnapshot, petPackage))
     return stabilizedSnapshot
@@ -1259,6 +1389,7 @@ async function bootstrap() {
         windowProcess: latestSnapshot.activeWindow?.process ?? '',
         screenSummary: latestScreenSummary,
         screenSource: latestScreenSource,
+        activeWindowInfo: latestSnapshot.activeWindow,
       })
 
       emitCompanionFeedAnalysisResult(result, {
@@ -1321,6 +1452,7 @@ async function bootstrap() {
       latestSnapshot.activeWindow?.process ?? '',
       latestScreenSummary,
       latestScreenSource,
+      latestSnapshot.activeWindow,
     )
     const briefSummary = buildCompanionBriefSummary(
       detailedAnalysis,
@@ -1383,6 +1515,7 @@ async function bootstrap() {
       latestSnapshot.activeWindow?.process ?? '',
       latestScreenSummary,
       latestScreenSource,
+      latestSnapshot.activeWindow,
     )
     const briefSummary = buildCompanionBriefSummary(
       detailedAnalysis,
@@ -1539,6 +1672,8 @@ async function bootstrap() {
 
   const dragController = new PetDragController({
     element: runtime.canvas,
+    canStartInteraction: (event) => runtime.hitTestCanvasPoint(event.clientX, event.clientY).hit,
+    isHoveringInteractiveTarget: (event) => runtime.hitTestCanvasPoint(event.clientX, event.clientY).hit,
     onDragStart: () => {
       emitAutomationMetricEvent('pet.drag.start')
       refreshPresentation(companion.handleDragStart().snapshot)
@@ -1565,19 +1700,30 @@ async function bootstrap() {
 
   dragController.mount()
 
+  const isFileDragEvent = (event: DragEvent) => Array.from(event.dataTransfer?.types ?? []).includes('Files')
+  const isDragOverPetBody = (event: DragEvent) => runtime.hitTestCanvasPoint(event.clientX, event.clientY).hit
+
   runtime.canvas.addEventListener('dragenter', (event) => {
     if (isFeedAnalyzing) return
-    if (!Array.from(event.dataTransfer?.types ?? []).includes('Files')) return
+    if (!isFileDragEvent(event)) return
     event.preventDefault()
+    if (!isDragOverPetBody(event)) {
+      feedCard.setDragActive(false)
+      return
+    }
     feedCard.setDragActive(true)
   })
 
   runtime.canvas.addEventListener('dragover', (event) => {
     if (isFeedAnalyzing) return
-    if (!Array.from(event.dataTransfer?.types ?? []).includes('Files')) return
+    if (!isFileDragEvent(event)) return
     event.preventDefault()
     if (event.dataTransfer) {
-      event.dataTransfer.dropEffect = 'copy'
+      event.dataTransfer.dropEffect = isDragOverPetBody(event) ? 'copy' : 'none'
+    }
+    if (!isDragOverPetBody(event)) {
+      feedCard.setDragActive(false)
+      return
     }
     feedCard.setDragActive(true)
   })
@@ -1589,10 +1735,15 @@ async function bootstrap() {
 
   runtime.canvas.addEventListener('drop', (event) => {
     if (isFeedAnalyzing) return
-    const files = event.dataTransfer?.files
-    if (!files || files.length === 0) return
+    if (!isFileDragEvent(event)) return
     event.preventDefault()
     event.stopPropagation()
+    if (!isDragOverPetBody(event)) {
+      feedCard.setDragActive(false)
+      return
+    }
+    const files = event.dataTransfer?.files
+    if (!files || files.length === 0) return
     feedCard.setDragActive(true)
     pendingFeedFile = files[0]
     emitAutomationMetricEvent('feed.drop.received', {
@@ -1620,6 +1771,10 @@ async function bootstrap() {
 
   runtime.canvas.addEventListener('contextmenu', (event) => {
     event.preventDefault()
+    if (!runtime.hitTestCanvasPoint(event.clientX, event.clientY).hit) {
+      contextMenu.hide()
+      return
+    }
     contextMenu.show(event.clientX, event.clientY)
   })
 
@@ -1654,6 +1809,8 @@ async function bootstrap() {
           scene: stabilizedSnapshot.scene.id,
           mode: stabilizedSnapshot.mode,
           emotion: stabilizedSnapshot.emotion,
+          musicListening: stabilizedSnapshot.scene.flags.includes('music_listening'),
+          mediaSource: stabilizedSnapshot.activeWindow?.mediaSource || 'none',
         },
       })
     }
@@ -1676,7 +1833,7 @@ async function bootstrap() {
     workModeRuntime.tick()
     const workModeSignals = workModeRuntime.getSignals()
     const snapshotWithWorkMode = attachWorkModeToSnapshot(result.snapshot, workModeSignals)
-    const stabilizedSnapshot = stabilizer.stabilize(snapshotWithWorkMode)
+    const stabilizedSnapshot = normalizeCompanionSnapshot(stabilizer.stabilize(snapshotWithWorkMode))
     latestSnapshot = stabilizedSnapshot
     runtime.applyPresentation(resolvePetPresentation(stabilizedSnapshot, petPackage))
     maybePlaySceneBridgeMotion(previousSnapshot, stabilizedSnapshot, Date.now())

@@ -14,7 +14,7 @@
     "resultBody": "《{{fileName}}》我先替你顺过一遍了。\n{{desktopSummary}}\n\n更完整的整理已经在聊天里等你了，你想继续的话，{{petName}}就陪你往下看。"
   },
   "fileAnalysis": {
-    "desktopUtterance": "{{lead}}。{{desktopSummary}}"
+    "desktopUtterance": "{{lead}} {{desktopSummary}}"
   },
   "bridgeMotions": {
     "focusToBreak": [
@@ -39,14 +39,14 @@
     "focusEnding": {
       "title": "专注快收尾了",
       "speech": {
-        "message": "{{preferredName}}，{{#workModeLabel}}{{workModeLabel}}这轮快收尾了。{{/workModeLabel}}{{^workModeLabel}}这轮快收尾了。{{/workModeLabel}}{{#sharedAttention}}如果眼前最要紧的还是{{sharedAttention}}，我继续陪着你把最后一点慢慢收干净。{{/sharedAttention}}{{^sharedAttention}}我继续陪着你把最后一点慢慢收干净。{{/sharedAttention}}",
+        "message": "{{preferredName}}，{{#workModeLabel}}{{workModeLabel}}这一轮快到尾声了。{{/workModeLabel}}{{^workModeLabel}}这一轮快到尾声了。{{/workModeLabel}}{{#sharedAttention}}如果眼前最挂心的还是{{sharedAttention}}，我就继续陪着你把最后一点慢慢收干净。{{/sharedAttention}}{{^sharedAttention}}我就继续陪着你把最后一点慢慢收干净。{{/sharedAttention}}",
         "durationMs": 3400
       },
       "actions": [
         {
           "id": "focus-finish-strong",
           "label": "再陪我收个尾",
-          "prompt": "{{#workModeLabel}}我这轮{{workModeLabel}}快结束了，{{/workModeLabel}}{{^workModeLabel}}我这一段快结束了，{{/workModeLabel}}请继续陪我把最后一点内容收干净。{{#sharedAttention}}如果{{sharedAttention}}就是眼前最要紧的，就帮我判断怎么先把它收好。{{/sharedAttention}}{{^sharedAttention}}也帮我判断现在最值得先收好的那一点。{{/sharedAttention}}"
+          "prompt": "{{#workModeLabel}}我这轮{{workModeLabel}}快结束了。{{/workModeLabel}}{{^workModeLabel}}我这段快结束了。{{/workModeLabel}}请继续陪我把最后一点内容收干净。{{#sharedAttention}}如果{{sharedAttention}}就是眼前最挂心的，就帮我判断怎么先把它收好。{{/sharedAttention}}{{^sharedAttention}}也帮我判断现在最值得先收好的那一点。{{/sharedAttention}}"
         },
         {
           "id": "focus-start-break",
@@ -55,8 +55,8 @@
         },
         {
           "id": "focus-next-step",
-          "label": "帮我整理下一步",
-          "prompt": "请根据我刚才这段{{sceneLabel}}状态，帮我整理一个自然、轻量的下一步顺序。{{#sharedAttention}}如果{{sharedAttention}}值得先处理，就优先顺着它往下走。{{/sharedAttention}}{{^sharedAttention}}如果有更适合先接住的那一点，也请帮我顺出来。{{/sharedAttention}}"
+          "label": "帮我理下一步",
+          "prompt": "请根据我刚才这段{{sceneLabel}}状态，帮我理一个自然、轻量的下一步顺序。{{#sharedAttention}}如果{{sharedAttention}}最值得先接住，就顺着它往下走。{{/sharedAttention}}{{^sharedAttention}}如果有更适合先接住的那一点，也请帮我顺出来。{{/sharedAttention}}"
         }
       ]
     },
@@ -69,32 +69,32 @@
       "actions": [
         {
           "id": "break-return-gently",
-          "label": "轻一点回到专注",
+          "label": "轻一点回去",
           "prompt": "休息差不多结束了。请陪我温柔一点回到专注，不要一下子变得很紧绷。"
         },
         {
           "id": "break-decide-first-step",
-          "label": "帮我决定先做什么",
-          "prompt": "{{#workModeLabel}}我要从{{workModeLabel}}回到工作里了。{{/workModeLabel}}{{^workModeLabel}}我要回到工作里了。{{/workModeLabel}}请帮我决定重启时第一步做什么，尽量让我容易重新进入状态。{{#sharedAttention}}如果{{sharedAttention}}还挂在眼前，也一起考虑进去。{{/sharedAttention}}"
+          "label": "帮我定第一步",
+          "prompt": "{{#workModeLabel}}我要从{{workModeLabel}}回到工作里了。{{/workModeLabel}}{{^workModeLabel}}我要回到工作里了。{{/workModeLabel}}请帮我决定重新开始时第一步做什么，尽量让我容易重新进入状态。{{#sharedAttention}}如果{{sharedAttention}}还挂在眼前，也一起考虑进去。{{/sharedAttention}}"
         }
       ]
     },
     "overworkFirm": {
       "title": "该认真歇一下了",
       "speech": {
-        "message": "{{preferredName}}，你今天已经撑很久了。{{#sharedAttention}}{{sharedAttention}}如果还挂在心上，我也会陪你安顿它，{{/sharedAttention}}但这次真的可以先停一下。",
+        "message": "{{preferredName}}，你今天已经撑很久了。{{#sharedAttention}}{{sharedAttention}}如果还挂在心上，我也会陪你安顿它。{{/sharedAttention}}但这次真的可以先停一下。",
         "durationMs": 4200
       },
       "actions": [
         {
           "id": "overwork-wrap-up",
           "label": "先帮我收尾",
-          "prompt": "我已经有点过劳了。请帮我做一个尽量轻的收尾，只保留今晚一定要结束的点。{{#sharedAttention}}如果{{sharedAttention}}不是今晚非做不可，也请提醒我放下。{{/sharedAttention}}{{^sharedAttention}}如果有不需要今晚继续扛着的部分，也请直接提醒我放下。{{/sharedAttention}}"
+          "prompt": "我已经有点过劳了。请帮我做一个尽量轻的收尾，只保留今晚一定要结束的点。{{#sharedAttention}}如果{{sharedAttention}}不是今晚非做不可，也请提醒我先放下。{{/sharedAttention}}{{^sharedAttention}}如果有不需要今晚继续扛着的部分，也请直接提醒我放下。{{/sharedAttention}}"
         },
         {
           "id": "overwork-pause-reminder",
           "label": "提醒我暂停",
-          "prompt": "我现在需要停一下。请用温和但坚定的方式提醒我为什么应该先休息，并帮我放下手头的内容。{{#sharedAttention}}{{preferredName}}如果还在惦记{{sharedAttention}}，也请顺手帮我安顿一下。{{/sharedAttention}}"
+          "prompt": "我现在需要停一下。请用温和但坚定的方式提醒我为什么应该先休息，并帮我把手头的内容放下。{{#sharedAttention}}如果我还在惦记{{sharedAttention}}，也请顺手帮我安顿一下。{{/sharedAttention}}"
         }
       ]
     },
@@ -108,7 +108,7 @@
         {
           "id": "overwork-gentle-wrap",
           "label": "先帮我收个口",
-          "prompt": "我有点撑太久了。请帮我把当前这段工作收个口，让我能比较自然地停下来。{{#sharedAttention}}如果{{sharedAttention}}就是这一段，就按它来帮我收。{{/sharedAttention}}{{^sharedAttention}}如果眼前这块里有最适合先收住的一点，也请直接按那个来。{{/sharedAttention}}"
+          "prompt": "我有点绷太久了。请帮我把当前这段工作收个口，让我能比较自然地停下来。{{#sharedAttention}}如果{{sharedAttention}}就是这一段，就按它来帮我收。{{/sharedAttention}}{{^sharedAttention}}如果眼前这块里有最适合先收住的一点，也请直接按那一点来。{{/sharedAttention}}"
         },
         {
           "id": "overwork-gentle-break",
@@ -131,8 +131,8 @@
         },
         {
           "id": "productive-soft-plan",
-          "label": "整理轻一点的后续",
-          "prompt": "请根据我现在这段{{sceneLabel}}状态，帮我整理一个轻一点的后续安排，不要太工具化。{{#recentTopic}}如果{{recentTopic}}更值得先接住，也请顺着它来。{{/recentTopic}}{{^recentTopic}}{{#sharedAttention}}如果{{sharedAttention}}更值得先接住，也请顺着它来。{{/sharedAttention}}{{^sharedAttention}}如果有更值得先接住的那一点，也请直接顺着它来。{{/sharedAttention}}{{/recentTopic}}"
+          "label": "理个轻一点的后续",
+          "prompt": "请根据我现在这段{{sceneLabel}}状态，帮我理一个轻一点的后续安排，不要太工具化。{{#recentTopic}}如果{{recentTopic}}更值得先接住，也请顺着它来。{{/recentTopic}}{{^recentTopic}}{{#sharedAttention}}如果{{sharedAttention}}更值得先接住，也请顺着它来。{{/sharedAttention}}{{^sharedAttention}}如果有更值得先接住的那一点，也请直接顺着它来。{{/sharedAttention}}{{/recentTopic}}"
         }
       ]
     },
@@ -158,14 +158,14 @@
     "watchTogether": {
       "title": "一起看着呢",
       "speech": {
-        "message": "{{#sharedAttention}}这会儿像是在一起看着{{sharedAttention}}。{{/sharedAttention}}{{^sharedAttention}}这会儿像是在一起看着什么。{{/sharedAttention}}{{petName}}就在旁边陪你。",
+        "message": "{{#sharedAttention}}这会儿像是在一起看着{{sharedAttention}}。{{/sharedAttention}}{{^sharedAttention}}这会儿像是在一起看着点什么。{{/sharedAttention}}{{petName}}就在旁边陪你。",
         "durationMs": 3200
       },
       "actions": [
         {
           "id": "watch-highlight",
           "label": "聊聊刚才那段",
-          "prompt": "{{#sharedAttention}}我们刚才像是在一起看“{{sharedAttention}}”。{{/sharedAttention}}{{^sharedAttention}}我们刚才像是在一起看着什么。{{/sharedAttention}}请陪我用自然一点的方式聊聊最值得继续说的点，不要太像分析报告。"
+          "prompt": "{{#sharedAttention}}我们刚才像是在一起看“{{sharedAttention}}”。{{/sharedAttention}}{{^sharedAttention}}我们刚才像是在一起看着点什么。{{/sharedAttention}}请陪我用自然一点的方式聊聊最值得继续说的点，不要太像分析报告。"
         }
       ]
     },

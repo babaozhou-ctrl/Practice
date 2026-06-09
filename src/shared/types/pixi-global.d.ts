@@ -38,6 +38,15 @@ declare global {
     electronAPI?: {
       movePet?: (x: number, y: number) => void
       getPosition?: () => Promise<{ x: number; y: number }>
+      setMenuExpanded?: (
+        expandedOrOptions:
+          | boolean
+          | {
+              expanded: boolean
+              width?: number
+              height?: number
+            },
+      ) => Promise<boolean>
       toggleClickThrough?: () => void
       openChat?: () => void
       openSettings?: () => void
@@ -103,7 +112,15 @@ declare global {
       }) => Promise<{ ok: boolean; message: string }>
       cancelPluginAIChat?: (requestId: string) => Promise<boolean>
       onSpeech?: (callback: (msg: string, dur: number) => void) => void
-      onContextUpdate?: (callback: (info: { title: string; process: string; idleMs?: number }) => void) => void
+      onContextUpdate?: (callback: (info: {
+        title: string
+        process: string
+        idleMs?: number
+        mediaPlaying?: boolean
+        mediaTitle?: string
+        mediaArtist?: string
+        mediaSource?: string
+      }) => void) => void
       listImportedPets?: () => Promise<ImportedPetDiskPackage[]>
       saveImportedPet?: (record: unknown) => Promise<unknown>
       listLocalPlugins?: () => Promise<PluginDiscoveryRecord[]>

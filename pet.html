@@ -19,6 +19,18 @@
       user-select: none;
       -webkit-user-select: none;
     }
+    #pet-stage {
+      position: absolute;
+      inset: 0;
+    }
+    #pet-shell {
+      position: absolute;
+      left: 50%;
+      bottom: 0;
+      width: 300px;
+      height: 420px;
+      transform: translateX(-50%);
+    }
     #pet-root {
       position: absolute;
       inset: 0;
@@ -315,6 +327,7 @@
       position: absolute;
       display: none;
       width: 280px;
+      max-height: min(520px, calc(100vh - 28px));
       padding: 10px;
       border: 1px solid rgba(178, 205, 230, 0.24);
       border-radius: 24px;
@@ -324,9 +337,26 @@
       backdrop-filter: blur(20px);
       box-shadow: 0 22px 52px rgba(109, 143, 180, 0.22), 0 10px 22px rgba(153, 181, 207, 0.14);
       z-index: 20;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(149, 179, 206, 0.72) rgba(255, 255, 255, 0.24);
+      contain: layout style paint;
     }
     #ctx.show {
       display: block;
+    }
+    #ctx::-webkit-scrollbar {
+      width: 10px;
+    }
+    #ctx::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 999px;
+    }
+    #ctx::-webkit-scrollbar-thumb {
+      background: linear-gradient(180deg, rgba(155, 191, 222, 0.9), rgba(236, 192, 210, 0.86));
+      border-radius: 999px;
+      border: 2px solid rgba(255, 255, 255, 0.42);
     }
     #ctx .ctx-hero {
       padding: 10px 10px 12px;
@@ -443,12 +473,16 @@
   </style>
 </head>
 <body>
-  <div id="pet-root"></div>
-  <div id="feed-layer">
-    <div id="feed-highlight"></div>
-    <div id="feed-card"></div>
+  <div id="pet-stage">
+    <div id="pet-shell">
+      <div id="pet-root"></div>
+      <div id="feed-layer">
+        <div id="feed-highlight"></div>
+        <div id="feed-card"></div>
+      </div>
+      <div id="speech"></div>
+    </div>
   </div>
-  <div id="speech"></div>
   <div id="ctx"></div>
   <script type="module" src="/src/pet-main.ts"></script>
 </body>

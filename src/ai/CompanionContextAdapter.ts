@@ -20,6 +20,7 @@ export function buildCompanionChatContext(
   windowProcess: string,
   screenSummary?: string | null,
   screenSource?: CompanionChatContext['screenSource'],
+  runtimeWindowInfo?: { mediaPlaying?: boolean; mediaTitle?: string; mediaArtist?: string; mediaSource?: string } | null,
 ): CompanionChatContext {
   const profile = getCompanionProfile()
   const activityLabel = normalizeActivity(activity)
@@ -45,6 +46,10 @@ export function buildCompanionChatContext(
       title: windowTitle || '',
       process: windowProcess || '',
       idleMs: 0,
+      mediaPlaying: runtimeWindowInfo?.mediaPlaying,
+      mediaTitle: runtimeWindowInfo?.mediaTitle,
+      mediaArtist: runtimeWindowInfo?.mediaArtist,
+      mediaSource: runtimeWindowInfo?.mediaSource,
     },
     screenContext,
   })
@@ -66,7 +71,7 @@ export function buildCompanionChatContext(
     interruptionStyle: sceneDirective.interruptionStyle,
     samplePrompts: contextBehavior.samplePrompts,
     sceneGuidance: sceneDirective.guidance,
-    contextFlags: buildContextFlags(activityLabel, scene.id, profile.speechRules),
+    contextFlags: buildContextFlags(activityLabel, scene.id, profile.speechRules, scene.flags),
     capabilityFlags: Object.entries(resolveSelectedPetCapabilities())
       .filter(([, enabled]) => enabled)
       .map(([name]) => name),
@@ -541,6 +546,7 @@ function buildContextFlags(
   activity: string,
   sceneId: string,
   speechRules: CompanionChatContext['profile']['speechRules'],
+  sceneFlags: string[] = [],
 ): string[] {
   const flags: string[] = []
 
@@ -570,6 +576,9 @@ function buildContextFlags(
   }
   if (sceneId === 'quiet_idle' || sceneId === 'ambient_presence') {
     flags.push('ambient_presence')
+  }
+  if (sceneFlags.includes('music_listening')) {
+    flags.push('music_listening')
   }
 
   const hour = new Date().getHours()

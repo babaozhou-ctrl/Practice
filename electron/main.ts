@@ -32,6 +32,7 @@ let contextPollInterval: ReturnType<typeof setInterval> | null = null
 let automationMetricsInterval: ReturnType<typeof setInterval> | null = null
 let lastWindowInfo = ''
 let lastAwayBucket = ''
+let lastMediaPlaybackSignature = ''
 let isClickThrough = false
 
 const AWAY_BUCKET_IDLE_MS = 90_000
@@ -39,6 +40,8 @@ const APP_ID = 'com.deep.pet'
 const APP_ICON_PATH = join(__dirname, '../build/icon.png')
 const PET_WINDOW_WIDTH = 300
 const PET_WINDOW_HEIGHT = 420
+const PET_MENU_MIN_EXPANDED_WIDTH = 360
+const PET_MENU_MIN_EXPANDED_HEIGHT = 560
 const IMPORTED_PET_PROTOCOL = 'deep-pet'
 const IS_DEV_RUNTIME = process.argv.includes('--dev') || Boolean(process.env.VITE_DEV_SERVER_URL)
 const SMOKE_TARGET = process.env.DEEP_PET_SMOKE ?? ''
@@ -69,8 +72,10 @@ let smokeWorkModeReady = false
 let smokeImportReady = false
 let companionFeedHistory: CompanionFeedAnalysisPayload[] = []
 let smokeFinishing = false
+let petWindowMenuExpanded = false
 
 prepareRuntimePaths()
+configureAutomatedGpuRuntime()
 
 process.on('uncaughtException', (err) => {
   console.error('Uncaught exception:', err.message)
@@ -222,6 +227,17 @@ function prepareRuntimePaths() {
   } catch (error) {
     console.warn('Failed to prepare runtime paths:', error)
   }
+}
+
+function configureAutomatedGpuRuntime() {
+  if (!IS_AUTOMATED_RUNTIME) {
+    return
+  }
+
+  // Automated runs are short-lived and don't benefit from Chromium's GPU
+  // shader/program cache, but cache flushes can add noisy warnings on exit.
+  app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
+  app.commandLine.appendSwitch('disable-gpu-program-cache')
 }
 
 function parsePositiveInteger(value: string | undefined): number | null {
@@ -454,6 +470,9 @@ function attachWindowDiagnostics(windowRef: BrowserWindow, label: 'pet' | 'ui') 
 
 function createPetWindow() {
   const { x, y } = getDefaultPosition()
+  lastWindowInfo = ''
+  lastAwayBucket = ''
+  lastMediaPlaybackSignature = ''
   petWindow = new BrowserWindow({
     width: PET_WINDOW_WIDTH,
     height: PET_WINDOW_HEIGHT,
@@ -473,6 +492,8 @@ function createPetWindow() {
       nodeIntegration: false,
     },
   })
+
+  petWindowMenuExpanded = false
 
   petWindow.setIgnoreMouseEvents(false)
   attachWindowDiagnostics(petWindow, 'pet')
@@ -644,6 +665,61 @@ function getDefaultPosition() {
   }
 }
 
+function constrainPetWindowBounds(bounds: Electron.Rectangle): Electron.Rectangle {
+  const display = screen.getDisplayMatching(bounds)
+  const workArea = display.workArea
+
+  const width = Math.min(bounds.width, workArea.width)
+  const height = Math.min(bounds.height, workArea.height)
+  const maxX = workArea.x + workArea.width - width
+  const maxY = workArea.y + workArea.height - height
+
+  return {
+    x: Math.min(Math.max(bounds.x, workArea.x), maxX),
+    y: Math.min(Math.max(bounds.y, workArea.y), maxY),
+    width,
+    height,
+  }
+}
+
+function setPetWindowMenuExpanded(
+  expandedOrOptions:
+    | boolean
+    | {
+        expanded: boolean
+        width?: number
+        height?: number
+      },
+) {
+  const options =
+    typeof expandedOrOptions === 'boolean'
+      ? { expanded: expandedOrOptions }
+      : expandedOrOptions
+  const expanded = Boolean(options.expanded)
+
+  if (!petWindow || petWindow.isDestroyed() || petWindowMenuExpanded === expanded) {
+    return
+  }
+  const currentBounds = petWindow.getBounds()
+  const nextWidth = expanded
+    ? Math.max(PET_MENU_MIN_EXPANDED_WIDTH, Math.round(options.width ?? PET_MENU_MIN_EXPANDED_WIDTH))
+    : PET_WINDOW_WIDTH
+  const nextHeight = expanded
+    ? Math.max(PET_MENU_MIN_EXPANDED_HEIGHT, Math.round(options.height ?? PET_MENU_MIN_EXPANDED_HEIGHT))
+    : PET_WINDOW_HEIGHT
+  const anchorX = currentBounds.x + Math.round((currentBounds.width - PET_WINDOW_WIDTH) / 2)
+  const anchorY = currentBounds.y + Math.max(0, currentBounds.height - PET_WINDOW_HEIGHT)
+  const nextBounds = constrainPetWindowBounds({
+    x: anchorX - Math.round((nextWidth - PET_WINDOW_WIDTH) / 2),
+    y: anchorY - Math.max(0, nextHeight - PET_WINDOW_HEIGHT),
+    width: nextWidth,
+    height: nextHeight,
+  })
+
+  petWindow.setBounds(nextBounds, false)
+  petWindowMenuExpanded = expanded
+}
+
 function setupIPC() {
   let lastMoveTime = 0
 
@@ -661,6 +737,23 @@ function setupIPC() {
     const [x, y] = petWindow.getPosition()
     return { x, y }
   })
+
+  ipcMain.handle(
+    'pet:set-menu-expanded',
+    (
+      _event,
+      expandedOrOptions:
+        | boolean
+        | {
+            expanded: boolean
+            width?: number
+            height?: number
+          },
+    ) => {
+      setPetWindowMenuExpanded(expandedOrOptions)
+    return petWindowMenuExpanded
+    },
+  )
 
   ipcMain.on('pet:toggle-clickthrough', () => {
     isClickThrough = !isClickThrough
@@ -818,9 +911,20 @@ function startContextPolling() {
       const info = detectActiveWindow()
       const key = info.title + '||' + info.process
       const awayBucket = (info.idleMs ?? 0) >= AWAY_BUCKET_IDLE_MS ? 'away' : 'present'
-      if (key !== lastWindowInfo || awayBucket !== lastAwayBucket) {
+      const mediaSignature = [
+        info.mediaPlaying ? 'playing' : 'silent',
+        info.mediaSource ?? '',
+        info.mediaTitle ?? '',
+        info.mediaArtist ?? '',
+      ].join('||')
+      if (
+        key !== lastWindowInfo ||
+        awayBucket !== lastAwayBucket ||
+        mediaSignature !== lastMediaPlaybackSignature
+      ) {
         lastWindowInfo = key
         lastAwayBucket = awayBucket
+        lastMediaPlaybackSignature = mediaSignature
         broadcastContextUpdate(info)
       }
     } catch {

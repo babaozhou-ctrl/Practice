@@ -1,4 +1,4 @@
-import { classifyActivity } from '../../context/ActivityClassifier'
+import { classifyActivity, looksLikeMusicPlayback } from '../../context/ActivityClassifier'
 import { FSM, type FSMTransition } from '../../engine/FSM'
 import type { CompanionFileAnalysisMemory, CompanionMemorySnapshot } from '../../types/chat'
 import type { ActiveWindowInfo, ScreenPerceptionSnapshot } from '../../types/context'
@@ -60,6 +60,13 @@ const CONTEXT_REACTION_BASE_COOLDOWN_MS = 45_000
 const CONTEXT_REACTION_QUIET_COOLDOWN_MS = 120_000
 const MIN_ACTIVITY_HOLD_BEFORE_CONTEXT_SPEECH_MS = 35_000
 const MIN_SCENE_HOLD_BEFORE_CONTEXT_SPEECH_MS = 28_000
+const FOCUS_GUARDIAN_MIN_CONFIDENT_ACTIVITY_MS = 18_000
+const TAP_REACTION_COOLDOWN_MS = 2_800
+const MUSIC_REACTION_LINES = [
+  '这会儿就这样轻轻陪你听着。',
+  '现在这种安静地听着也很好，我就在旁边。',
+  '这点节奏感慢慢流着，我也陪你一起听。',
+]
 
 const ACTIVITY_TO_EVENT: Record<CompanionActivity, ActivityEvent> = {
   idle: 'to_idle',
@@ -184,6 +191,7 @@ export class CompanionStateMachine {
   }
 
   handleTap(now = Date.now()): CompanionTransitionResult {
+    const withinCooldown = now - this.lastTapAt < TAP_REACTION_COOLDOWN_MS
     this.lastTapAt = now
     this.interruptionBudget = Math.max(20, this.interruptionBudget - 8)
     this.syncEmotion('happy')
@@ -198,10 +206,12 @@ export class CompanionStateMachine {
 
     return {
       snapshot: this.getSnapshot(now),
-      speech: {
-        message: randomFrom(pool),
-        duration: 2200,
-      },
+      speech: withinCooldown
+        ? undefined
+        : {
+            message: randomFrom(pool),
+            duration: 2200,
+          },
     }
   }
 
@@ -295,6 +305,7 @@ export class CompanionStateMachine {
     const recentlyTapped = now - this.lastTapAt < 2000
     const userIdleMs = this.activeWindow?.idleMs ?? 0
     const screenContext = inferScreenContextSignals(this.screenPerception)
+    const musicListening = this.activeWindow ? looksLikeMusicPlayback(this.activeWindow) : false
 
     if (recentlyTapped) return 'happy'
     if (userIdleMs >= DEEP_AWAY_IDLE_MS) return 'sleepy'
@@ -302,6 +313,7 @@ export class CompanionStateMachine {
     if (activity === 'gaming' || screenContext.domain === 'game') return 'excited'
     if (activity === 'coding' || activity === 'reading' || screenContext.domain === 'code') return 'thinking'
     if (activity === 'chatting' || screenContext.domain === 'social') return 'happy'
+    if (musicListening && activity === 'watching_video') return 'happy'
     if (activity === 'watching_video' || screenContext.domain === 'video') return 'thinking'
     if (lateNight && (activity === 'idle' || activity === 'browsing' || activity === 'other')) {
       return 'sleepy'
@@ -312,11 +324,22 @@ export class CompanionStateMachine {
   private deriveMode(activity: CompanionActivity, emotion: CompanionEmotion, now: number): InteractionMode {
     const userIdleMs = this.activeWindow?.idleMs ?? 0
     const screenContext = inferScreenContextSignals(this.screenPerception)
+    const currentActivityDurationMs = Math.max(0, now - this.activityEnteredAt)
+    const musicListening = this.activeWindow ? looksLikeMusicPlayback(this.activeWindow) : false
+    const codingLikeActivity = activity === 'coding'
+    const adjacentWorkActivity = activity === 'reading' || activity === 'browsing' || activity === 'other'
+    const strongCodeContext =
+      screenContext.domain === 'code' &&
+      adjacentWorkActivity &&
+      currentActivityDurationMs >= FOCUS_GUARDIAN_MIN_CONFIDENT_ACTIVITY_MS
 
     if (userIdleMs >= SOFT_AWAY_IDLE_MS) {
       return 'quiet'
     }
-    if (activity === 'coding' || screenContext.domain === 'code') {
+    if (activity === 'idle') {
+      return emotion === 'sleepy' ? 'quiet' : 'observing'
+    }
+    if (codingLikeActivity || strongCodeContext) {
       if (this.productiveSessionStartedAt && now - this.productiveSessionStartedAt > 45 * 60_000) {
         return 'proactive'
       }
@@ -324,6 +347,7 @@ export class CompanionStateMachine {
     }
     if (activity === 'gaming' || screenContext.domain === 'game') return 'quiet'
     if (activity === 'chatting' || screenContext.domain === 'social') return 'reactive'
+    if (musicListening && activity === 'watching_video') return 'observing'
     if (activity === 'watching_video' || screenContext.domain === 'video') return 'reactive'
     if (emotion === 'sleepy') return 'quiet'
     if (emotion === 'happy') return 'reactive'
@@ -475,6 +499,7 @@ export class CompanionStateMachine {
     const name = this.resolveUserName()
     const screenContext = inferScreenContextSignals(this.screenPerception)
     const recentFile = resolveRecentFileAnalysis(memory)
+    const musicListening = this.activeWindow ? looksLikeMusicPlayback(this.activeWindow) : false
     const sharedAttention =
       screenContext.shortSummary ||
       (recentFile ? `《${recentFile.fileName}》` : null) ||
@@ -520,6 +545,10 @@ export class CompanionStateMachine {
         : `你现在像是在认真盯着“${trimForSpeech(sharedAttention, 22)}”。我会安静陪着你。`
     }
 
+    if (musicListening) {
+      return randomFrom(MUSIC_REACTION_LINES)
+    }
+
     if ((activity === 'watching_video' || screenContext.domain === 'video') && sharedAttention) {
       return `这次也像是在一起看“${trimForSpeech(sharedAttention, 22)}”。我就在旁边陪你。`
     }
@@ -557,8 +586,8 @@ const REACTION_LIBRARY: ReactionLibrary = {
     excited: ['我先安静看你操作。', '这一波看起来很紧张。', '你专心玩，我不打扰。'],
   },
   watching_video: {
-    thinking: ['这一段看起来很有意思。', '我也在悄悄陪你一起看。', '像是在陪你追点什么。'],
-    idle: ['这一段看起来很有意思。', '我也在悄悄陪你一起看。', '像是在陪你追点什么。'],
+    thinking: ['这一段看起来很有意思。', '我也在悄悄陪你一起看。', '像是在陪你追点什么。', '这会儿这样安静陪你听着也挺好。'],
+    idle: ['这一段看起来很有意思。', '我也在悄悄陪你一起看。', '像是在陪你追点什么。', '我会轻轻跟着节奏待在这儿。'],
   },
   chatting: {
     happy: ['今天好像聊得很热闹。', '你看起来心情还不错。', '我在旁边陪你。'],

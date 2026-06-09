@@ -3,8 +3,33 @@
 declare global {
   interface Window {
     electronAPI?: {
-      getActiveWindow: () => Promise<{ title: string; process: string; idleMs?: number }>
-      onWindowUpdate: (callback: (info: { title: string; process: string; idleMs?: number }) => void) => void
+      getActiveWindow: () => Promise<{
+        title: string
+        process: string
+        idleMs?: number
+        mediaPlaying?: boolean
+        mediaTitle?: string
+        mediaArtist?: string
+        mediaSource?: string
+      }>
+      setMenuExpanded?: (
+        expandedOrOptions:
+          | boolean
+          | {
+              expanded: boolean
+              width?: number
+              height?: number
+            },
+      ) => Promise<boolean>
+      onWindowUpdate: (callback: (info: {
+        title: string
+        process: string
+        idleMs?: number
+        mediaPlaying?: boolean
+        mediaTitle?: string
+        mediaArtist?: string
+        mediaSource?: string
+      }) => void) => void
       [key: string]: any
     }
   }

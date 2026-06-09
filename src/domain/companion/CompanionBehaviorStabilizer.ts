@@ -5,6 +5,7 @@ import type {
   InteractionMode,
   StabilizedCompanionSnapshot,
 } from './types'
+import { normalizeCompanionMode, normalizeCompanionSnapshot } from './normalizeCompanionSnapshot'
 
 interface FieldState<T extends string> {
   active: T
@@ -121,6 +122,7 @@ export class CompanionBehaviorStabilizer {
 
       return {
         ...snapshot,
+        ...normalizeCompanionSnapshot(snapshot),
         rawActivity: snapshot.activity,
         rawEmotion: snapshot.emotion,
         rawMode: snapshot.mode,
@@ -155,14 +157,18 @@ export class CompanionBehaviorStabilizer {
       shouldForceModeTransition,
       fastRecover,
     )
+    const normalizedMode = normalizeCompanionMode(stabilizedActivity, stabilizedMode, stabilizedEmotion)
+    const normalizedSnapshot = normalizeCompanionSnapshot({
+      ...snapshot,
+      activity: stabilizedActivity,
+      emotion: stabilizedEmotion,
+      mode: normalizedMode,
+    })
 
     this.lastStabilizedAt = now
 
     return {
-      ...snapshot,
-      activity: stabilizedActivity,
-      emotion: stabilizedEmotion,
-      mode: stabilizedMode,
+      ...normalizedSnapshot,
       rawActivity: snapshot.activity,
       rawEmotion: snapshot.emotion,
       rawMode: snapshot.mode,

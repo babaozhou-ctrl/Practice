@@ -4,6 +4,10 @@ export interface ActiveWindowInfo {
   title: string
   process: string
   idleMs?: number
+  mediaPlaying?: boolean
+  mediaTitle?: string
+  mediaArtist?: string
+  mediaSource?: string
 }
 
 export interface ContextSnapshot {

@@ -10,7 +10,15 @@ export interface RuntimeTextureSet {
   framesByState: Partial<Record<AnimationState, FrameData[]>>
   texturesByClip: Record<string, any[]>
   framesByClip: Record<string, FrameData[]>
+  hitTestAlphaAt?: (texture: any, x: number, y: number) => number
   source: 'atlas' | 'procedural'
+}
+
+interface AtlasFrameRect {
+  x: number
+  y: number
+  width: number
+  height: number
 }
 
 function createTextureFromFrame(sprite: Sprite, frame: FrameData, pixelScale: number): any {
@@ -61,6 +69,7 @@ export function buildRuntimeTextureSet(definition: Sprite['definition'], renderS
     framesByState,
     texturesByClip,
     framesByClip,
+    hitTestAlphaAt: undefined,
     source: 'procedural',
   }
 }
@@ -138,6 +147,7 @@ function buildAtlasTextureSet(
     framesByState,
     texturesByClip,
     framesByClip,
+    hitTestAlphaAt: buildAtlasAlphaSampler(image, atlas.cellWidth, atlas.cellHeight),
     source: 'atlas',
   }
 }
@@ -163,7 +173,14 @@ function sliceTextureFromAtlas(
   ctx.imageSmoothingEnabled = false
   ctx.drawImage(image, sourceX, sourceY, width, height, 0, 0, width, height)
 
-  return PIXI.Texture.from(canvas)
+  const texture = PIXI.Texture.from(canvas)
+  ;(texture as { __deepPetAtlasRect?: AtlasFrameRect }).__deepPetAtlasRect = {
+    x: sourceX,
+    y: sourceY,
+    width,
+    height,
+  }
+  return texture
 }
 
 function buildTimelineFrames(
@@ -194,4 +211,57 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     image.onerror = () => reject(new Error(`Failed to load atlas image: ${src}`))
     image.src = src
   })
+}
+
+function buildAtlasAlphaSampler(
+  image: HTMLImageElement,
+  cellWidth: number,
+  cellHeight: number,
+): (texture: any, x: number, y: number) => number {
+  const cache = new WeakMap<object, Uint8ClampedArray>()
+
+  return (texture: any, x: number, y: number) => {
+    if (!texture) {
+      return 255
+    }
+
+    const textureKey = texture as object
+    let alphaBuffer = cache.get(textureKey)
+    if (!alphaBuffer) {
+      const canvas = document.createElement('canvas')
+      canvas.width = cellWidth
+      canvas.height = cellHeight
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        return 255
+      }
+
+      const atlasRect = (texture as { __deepPetAtlasRect?: AtlasFrameRect }).__deepPetAtlasRect
+      const sourceX = atlasRect?.x ?? texture.frame?.x ?? 0
+      const sourceY = atlasRect?.y ?? texture.frame?.y ?? 0
+      const sourceWidth = atlasRect?.width ?? texture.frame?.width ?? cellWidth
+      const sourceHeight = atlasRect?.height ?? texture.frame?.height ?? cellHeight
+
+      ctx.clearRect(0, 0, cellWidth, cellHeight)
+      ctx.imageSmoothingEnabled = false
+      ctx.drawImage(
+        image,
+        sourceX,
+        sourceY,
+        sourceWidth,
+        sourceHeight,
+        0,
+        0,
+        cellWidth,
+        cellHeight,
+      )
+      alphaBuffer = ctx.getImageData(0, 0, cellWidth, cellHeight).data
+      cache.set(textureKey, alphaBuffer)
+    }
+
+    const clampedX = Math.max(0, Math.min(cellWidth - 1, Math.floor(x)))
+    const clampedY = Math.max(0, Math.min(cellHeight - 1, Math.floor(y)))
+    const index = (clampedY * cellWidth + clampedX) * 4 + 3
+    return alphaBuffer[index] ?? 0
+  }
 }

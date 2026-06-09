@@ -52,6 +52,15 @@
       "mode": "reactive",
       "minHoldMs": 12000
     },
+    "listening": {
+      "baseClip": "listening_loop",
+      "mode": "observing",
+      "minHoldMs": 14000,
+      "transitions": {
+        "idle": { "viaState": "thinking", "clipName": "thinking_to_idle" },
+        "thinking": { "viaState": "thinking", "clipName": "idle_to_thinking" }
+      }
+    },
     "chatting": {
       "baseClip": "chatting_loop",
       "mode": "reactive",
