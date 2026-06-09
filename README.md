@@ -5,6 +5,13 @@ Deep Pet 是一个桌面陪伴宠物项目。
 
 当前内置角色统一为 **bb7**。现阶段的视觉、语气、陪伴方式和交互基准，都会围绕 bb7 继续打磨。
 
+## 下载体验
+
+- Windows 安装包：[`Deep.Pet-0.1.0-Setup-x64.exe`](https://github.com/babaozhou-ctrl/deep-pet/releases/download/v0.1.0/Deep.Pet-0.1.0-Setup-x64.exe)
+- Release 页面：[`v0.1.0`](https://github.com/babaozhou-ctrl/deep-pet/releases/tag/v0.1.0)
+
+如果你只是想先体验当前版本，直接下载安装包即可，不需要自己拉源码构建。
+
 ## 产品方向
 
 这个项目追求的是一种更安静、更有存在感的桌面陪伴体验：
@@ -38,6 +45,22 @@ Deep Pet 是一个桌面陪伴宠物项目。
 - 首次使用体验和整体产品收口
 - 更稳定的上下文承接与长期记忆
 - 开源展示素材、发布流程与社区扩展体验
+
+## 当前可用程度
+
+目前已经可以作为一个早期可用版本来体验，适合：
+
+- 安装后常驻桌面，观察 bb7 的基础陪伴表现
+- 打开聊天面板，体验带上下文的互动链路
+- 拖文件到宠物身上，体验“投喂 -> 思考 -> 桌面短总结 -> 聊天完整分析”
+- 使用工作模式，体验番茄钟 / 专注陪伴的基础结构
+
+但它还不是最终完成态，现阶段更接近：
+
+- 一个已经跑通主链路、能稳定体验的 early product build
+- 而不是所有细节都打磨完成的正式版
+
+最近一轮重点还收敛了默认陪伴节奏，目标是让 bb7 更安静待在桌面，减少频繁发言、过度晃动和不自然的“下蹲感”。
 
 ## 技术栈
 
@@ -110,6 +133,14 @@ npm run dist
 ```bash
 npm run qa:mochi
 ```
+
+当前 release 在发布前已至少做过这些检查：
+
+- `npm run typecheck`
+- `npm run build`
+- `npm run dist`
+- `node scripts/smoke-desktop.mjs`
+- `node scripts/stability-runtime.mjs --skip-build --scenario=stability-chat --duration-ms=60000`
 
 ## 自定义宠物包
 
