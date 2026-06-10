@@ -12,6 +12,9 @@ export interface RuntimeTextureSet {
   framesByClip: Record<string, FrameData[]>
   hitTestAlphaAt?: (texture: any, x: number, y: number) => number
   source: 'atlas' | 'procedural'
+  preferredSource: 'atlas' | 'procedural'
+  fallbackReason: 'atlas-load-failed' | null
+  atlasImageUrl: string | null
 }
 
 interface AtlasFrameRect {
@@ -71,6 +74,9 @@ export function buildRuntimeTextureSet(definition: Sprite['definition'], renderS
     framesByClip,
     hitTestAlphaAt: undefined,
     source: 'procedural',
+    preferredSource: 'procedural',
+    fallbackReason: null,
+    atlasImageUrl: null,
   }
 }
 
@@ -78,14 +84,23 @@ export async function buildRuntimeTextureSetForPetPackage(
   petPackage: BuiltInPetPackage,
   renderScale = 15,
 ): Promise<RuntimeTextureSet> {
-  if (petPackage.runtimeAssets.preferredSource === 'atlas') {
+  const preferredSource = petPackage.runtimeAssets.preferredSource
+  const atlasImageUrl = petPackage.runtimeAssets.atlasImageUrl ?? null
+
+  if (preferredSource === 'atlas') {
     const atlasTextureSet = await tryBuildAtlasTextureSet(petPackage)
     if (atlasTextureSet) {
       return atlasTextureSet
     }
   }
 
-  return buildRuntimeTextureSet(petPackage.spriteDefinition, renderScale)
+  const proceduralTextureSet = buildRuntimeTextureSet(petPackage.spriteDefinition, renderScale)
+  return {
+    ...proceduralTextureSet,
+    preferredSource,
+    fallbackReason: preferredSource === 'atlas' ? 'atlas-load-failed' : null,
+    atlasImageUrl,
+  }
 }
 
 async function tryBuildAtlasTextureSet(petPackage: BuiltInPetPackage): Promise<RuntimeTextureSet | null> {
@@ -149,6 +164,9 @@ function buildAtlasTextureSet(
     framesByClip,
     hitTestAlphaAt: buildAtlasAlphaSampler(image, atlas.cellWidth, atlas.cellHeight),
     source: 'atlas',
+    preferredSource: 'atlas',
+    fallbackReason: null,
+    atlasImageUrl: petPackage.runtimeAssets.atlasImageUrl ?? null,
   }
 }
 

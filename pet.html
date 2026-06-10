@@ -326,8 +326,8 @@
     #ctx {
       position: absolute;
       display: none;
-      width: 280px;
-      max-height: min(520px, calc(100vh - 28px));
+      width: min(320px, calc(100vw - 28px));
+      min-width: 300px;
       padding: 10px;
       border: 1px solid rgba(178, 205, 230, 0.24);
       border-radius: 24px;
@@ -338,6 +338,7 @@
       box-shadow: 0 22px 52px rgba(109, 143, 180, 0.22), 0 10px 22px rgba(153, 181, 207, 0.14);
       z-index: 20;
       overflow-y: auto;
+      overflow-x: hidden;
       overscroll-behavior: contain;
       scrollbar-width: thin;
       scrollbar-color: rgba(149, 179, 206, 0.72) rgba(255, 255, 255, 0.24);

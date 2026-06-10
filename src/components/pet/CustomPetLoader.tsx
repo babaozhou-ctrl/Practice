@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { createMochiSprite } from '../../engine/PixelMochi'
 import { usePetStore } from '../../store/petStore'
 import {
@@ -26,9 +26,31 @@ const CustomPetLoader: React.FC<Props> = ({ onClose }) => {
   const [status, setStatus] = useState<LoaderStatus>('idle')
   const [message, setMessage] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const directoryInputRef = useRef<HTMLInputElement>(null)
   const setCustomPet = usePetStore((s) => s.setCustomPet)
   const selectPet = useSelectedPetStore((s) => s.selectPet)
   const refreshCatalog = useSelectedPetStore((s) => s.refreshCatalog)
+
+  useEffect(() => {
+    const input = directoryInputRef.current
+    if (!input) {
+      return
+    }
+
+    input.setAttribute('webkitdirectory', '')
+    input.setAttribute('directory', '')
+  }, [])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
 
   const processFiles = useCallback(async (files: File[]) => {
     if (files.length === 0) {
@@ -64,6 +86,14 @@ const CustomPetLoader: React.FC<Props> = ({ onClose }) => {
     if (event.target.files) {
       processFiles(Array.from(event.target.files))
     }
+    event.target.value = ''
+  }, [processFiles])
+
+  const handleDirectoryInput = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files) {
+      processFiles(Array.from(event.target.files))
+    }
+    event.target.value = ''
   }, [processFiles])
 
   const resetPreview = useCallback(() => {
@@ -129,7 +159,7 @@ const CustomPetLoader: React.FC<Props> = ({ onClose }) => {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 10001,
+    zIndex: 10003,
     backdropFilter: 'blur(18px)',
     padding: '14px',
   }
@@ -144,7 +174,10 @@ const CustomPetLoader: React.FC<Props> = ({ onClose }) => {
     boxShadow: '0 28px 80px rgba(23, 38, 52, 0.34)',
     color: '#49657f',
     position: 'relative',
-    overflow: 'hidden',
+    maxHeight: 'calc(100vh - 24px)',
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    overscrollBehavior: 'contain',
   }
 
   const cardStyle: React.CSSProperties = {
@@ -170,6 +203,8 @@ const CustomPetLoader: React.FC<Props> = ({ onClose }) => {
     <div style={overlayStyle} onClick={onClose}>
       <div
         style={modalStyle}
+        role="dialog"
+        aria-modal="true"
         onClick={(event) => event.stopPropagation()}
         onDragOver={(event) => {
           event.preventDefault()
@@ -179,13 +214,13 @@ const CustomPetLoader: React.FC<Props> = ({ onClose }) => {
         onDrop={handleDrop}
       >
         <div style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.28em', color: 'rgba(104,132,157,0.58)', marginBottom: '6px' }}>
-          Pet Import
+          角色导入
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', marginBottom: '16px', flexWrap: 'wrap' }}>
           <div>
             <h3 style={{ margin: 0, fontSize: '24px', fontWeight: 700, color: '#425a73' }}>导入新的陪伴角色</h3>
             <p style={{ margin: '10px 0 0', fontSize: '13px', lineHeight: 1.7, color: 'rgba(93,118,142,0.8)', maxWidth: '420px' }}>
-              把完整宠物包或旧版 sprite 配置交给我，我会尽量把它原本的样子、动画和性格一起接进来。
+              把完整角色包或旧版资源交给我，我会尽量把它原本的样子、动作表现和角色气质一起接进来。
             </p>
           </div>
           <div
@@ -205,7 +240,7 @@ const CustomPetLoader: React.FC<Props> = ({ onClose }) => {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.1fr) minmax(220px, 0.9fr)', gap: '14px', marginBottom: '14px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginBottom: '14px', alignItems: 'start' }}>
           <div style={dropZoneStyle} onClick={() => fileInputRef.current?.click()}>
             <input
               ref={fileInputRef}
@@ -215,6 +250,13 @@ const CustomPetLoader: React.FC<Props> = ({ onClose }) => {
               style={{ display: 'none' }}
               onChange={handleFileInput}
             />
+            <input
+              ref={directoryInputRef}
+              type="file"
+              multiple
+              style={{ display: 'none' }}
+              onChange={handleDirectoryInput}
+            />
             {status === 'idle' && (
               <div>
                 <div style={{ fontSize: '15px', fontWeight: 700, color: '#4f6880', marginBottom: '8px' }}>
@@ -222,6 +264,28 @@ const CustomPetLoader: React.FC<Props> = ({ onClose }) => {
                 </div>
                 <div style={{ fontSize: '12px', lineHeight: 1.7, color: 'rgba(92,118,143,0.78)' }}>
                   最顺手的方式，是把同一个宠物目录里的文件一起拖进来。完整宠物包会保留更多角色感。
+                </div>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '14px' }}>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      fileInputRef.current?.click()
+                    }}
+                    style={secondaryButtonStyle}
+                  >
+                    选择文件
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      directoryInputRef.current?.click()
+                    }}
+                    style={primaryButtonStyle}
+                  >
+                    选择文件夹
+                  </button>
                 </div>
               </div>
             )}
@@ -247,15 +311,15 @@ const CustomPetLoader: React.FC<Props> = ({ onClose }) => {
 
           <div style={{ display: 'grid', gap: '10px' }}>
             <div style={cardStyle}>
-              <div style={{ fontSize: '11px', color: 'rgba(103,128,151,0.66)', marginBottom: '6px' }}>建议方式</div>
+              <div style={{ fontSize: '11px', color: 'rgba(103,128,151,0.66)', marginBottom: '6px' }}>推荐导入方式</div>
               <div style={{ fontSize: '13px', fontWeight: 700, color: '#4f6880', marginBottom: '4px' }}>优先导入完整宠物包</div>
               <div style={{ fontSize: '12px', lineHeight: 1.65, color: 'rgba(92,118,143,0.82)' }}>
-                会一起保留动画、personality、companion-content 和 atlas 资源。
+                这样能把动画、对话内容、角色设定和画面资源一起保留下来。
               </div>
             </div>
             <div style={cardStyle}>
               <div style={{ fontSize: '11px', color: 'rgba(103,128,151,0.66)', marginBottom: '6px' }}>兼容旧资源</div>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: '#4f6880', marginBottom: '4px' }}>旧版 JSON + PNG 也能导入</div>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#4f6880', marginBottom: '4px' }}>旧版配置和贴图也能导入</div>
               <div style={{ fontSize: '12px', lineHeight: 1.65, color: 'rgba(92,118,143,0.82)' }}>
                 如果是旧资源，我会先替它套上一套默认陪伴人格和互动内容。
               </div>
@@ -278,11 +342,11 @@ const CustomPetLoader: React.FC<Props> = ({ onClose }) => {
 
         <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           {(status === 'loaded' || status === 'error') && (
-            <button onClick={resetPreview} style={secondaryButtonStyle}>
+            <button type="button" onClick={resetPreview} style={secondaryButtonStyle}>
               重新导入
             </button>
           )}
-          <button onClick={onClose} style={status === 'loaded' ? primaryButtonStyle : secondaryButtonStyle}>
+          <button type="button" onClick={onClose} style={status === 'loaded' ? primaryButtonStyle : secondaryButtonStyle}>
             {status === 'loaded' ? '完成' : '先关闭'}
           </button>
         </div>
@@ -312,10 +376,10 @@ async function buildImportPayload(
   const pngFile = files.find((file) => file.name.toLowerCase().endsWith('.png'))
 
   if (!jsonFile || !pngFile) {
-    throw new Error('需要提供完整宠物包文件，或者至少一份旧版 JSON 配置和 PNG sprite sheet。')
+    throw new Error('需要提供完整角色包文件，或者至少一份旧版配置文件和对应贴图。')
   }
 
-  setMessage('正在整理旧版 sprite 宠物...')
+  setMessage('正在整理旧版角色资源...')
   const config: PetAssetConfig = parsePetConfig(await jsonFile.text())
   const frames = await loadSpriteSheet(pngFile, config)
   const sprite = buildSpriteFromFrames(frames, config)

@@ -8,14 +8,16 @@ const rootDir = resolve(__dirname, '..')
 const nodeExecutable = process.execPath
 const buildScript = resolve(rootDir, 'scripts', 'build-release.mjs')
 const electronExecutable = resolve(rootDir, 'node_modules', 'electron', 'dist', 'electron.exe')
+const smokeOnlyTarget = process.env.DEEP_PET_SMOKE_ONLY?.trim() || null
+const smokeTargets = smokeOnlyTarget
+  ? [smokeOnlyTarget]
+  : ['pet', 'chat', 'settings', 'workmode', 'import', 'feed']
 
 await runNodeScript(buildScript, ['--mode=build'], 'Desktop smoke build failed.')
-await runElectronSmoke('pet')
-await runElectronSmoke('chat')
-await runElectronSmoke('settings')
-await runElectronSmoke('workmode')
-await runElectronSmoke('import')
-await runElectronSmoke('feed')
+
+for (const target of smokeTargets) {
+  await runElectronSmoke(target)
+}
 
 async function runNodeScript(scriptPath, args, errorMessage) {
   await runCommand(nodeExecutable, [scriptPath, ...args], {
@@ -26,6 +28,8 @@ async function runNodeScript(scriptPath, args, errorMessage) {
 
 async function runElectronSmoke(target) {
   let sawReady = false
+  let unexpectedAmbientExternalSpeechLine = null
+  let unexpectedProceduralRenderSourceLine = null
   const readyMarker =
     target === 'chat'
       ? '[deep-pet] smoke-ui-ready'
@@ -51,15 +55,68 @@ async function runElectronSmoke(target) {
       if (text.includes(readyMarker)) {
         sawReady = true
       }
+      unexpectedAmbientExternalSpeechLine =
+        unexpectedAmbientExternalSpeechLine ?? findUnexpectedAmbientExternalSpeechLine(text)
+      unexpectedProceduralRenderSourceLine =
+        unexpectedProceduralRenderSourceLine ?? findUnexpectedProceduralRenderSourceLine(text)
     },
     onStderr: (text) => {
       process.stderr.write(text)
+      unexpectedAmbientExternalSpeechLine =
+        unexpectedAmbientExternalSpeechLine ?? findUnexpectedAmbientExternalSpeechLine(text)
+      unexpectedProceduralRenderSourceLine =
+        unexpectedProceduralRenderSourceLine ?? findUnexpectedProceduralRenderSourceLine(text)
     },
   })
 
   if (!sawReady) {
     throw new Error(`Desktop smoke finished without reaching ${target} ready state.`)
   }
+
+  if (unexpectedAmbientExternalSpeechLine) {
+    throw new Error(
+      `Desktop smoke observed ambient external speech in a quiet scene: ${unexpectedAmbientExternalSpeechLine}`,
+    )
+  }
+
+  if (unexpectedProceduralRenderSourceLine) {
+    throw new Error(
+      `Desktop smoke observed built-in bb7 falling back to procedural rendering: ${unexpectedProceduralRenderSourceLine}`,
+    )
+  }
+}
+
+function findUnexpectedAmbientExternalSpeechLine(text) {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  return (
+    lines.find(
+      (line) =>
+        line.includes('[deep-pet] event name:speech.shown') &&
+        line.includes('"source":"external"') &&
+        line.includes('"externalTier":"ambient"') &&
+        (line.includes('"scene":"away"') || line.includes('"scene":"quiet_idle"')),
+    ) ?? null
+  )
+}
+
+function findUnexpectedProceduralRenderSourceLine(text) {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  return (
+    lines.find(
+      (line) =>
+        line.includes('[deep-pet] event name:runtime.texture-source') &&
+        line.includes('"petId":"mascot.bb7"') &&
+        line.includes('"source":"procedural"'),
+    ) ?? null
+  )
 }
 
 function runCommand(command, args, options) {
@@ -82,6 +139,8 @@ function runCommand(command, args, options) {
 
     let timedOut = false
     let timeout = null
+    let exitCode = null
+    let settled = false
 
     if (typeof timeoutMs === 'number') {
       timeout = setTimeout(() => {
@@ -99,28 +158,40 @@ function runCommand(command, args, options) {
     })
 
     child.on('exit', (code) => {
-      if (timeout) {
-        clearTimeout(timeout)
-      }
-
-      if (timedOut) {
-        rejectPromise(new Error(`${errorMessage} Timed out after ${timeoutMs}ms.`))
-        return
-      }
-
-      if (code === 0) {
-        resolvePromise()
-        return
-      }
-
-      rejectPromise(new Error(`${errorMessage} Exit code: ${code ?? 'unknown'}`))
+      exitCode = code
     })
 
     child.on('error', (error) => {
       if (timeout) {
         clearTimeout(timeout)
       }
+      settled = true
       rejectPromise(error)
+    })
+
+    child.on('close', (code) => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+
+      if (timeout) {
+        clearTimeout(timeout)
+      }
+
+      const resolvedCode = exitCode ?? code
+      if (timedOut) {
+        rejectPromise(new Error(`${errorMessage} Timed out after ${timeoutMs}ms.`))
+        return
+      }
+
+      if (resolvedCode === 0) {
+        resolvePromise()
+        return
+      }
+
+      rejectPromise(new Error(`${errorMessage} Exit code: ${resolvedCode ?? 'unknown'}`))
     })
   })
 }

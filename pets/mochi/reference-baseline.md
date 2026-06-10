@@ -59,7 +59,7 @@ Mochi must read as:
 
 ## Must Avoid
 
-- catgirl or humanoid anatomy
+- humanoid anatomy or human-like torso treatment
 - giant head / tiny body exaggeration
 - huge floppy ears that overpower the body
 - sticker, emoji, reaction-face, or cheap mobile-pet styling

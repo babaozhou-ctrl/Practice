@@ -88,26 +88,11 @@ const PREVIEW_DISMISSED_SEQUENCE = [
   { state: 'IDLE' as const, holdMs: 360 },
 ]
 const DEFAULT_SCENE_SHIFT_TO_BREAK_SEQUENCE = [
-  { state: 'HAPPY' as const, holdMs: 320 },
-  { state: 'IDLE' as const, holdMs: 280 },
+  { state: 'HAPPY' as const, holdMs: 240 },
+  { state: 'IDLE' as const, holdMs: 200 },
 ]
 const DEFAULT_SCENE_SHIFT_TO_FOCUS_SEQUENCE = [
-  { state: 'THINKING' as const, holdMs: 340 },
-  { state: 'IDLE' as const, holdMs: 240 },
-]
-const DEFAULT_SCENE_SHIFT_TO_WATCH_SEQUENCE = [
-  { state: 'THINKING' as const, holdMs: 260 },
-  { state: 'HAPPY' as const, holdMs: 240 },
   { state: 'IDLE' as const, holdMs: 220 },
-]
-const DEFAULT_SCENE_SHIFT_TO_LISTEN_SEQUENCE = [
-  { state: 'HAPPY' as const, holdMs: 240 },
-  { state: 'THINKING' as const, holdMs: 220 },
-  { state: 'HAPPY' as const, holdMs: 240 },
-]
-const DEFAULT_SCENE_SHIFT_FROM_LISTEN_SEQUENCE = [
-  { state: 'THINKING' as const, holdMs: 220 },
-  { state: 'IDLE' as const, holdMs: 260 },
 ]
 const FEED_THINKING_LINES = [
   '那我先抱走啦，稍微想一想。',
@@ -176,7 +161,15 @@ interface RuntimeCompanionState {
   previewState: CompanionSettingsPreviewState
 }
 
+type ExternalSpeechTier = 'ambient' | 'response' | 'result'
+
+interface SpeechPolicyOptions {
+  externalTier?: ExternalSpeechTier
+}
+
 type CompanionBridgeSequence = Array<{ state: 'IDLE' | 'HAPPY' | 'THINKING' | 'EXCITED'; holdMs: number }>
+
+const EXTERNAL_AMBIENT_IDLE_SUPPRESSION_MS = 90_000
 
 function randomFrom<T>(items: readonly T[]): T {
   return items[Math.floor(Math.random() * items.length)]
@@ -193,6 +186,30 @@ function emitAutomationMetricEvent(
     name,
     value: options?.value,
     tags: options?.tags,
+  })
+}
+
+function emitRuntimeTextureSourceMetric(
+  petPackage: BuiltInPetPackage,
+  textureSet: {
+    source: 'atlas' | 'procedural'
+    preferredSource: 'atlas' | 'procedural'
+    fallbackReason: string | null
+    atlasImageUrl: string | null
+  },
+  phase: 'initial' | 'replace',
+) {
+  emitAutomationMetricEvent('runtime.texture-source', {
+    tags: {
+      phase,
+      petId: petPackage.manifest.id,
+      petName: petPackage.manifest.name,
+      source: textureSet.source,
+      preferredSource: textureSet.preferredSource,
+      fallbackReason: textureSet.fallbackReason,
+      runtimeFallbackEnabled: petPackage.assetStatus?.runtimeFallbackEnabled ?? null,
+      atlasImageUrl: textureSet.atlasImageUrl,
+    },
   })
 }
 
@@ -654,7 +671,7 @@ function resolveConfiguredBridgeSequence(
       case 'breakToFocus':
         return DEFAULT_SCENE_SHIFT_TO_FOCUS_SEQUENCE
       case 'focusToWatch':
-        return DEFAULT_SCENE_SHIFT_TO_WATCH_SEQUENCE
+        return DEFAULT_SCENE_SHIFT_TO_FOCUS_SEQUENCE
       case 'watchToFocus':
         return DEFAULT_SCENE_SHIFT_TO_FOCUS_SEQUENCE
     }
@@ -675,12 +692,8 @@ function resolveSceneBridgeSequence(
     return null
   }
 
-  const previousSceneId = previous.scene.id
-  const nextSceneId = next.scene.id
   const previousPhase = previous.workMode?.phase ?? 'idle'
   const nextPhase = next.workMode?.phase ?? 'idle'
-  const previousMusicListening = previous.scene.flags.includes('music_listening')
-  const nextMusicListening = next.scene.flags.includes('music_listening')
 
   if (previousPhase !== nextPhase) {
     if (nextPhase === 'short_break' || nextPhase === 'long_break') {
@@ -688,28 +701,6 @@ function resolveSceneBridgeSequence(
     }
     if (nextPhase === 'focus') {
       return resolveConfiguredBridgeSequence(petPackage, 'breakToFocus')
-    }
-  }
-
-  if (previousMusicListening !== nextMusicListening) {
-    return nextMusicListening
-      ? DEFAULT_SCENE_SHIFT_TO_LISTEN_SEQUENCE
-      : DEFAULT_SCENE_SHIFT_FROM_LISTEN_SEQUENCE
-  }
-
-  if (previousSceneId !== nextSceneId) {
-    if (
-      (previousSceneId === 'deep_focus' || previousSceneId === 'steady_focus' || previousSceneId === 'reading_nook') &&
-      nextSceneId === 'watch_together'
-    ) {
-      return resolveConfiguredBridgeSequence(petPackage, 'focusToWatch')
-    }
-
-    if (
-      (previousSceneId === 'watch_together' || previousSceneId === 'soft_browsing') &&
-      (nextSceneId === 'deep_focus' || nextSceneId === 'steady_focus')
-    ) {
-      return resolveConfiguredBridgeSequence(petPackage, 'watchToFocus')
     }
   }
 
@@ -945,10 +936,12 @@ function createStableFeedCardController(
 function setupStableContextMenu(menu: HTMLElement, options: { getSnapshot: () => CompanionSnapshot | null }) {
   const menuStage = document.getElementById('pet-stage') as HTMLElement | null
   const menuShell = document.getElementById('pet-shell') as HTMLElement | null
-  const menuStageMinExpandedWidth = 360
-  const menuStageMinExpandedHeight = 560
-  const menuStageWidthPadding = 56
-  const menuStageHeightPadding = 40
+  const menuPreferredWidth = 320
+  const menuMinWidth = 300
+  const menuStageMinExpandedWidth = 400
+  const menuStageMinExpandedHeight = 640
+  const menuStageWidthPadding = 68
+  const menuStageHeightPadding = 56
   const menuBaseWidth = 300
   const menuBaseHeight = 420
   const menuMargin = 14
@@ -984,6 +977,7 @@ function setupStableContextMenu(menu: HTMLElement, options: { getSnapshot: () =>
   const hide = () => {
     menu.classList.remove('show')
     menu.style.visibility = ''
+    menu.style.width = ''
     menu.style.maxHeight = ''
     menu.style.maxWidth = ''
     menu.style.left = ''
@@ -1099,6 +1093,9 @@ function setupStableContextMenu(menu: HTMLElement, options: { getSnapshot: () =>
     actionsSection.appendChild(
       createItem('\u6253\u5f00\u8bbe\u7f6e', '调整陪伴状态、接入和工作节奏。', () => window.electronAPI?.openSettings?.()),
     )
+    actionsSection.appendChild(
+      createItem('\u5bfc\u5165\u89d2\u8272', '把新的宠物包或旧版 sprite 资源接进来。', () => window.electronAPI?.openImport?.()),
+    )
     menu.appendChild(actionsSection)
 
     const controlsSection = createSection('桌面控制')
@@ -1128,8 +1125,17 @@ function setupStableContextMenu(menu: HTMLElement, options: { getSnapshot: () =>
       menu.style.visibility = 'hidden'
       menu.classList.add('show')
 
-      const estimatedWidth = Math.max(menu.offsetWidth, 280)
-      const estimatedHeight = Math.max(menu.scrollHeight, menu.offsetHeight, 320)
+      const measuredWidth = Math.max(menuMinWidth, Math.min(menuPreferredWidth, window.screen.availWidth - menuMargin * 6))
+      menu.style.width = `${measuredWidth}px`
+      menu.style.left = `${menuMargin}px`
+      menu.style.top = `${menuMargin}px`
+      menu.style.maxHeight = ''
+      menu.style.maxWidth = ''
+      menu.scrollTop = 0
+      await waitForMenuLayout()
+
+      const estimatedWidth = Math.max(menu.scrollWidth, menu.offsetWidth, measuredWidth)
+      const estimatedHeight = Math.max(menu.scrollHeight, menu.offsetHeight, 360)
       const expandedStageSize = {
         width: Math.max(menuStageMinExpandedWidth, estimatedWidth + menuStageWidthPadding),
         height: Math.max(menuStageMinExpandedHeight, estimatedHeight + menuStageHeightPadding),
@@ -1149,9 +1155,10 @@ function setupStableContextMenu(menu: HTMLElement, options: { getSnapshot: () =>
       const anchorOffsetY = Math.max(0, viewportHeight - menuBaseHeight)
       const anchorX = x + anchorOffsetX
       const anchorY = y + anchorOffsetY
-      menu.scrollTop = 0
       const maxMenuHeight = Math.max(220, viewportHeight - menuMargin * 2)
-      const maxMenuWidth = Math.max(240, viewportWidth - menuMargin * 2)
+      const maxMenuWidth = Math.max(menuMinWidth, viewportWidth - menuMargin * 2)
+      const resolvedMenuWidth = Math.min(maxMenuWidth, measuredWidth)
+      menu.style.width = `${resolvedMenuWidth}px`
       menu.style.maxHeight = `${maxMenuHeight}px`
       menu.style.maxWidth = `${maxMenuWidth}px`
       await waitForMenuLayout()
@@ -1226,6 +1233,8 @@ async function bootstrap() {
     speech,
   })
 
+  emitRuntimeTextureSourceMetric(petPackage, textureSet, 'initial')
+
   await runtime.init()
   applyRuntimeCompanionState(runtime, {
     lowDistractionMode,
@@ -1253,12 +1262,35 @@ async function bootstrap() {
     message: string,
     duration: number,
     override?: Partial<SpeechPresentation>,
+    options?: SpeechPolicyOptions,
   ) => {
     const effectiveRuntimeState = getEffectiveRuntimeCompanionState()
     const effectiveLowDistractionMode = resolveEffectiveLowDistractionMode(
       effectiveRuntimeState.effectiveLowDistractionMode,
       effectiveRuntimeState.effectiveChatRuntimeState,
     )
+
+    if (source === 'external') {
+      const suppressionReason = resolveExternalSpeechSuppressionReason(
+        snapshot,
+        effectiveLowDistractionMode,
+        options?.externalTier ?? 'ambient',
+      )
+
+      if (suppressionReason) {
+        emitAutomationMetricEvent('speech.suppressed', {
+          tags: {
+            source,
+            externalTier: options?.externalTier ?? 'ambient',
+            reason: suppressionReason,
+            scene: snapshot.scene.id,
+            activity: snapshot.activity,
+          },
+        })
+        return false
+      }
+    }
+
     const decision = speechPolicy.evaluate({
       source,
       snapshot,
@@ -1295,6 +1327,7 @@ async function bootstrap() {
     emitAutomationMetricEvent('speech.shown', {
       tags: {
         source,
+        externalTier: source === 'external' ? options?.externalTier ?? 'ambient' : null,
         tone: (safeOverride?.tone ?? getRuntimeAwareSpeechPresentation(
           snapshot,
           safeMessage,
@@ -1325,6 +1358,7 @@ async function bootstrap() {
     currentSpeechKicker = getStableNamedKicker(petPackage.manifest.name)
     feedCard.setCopy(resolveFeedCardCopy(petPackage.manifest.name, petPackage.companionContent))
     runtime.replaceTextureSet(textureSet)
+    emitRuntimeTextureSourceMetric(petPackage, textureSet, 'replace')
     speech.setAnchor(petPackage.productionProfile?.anchors.speechBubble)
     refreshPresentation(companion.getSnapshot())
   }
@@ -1354,7 +1388,7 @@ async function bootstrap() {
   }
 
   const maybePlaySceneBridgeMotion = (previous: CompanionSnapshot | null, next: CompanionSnapshot, now = Date.now()) => {
-    if (now - lastBridgeAnimationAt < 1_600) {
+    if (now - lastBridgeAnimationAt < 10_000) {
       return
     }
 
@@ -1413,6 +1447,7 @@ async function bootstrap() {
           tone: 'focus',
           kicker: '已经喂给我了',
         },
+        { externalTier: 'result' },
       )
 
       if (!didSpeak) {
@@ -1608,6 +1643,7 @@ async function bootstrap() {
         runtimeStateSpeech.message,
         runtimeStateSpeech.duration,
         runtimeStateSpeech.presentation,
+        { externalTier: 'ambient' },
       )
     }
   })
@@ -1645,6 +1681,7 @@ async function bootstrap() {
         previewSpeech.message,
         previewSpeech.duration,
         previewSpeech.presentation,
+        { externalTier: 'ambient' },
       )
     }
   })
@@ -1659,6 +1696,14 @@ async function bootstrap() {
         tone: payload.source === 'file-analysis' ? 'focus' : 'warm',
         kicker: payload.source === 'file-analysis' ? '我先看过了' : currentSpeechKicker,
       },
+      {
+        externalTier:
+          payload.source === 'file-analysis'
+            ? 'result'
+            : payload.source === 'chat'
+              ? 'response'
+              : 'ambient',
+      },
     )
   })
 
@@ -1670,10 +1715,46 @@ async function bootstrap() {
     refreshPresentation(companion.getSnapshot())
   })
 
+  const resolvePetInteractionHit = (clientX: number, clientY: number) => runtime.hitTestCanvasPoint(clientX, clientY)
+
+  const canDragPet = (clientX: number, clientY: number) => {
+    const hit = resolvePetInteractionHit(clientX, clientY)
+    return hit.hit && hit.coverage >= 0.2
+  }
+
+  const canOpenContextMenu = (clientX: number, clientY: number) => {
+    const hit = resolvePetInteractionHit(clientX, clientY)
+    return (
+      hit.hit &&
+      hit.coverage >= 0.5 &&
+      hit.neighborhoodCoverage >= 0.34 &&
+      hit.normalizedX >= 0.14 &&
+      hit.normalizedX <= 0.86 &&
+      hit.normalizedY >= 0.06 &&
+      hit.normalizedY <= 0.92
+    )
+  }
+
+  const canPetAffectionTap = (clientX: number, clientY: number) => {
+    const hit = resolvePetInteractionHit(clientX, clientY)
+    // Keep petting intentionally narrower than dragging so near-edge clicks do not misfire as head pats.
+    return (
+      hit.hit &&
+      hit.alpha >= 168 &&
+      hit.coverage >= 0.66 &&
+      hit.neighborhoodCoverage >= 0.52 &&
+      hit.normalizedX >= 0.26 &&
+      hit.normalizedX <= 0.74 &&
+      hit.normalizedY >= 0.08 &&
+      hit.normalizedY <= 0.56
+    )
+  }
+
   const dragController = new PetDragController({
     element: runtime.canvas,
-    canStartInteraction: (event) => runtime.hitTestCanvasPoint(event.clientX, event.clientY).hit,
-    isHoveringInteractiveTarget: (event) => runtime.hitTestCanvasPoint(event.clientX, event.clientY).hit,
+    canStartInteraction: (event) => canDragPet(event.clientX, event.clientY),
+    canTriggerTap: (event) => canPetAffectionTap(event.clientX, event.clientY),
+    isHoveringInteractiveTarget: (event) => canDragPet(event.clientX, event.clientY),
     onDragStart: () => {
       emitAutomationMetricEvent('pet.drag.start')
       refreshPresentation(companion.handleDragStart().snapshot)
@@ -1701,7 +1782,7 @@ async function bootstrap() {
   dragController.mount()
 
   const isFileDragEvent = (event: DragEvent) => Array.from(event.dataTransfer?.types ?? []).includes('Files')
-  const isDragOverPetBody = (event: DragEvent) => runtime.hitTestCanvasPoint(event.clientX, event.clientY).hit
+  const isDragOverPetBody = (event: DragEvent) => canDragPet(event.clientX, event.clientY)
 
   runtime.canvas.addEventListener('dragenter', (event) => {
     if (isFeedAnalyzing) return
@@ -1771,7 +1852,7 @@ async function bootstrap() {
 
   runtime.canvas.addEventListener('contextmenu', (event) => {
     event.preventDefault()
-    if (!runtime.hitTestCanvasPoint(event.clientX, event.clientY).hit) {
+    if (!canOpenContextMenu(event.clientX, event.clientY)) {
       contextMenu.hide()
       return
     }
@@ -1788,7 +1869,7 @@ async function bootstrap() {
     speakWithPolicy('external', latestSnapshot, msg, dur, {
       tone: 'warm',
       kicker: currentSpeechKicker,
-    })
+    }, { externalTier: 'ambient' })
   })
 
   window.electronAPI?.onContextUpdate?.((info: { title: string; process: string; idleMs?: number }) => {
@@ -1957,7 +2038,15 @@ async function hydrateInitialContextStore() {
   }
 }
 
-function syncContextStoreFromWindowInfo(info: { title: string; process: string; idleMs?: number }) {
+function syncContextStoreFromWindowInfo(info: {
+  title: string
+  process: string
+  idleMs?: number
+  mediaPlaying?: boolean
+  mediaTitle?: string
+  mediaArtist?: string
+  mediaSource?: string
+}) {
   const contextStore = useContextStore.getState()
   contextStore.setActiveWindow(info)
   contextStore.setActivity(classifyActivity(info))
@@ -1988,6 +2077,31 @@ function resolveRuntimeCompanionState({
     effectiveLowDistractionMode,
     effectiveChatRuntimeState,
   }
+}
+
+function resolveExternalSpeechSuppressionReason(
+  snapshot: CompanionSnapshot,
+  effectiveLowDistractionMode: boolean,
+  externalTier: ExternalSpeechTier,
+): 'away' | 'quiet' | 'idle' | null {
+  if (externalTier !== 'ambient') {
+    return null
+  }
+
+  if (snapshot.scene.id === 'away') {
+    return 'away'
+  }
+
+  if (snapshot.mode === 'quiet' || effectiveLowDistractionMode) {
+    return 'quiet'
+  }
+
+  const idleMs = snapshot.activeWindow?.idleMs ?? 0
+  if (idleMs >= EXTERNAL_AMBIENT_IDLE_SUPPRESSION_MS) {
+    return 'idle'
+  }
+
+  return null
 }
 
 function applyRuntimeCompanionState(runtime: PixiPetRuntime, state: RuntimeCompanionState) {

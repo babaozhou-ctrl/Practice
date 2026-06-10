@@ -51,7 +51,7 @@ npm run qa:mochi
 
 - [docs/specs/pet-package-template.md](./docs/specs/pet-package-template.md)
 - [src/pets/README.md](./src/pets/README.md)
-- [pets/template-luna/README.md](./pets/template-luna/README.md)
+- [pets/mochi/manifest.json](./pets/mochi/manifest.json)
 
 我们更欢迎：
 

@@ -75,10 +75,18 @@ export function resolveCompanionScene(
   if (input.activity === 'coding') {
     if (input.workMode?.isFocusActive && (focusMinutes >= 20 || input.workMode.totalFocusMsToday >= 75 * 60_000)) {
       flags.add('deep_work')
+      if (musicListening) {
+        flags.add('rhythmic_focus')
+        return createScene('deep_focus', '听着写东西', 'steady', 'rhythmic_focus', flags)
+      }
       return createScene('deep_focus', '沉浸编程', 'steady', 'soft_focus', flags)
     }
 
     flags.add('productive')
+    if (musicListening) {
+      flags.add('rhythmic_focus')
+      return createScene('steady_focus', '听着写东西', 'steady', 'rhythmic_focus', flags)
+    }
     return createScene('steady_focus', '专注工作', 'steady', 'calm_focus', flags)
   }
 
@@ -119,16 +127,28 @@ export function resolveCompanionScene(
 
   if (input.activity === 'idle' && input.mode === 'quiet') {
     flags.add('resting')
+    if (musicListening) {
+      flags.add('soft_listening')
+      return createScene('quiet_idle', '安静听着', 'low', 'soft_listening', flags)
+    }
     return createScene('quiet_idle', '安静待机', 'low', 'gentle_idle', flags)
   }
 
   if (input.activity === 'idle') {
     flags.add('low_intrusion')
+    if (musicListening) {
+      flags.add('soft_listening')
+      return createScene('quiet_idle', '安静听着', 'low', 'soft_listening', flags)
+    }
     return createScene('quiet_idle', '静静陪着', 'low', 'gentle_idle', flags)
   }
 
   if (input.activity === 'browsing') {
     flags.add('light_exploration')
+    if (musicListening) {
+      flags.add('soft_listening')
+      return createScene('soft_browsing', '边听边看', 'steady', 'shared_rhythm', flags)
+    }
     return createScene('soft_browsing', '轻度浏览', 'steady', 'observant_soft', flags)
   }
 

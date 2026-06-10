@@ -80,6 +80,20 @@ async function readErrorMessage(response: Response): Promise<string> {
   }
 }
 
+function normalizeEndpoint(value: string): string {
+  return value.trim().replace(/\/+$/, '')
+}
+
+function buildHealthCheckBody(config: AIConfig) {
+  return {
+    model: config.model,
+    messages: [{ role: 'user', content: 'ping' }],
+    temperature: 0,
+    max_tokens: 1,
+    stream: false,
+  }
+}
+
 export class DeepSeekChatProvider implements AIChatProvider {
   readonly id = 'builtin.ai-chat.deepseek'
   readonly label = 'DeepSeek 对话'
@@ -172,9 +186,64 @@ export class DeepSeekChatProvider implements AIChatProvider {
       }
     }
 
-    return {
-      ok: true,
-      message: `已经可以连接 ${config.model}。`,
+    const endpoint = normalizeEndpoint(config.endpoint)
+    if (!endpoint) {
+      return {
+        ok: false,
+        message: '还没有填写可用的接口地址。',
+      }
+    }
+
+    try {
+      const controller = new AbortController()
+      const timeoutId = globalThis.setTimeout(() => {
+        controller.abort()
+      }, 6_000)
+
+      let response: Response
+      try {
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${config.apiKey}`,
+          },
+          body: JSON.stringify(buildHealthCheckBody(config)),
+          signal: controller.signal,
+        })
+      } finally {
+        globalThis.clearTimeout(timeoutId)
+      }
+
+      if (!response.ok) {
+        const errText = await readErrorMessage(response)
+        return {
+          ok: false,
+          message: `接口可达，但请求未通过（${response.status}）。${errText}`,
+        }
+      }
+
+      const json = await response.json().catch(() => null)
+      const content = json?.choices?.[0]?.message?.content
+
+      return {
+        ok: true,
+        message: content
+          ? `接口已连通，${config.model} 可以正常返回内容。`
+          : `接口已连通，${config.model} 已返回响应。`,
+      }
+    } catch (error: any) {
+      if (error?.name === 'AbortError') {
+        return {
+          ok: false,
+          message: '接口检查超时了，可能是网络慢，或者当前 endpoint 无响应。',
+        }
+      }
+
+      return {
+        ok: false,
+        message: `接口检查失败：${error?.message ?? '无法连接到聊天服务。'}`,
+      }
     }
   }
 }

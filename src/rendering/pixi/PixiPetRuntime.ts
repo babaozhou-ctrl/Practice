@@ -34,6 +34,10 @@ export interface PixiPetStateSequenceStep {
 export interface PetHitTestResult {
   hit: boolean
   alpha: number
+  coverage: number
+  neighborhoodCoverage: number
+  normalizedX: number
+  normalizedY: number
 }
 
 interface BlinkMotionProfile {
@@ -185,23 +189,23 @@ export class PixiPetRuntime {
 
   hitTestCanvasPoint(clientX: number, clientY: number): PetHitTestResult {
     if (this.destroyed || !this.initialized) {
-      return { hit: false, alpha: 0 }
+      return { hit: false, alpha: 0, coverage: 0, neighborhoodCoverage: 0, normalizedX: 0, normalizedY: 0 }
     }
 
     const canvas = this.app.canvas as HTMLCanvasElement | undefined
     if (!canvas) {
-      return { hit: false, alpha: 0 }
+      return { hit: false, alpha: 0, coverage: 0, neighborhoodCoverage: 0, normalizedX: 0, normalizedY: 0 }
     }
 
     const rect = canvas.getBoundingClientRect()
     const localX = clientX - rect.left
     const localY = clientY - rect.top
     if (localX < 0 || localY < 0 || localX > rect.width || localY > rect.height) {
-      return { hit: false, alpha: 0 }
+      return { hit: false, alpha: 0, coverage: 0, neighborhoodCoverage: 0, normalizedX: 0, normalizedY: 0 }
     }
     const texture = this.petSprite.texture
     if (!texture || this.petSprite.alpha <= 0.01 || this.petRoot.alpha <= 0.01) {
-      return { hit: false, alpha: 0 }
+      return { hit: false, alpha: 0, coverage: 0, neighborhoodCoverage: 0, normalizedX: 0, normalizedY: 0 }
     }
 
     this.petRoot.updateTransform?.({})
@@ -214,7 +218,7 @@ export class PixiPetRuntime {
 
     const localPoint = this.petSprite.toLocal?.({ x: stageX, y: stageY }, this.app.stage)
     if (!localPoint || !Number.isFinite(localPoint.x) || !Number.isFinite(localPoint.y)) {
-      return { hit: false, alpha: 0 }
+      return { hit: false, alpha: 0, coverage: 0, neighborhoodCoverage: 0, normalizedX: 0, normalizedY: 0 }
     }
 
     const anchorX = typeof this.petSprite.anchor?.x === 'number' ? this.petSprite.anchor.x : 0
@@ -223,15 +227,25 @@ export class PixiPetRuntime {
     const textureY = localPoint.y + texture.height * anchorY
 
     if (textureX < 0 || textureY < 0 || textureX >= texture.width || textureY >= texture.height) {
-      return { hit: false, alpha: 0 }
+      return { hit: false, alpha: 0, coverage: 0, neighborhoodCoverage: 0, normalizedX: 0, normalizedY: 0 }
     }
 
     const alpha = this.textureSet.hitTestAlphaAt
       ? this.textureSet.hitTestAlphaAt(texture, textureX, textureY)
       : 255
+    const coverage = alpha / 255
+    const neighborhoodCoverage = this.textureSet.hitTestAlphaAt
+      ? sampleNeighborhoodCoverage(this.textureSet.hitTestAlphaAt, texture, textureX, textureY)
+      : coverage
+    const normalizedX = texture.width > 1 ? textureX / (texture.width - 1) : 0.5
+    const normalizedY = texture.height > 1 ? textureY / (texture.height - 1) : 0.5
     return {
-      hit: alpha >= 20,
+      hit: alpha >= 32,
       alpha,
+      coverage,
+      neighborhoodCoverage,
+      normalizedX,
+      normalizedY,
     }
   }
 
@@ -532,11 +546,11 @@ export class PixiPetRuntime {
     const isMusicListening = scene?.flags?.includes('music_listening') ?? false
 
     if (emotion === 'happy' || emotion === 'excited') {
-      bounce = Math.abs(Math.sin(t / 260)) * 2.2
-      extraScaleY = 0.008 + Math.sin(t / 420) * 0.01
+      bounce = Math.abs(Math.sin(t / 320)) * 1.05
+      extraScaleY = 0.004 + Math.sin(t / 520) * 0.005
     } else if (emotion === 'thinking' || activity === 'watching_video') {
-      bounce = Math.sin(t / 1500) * 0.28
-      extraRotate = Math.sin(t / 2100) * 0.0045
+      bounce = Math.sin(t / 1800) * 0.16
+      extraRotate = Math.sin(t / 2400) * 0.0028
     } else if (emotion === 'sleepy') {
       bounce = Math.sin(t / 1900) * 0.18
       extraScaleY = Math.sin(t / 1400) * 0.004
@@ -547,10 +561,10 @@ export class PixiPetRuntime {
       const pulseWave = Math.sin(t / 560)
       const swayWave = Math.sin(t / 940)
       const accentWave = Math.sin(t / 280) * 0.5 + 0.5
-      bounce += pulseWave * 0.32 + accentWave * 0.16
-      extraSway += swayWave * 0.34
-      extraRotate += Math.sin(t / 1040) * 0.0044
-      extraScaleY += 0.0046 + pulseWave * 0.0034
+      bounce += pulseWave * 0.14 + accentWave * 0.08
+      extraSway += swayWave * 0.16
+      extraRotate += Math.sin(t / 1040) * 0.0024
+      extraScaleY += 0.0022 + pulseWave * 0.0016
     }
 
     if (mode === 'quiet') {
@@ -559,10 +573,10 @@ export class PixiPetRuntime {
       extraSway *= 0.34
       extraScaleY *= 0.52
     } else if (mode === 'observing') {
-      bounce *= 0.34
-      extraRotate *= 0.4
-      extraSway *= 0.42
-      extraScaleY *= 0.74
+      bounce *= 0.28
+      extraRotate *= 0.34
+      extraSway *= 0.36
+      extraScaleY *= 0.68
     }
 
     const clipMotion = this.playbackMotionProfile
@@ -814,6 +828,32 @@ function lerp(from: number, to: number, alpha: number): number {
 
 function easeOutCubic(value: number): number {
   return 1 - Math.pow(1 - value, 3)
+}
+
+function sampleNeighborhoodCoverage(
+  sampler: (texture: any, x: number, y: number) => number,
+  texture: any,
+  centerX: number,
+  centerY: number,
+): number {
+  const offsets = [
+    [0, 0],
+    [-3, 0],
+    [3, 0],
+    [0, -3],
+    [0, 3],
+    [-2, -2],
+    [2, -2],
+    [-2, 2],
+    [2, 2],
+  ]
+
+  let alphaSum = 0
+  for (const [offsetX, offsetY] of offsets) {
+    alphaSum += sampler(texture, centerX + offsetX, centerY + offsetY)
+  }
+
+  return alphaSum / (offsets.length * 255)
 }
 
 function resolveWorkModeMotionProfile(
@@ -1141,24 +1181,24 @@ function resolvePresenceMotionProfile(mode: 'quiet' | 'connected' | 'ambient') {
       }
     case 'connected':
       return {
-        bounceScale: 0.88,
-        breathScale: 0.94,
-        swayScale: 0.82,
-        rotationScale: 0.78,
-        earScale: 0.92,
-        tailScale: 0.94,
+        bounceScale: 0.68,
+        breathScale: 0.86,
+        swayScale: 0.68,
+        rotationScale: 0.62,
+        earScale: 0.76,
+        tailScale: 0.78,
         blinkScale: 0.98,
         restOffsetY: 0,
         settleBlend: 0.18,
       }
     default:
       return {
-        bounceScale: 0.72,
-        breathScale: 0.82,
-        swayScale: 0.68,
-        rotationScale: 0.62,
-        earScale: 0.72,
-        tailScale: 0.72,
+        bounceScale: 0.58,
+        breathScale: 0.76,
+        swayScale: 0.56,
+        rotationScale: 0.5,
+        earScale: 0.6,
+        tailScale: 0.58,
         blinkScale: 1,
         restOffsetY: 0,
         settleBlend: 0.16,

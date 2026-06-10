@@ -43,17 +43,9 @@ function resolveBuiltInStateOverride(
   petPackage: BuiltInPetPackage,
 ): string {
   if (
-    petStateKey === 'coding' &&
     snapshot.scene.flags.includes('music_listening') &&
-    petPackage.states.states.listening
-  ) {
-    return 'listening'
-  }
-
-  if (
-    petStateKey === 'watching_video' &&
-    snapshot.scene.flags.includes('music_listening') &&
-    petPackage.states.states.listening
+    petPackage.states.states.listening &&
+    ['idle', 'browsing', 'coding', 'watching_video', 'thinking'].includes(petStateKey)
   ) {
     return 'listening'
   }

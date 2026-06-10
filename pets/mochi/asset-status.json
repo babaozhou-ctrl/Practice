@@ -2,7 +2,7 @@
   "packageStage": "hybrid",
   "referenceAligned": true,
   "atlasReady": true,
-  "runtimeFallbackEnabled": true,
+  "runtimeFallbackEnabled": false,
   "speechToneReady": true,
   "latestConcept": "reference-user-board-v3.png",
   "pendingWork": [

@@ -71,7 +71,7 @@ function emitAutomationMetricEvent(
 }
 
 const ChatPanel: React.FC<Props> = ({ onClose }) => {
-  const { messages, config, addMessage, appendToLastMessage, setStreaming, isStreaming } = useChatStore()
+  const { messages, config, addMessage, appendToLastMessage, setStreaming, isStreaming, isConnected } = useChatStore()
   const activity = useContextStore((state) => state.activity)
   const activeWindow = useContextStore((state) => state.activeWindow)
   const windowTitle = useContextStore((state) => state.activeWindow.title)
@@ -87,16 +87,40 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
   const [client] = useState(() => new ChatClient(config, aiChatProviderId))
   const [petName, setPetName] = useState(() => resolveSelectedPetPackage().manifest.name || 'bb7')
   const smokeFeedCheckpointRef = useRef<string | null>(null)
+  const chatReady = config.enabled && isConnected
+  const chatInputDisabled = isStreaming || !chatReady
   const activityLabel = ACTIVITY_LABELS[activity] ?? '在桌面上待着'
   const screenSummaryLabel = screenPerception?.summary?.trim() || null
   const activeWindowLabel = windowTitle?.trim() || windowProcess?.trim() || '当前桌面'
-  const conversationStatusLabel = isStreaming ? `${petName} 正在回应你` : `${petName} 在这里陪你`
+  const conversationStatusLabel = isStreaming
+    ? `${petName} 正在回应你`
+    : !config.enabled
+      ? `${petName} 现在先安静陪你`
+      : isConnected
+        ? `${petName} 在这里陪你`
+        : `${petName} 在等你把聊天接通`
   const ambientSummary = screenSummaryLabel
     ? `你们现在一起看着：${screenSummaryLabel}`
     : `${petName} 留意到你现在${activityLabel}。`
+  const chatAvailabilityLabel = !config.enabled
+    ? '聊天未开启'
+    : isConnected
+      ? 'AI 对话已连通'
+      : '聊天接入待处理'
+  const chatInputPlaceholder = !config.enabled
+    ? `先去设置里打开聊天能力，再和 ${petName} 说话吧`
+    : isConnected
+      ? `想和 ${petName} 说点什么？`
+      : `先把 ${petName} 的聊天接口接通，再继续说`
+  const chatHelperText = !config.enabled
+    ? `${petName} 现在处在偏安静的陪伴模式。想聊天的话，先去设置里打开 AI 对话。`
+    : isConnected
+      ? '按 `Enter` 发送，`Shift + Enter` 换行。'
+      : `${petName} 已经准备好陪你聊，但还需要先在设置里把 endpoint 和 API Key 接好。`
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const recentCompanionActionIdsRef = useRef<string[]>([])
   const recentFeedAnalysisIdsRef = useRef<string[]>([])
 
@@ -119,6 +143,30 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
   useEffect(() => {
     setVisible(true)
   }, [])
+
+  useEffect(() => {
+    const focusInput = () => {
+      textareaRef.current?.focus()
+    }
+
+    focusInput()
+    const timer = window.setTimeout(focusInput, 180)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
 
   useEffect(() => {
     return subscribeSelectedPet(() => {
@@ -263,7 +311,7 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
   const sendPrompt = useCallback(
     async (content: string) => {
       const trimmed = content.trim()
-      if (!trimmed || isStreaming) return
+      if (!trimmed || chatInputDisabled) return
 
       setInput('')
       addMessage({
@@ -297,12 +345,12 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
           setStreaming(false)
         },
         (err) => {
-          appendToLastMessage(`刚才这句话我没能顺利接住。${err.message}`)
+          appendToLastMessage(`刚才这句话我没能顺利接住。\n${err.message}`)
           setStreaming(false)
         },
       )
     },
-    [addMessage, appendToLastMessage, buildContext, client, isStreaming, setStreaming],
+    [addMessage, appendToLastMessage, buildContext, chatInputDisabled, client, setStreaming],
   )
 
   const sendMessage = useCallback(async () => {
@@ -378,7 +426,6 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
       activity,
       addMessage,
       canAnalyzeFiles,
-      client,
       isStreaming,
       screenPerception?.source,
       screenPerception?.summary,
@@ -730,14 +777,14 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
       <div style={styles.statusStrip}>
         <div style={styles.summaryCard}>
           <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'rgba(103, 128, 151, 0.58)', marginBottom: '6px' }}>
-            Shared Moment
+            当前陪伴场景
           </div>
           <div style={{ fontSize: '13px', fontWeight: 700, color: '#4f6880', marginBottom: '5px' }}>{activeWindowLabel}</div>
           <div style={{ fontSize: '12px', lineHeight: 1.64, color: 'rgba(92, 118, 143, 0.82)' }}>{ambientSummary}</div>
         </div>
         <div style={styles.chipRow}>
           <span style={styles.chip}>当前状态 · {activityLabel}</span>
-          <span style={styles.chip}>{config.enabled ? 'AI 对话已打开' : '现在更偏安静陪伴'}</span>
+          <span style={styles.chip}>{chatAvailabilityLabel}</span>
           <span style={styles.chip}>{canAnalyzeFiles ? '支持文件投喂' : '文件分析未接入'}</span>
         </div>
       </div>
@@ -747,7 +794,7 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
             <div style={styles.emptyCard}>
               我在这儿，慢慢说也可以。
               <br />
-              想聊天就和我说一句，想投喂文件也可以直接拖进来。
+              {chatReady ? '想聊天就和我说一句，想投喂文件也可以直接拖进来。' : '想聊天的话，先把聊天能力接好；想投喂文件也可以直接拖进来。'}
             </div>
           </div>
         )}
@@ -798,23 +845,22 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
             </div>
           </div>
           <textarea
+            ref={textareaRef}
             value={input}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={`想和 ${petName} 说点什么？`}
+            placeholder={chatInputPlaceholder}
             rows={3}
             style={styles.input}
+            disabled={chatInputDisabled}
           />
         </div>
         <div style={styles.inputHintRow}>
-          <div style={styles.capabilityHint}>
-            按 `Enter` 发送，`Shift + Enter` 换行。
-            {canAnalyzeFiles ? ' 也可以把文件直接拖进来。' : ''}
-          </div>
+          <div style={styles.capabilityHint}>{chatHelperText}{chatReady && canAnalyzeFiles ? ' 也可以把文件直接拖进来。' : ''}</div>
           {canAnalyzeFiles && <span style={styles.capabilityBadge}>支持文件投喂</span>}
         </div>
-        <button onClick={() => void sendMessage()} style={styles.sendBtn} disabled={isStreaming}>
-          {isStreaming ? '正在陪你整理' : `发给 ${petName}`}
+        <button onClick={() => void sendMessage()} style={styles.sendBtn} disabled={chatInputDisabled}>
+          {isStreaming ? '正在陪你整理' : !config.enabled ? '先开启聊天' : isConnected ? `发给 ${petName}` : '等待接通'}
         </button>
       </div>
     </div>

@@ -17,6 +17,7 @@ import {
 } from '../../settings/CompanionSettingsPreviewStore'
 import { useChatStore } from '../../store/chatStore'
 import { useCompanionPreferencesStore } from '../../store/companionPreferencesStore'
+import { usePetStore } from '../../store/petStore'
 import { useSelectedPetStore } from '../../store/selectedPetStore'
 import { useWorkModeStore } from '../../store/workModeStore'
 
@@ -27,6 +28,8 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const availablePets = useSelectedPetStore((state) => state.availablePets)
   const selectedPetId = useSelectedPetStore((state) => state.selectedPetId)
   const selectPet = useSelectedPetStore((state) => state.selectPet)
+  const refreshCatalog = useSelectedPetStore((state) => state.refreshCatalog)
+  const setShowCustomPetLoader = usePetStore((state) => state.setShowCustomPetLoader)
   const workMode = useWorkModeStore((state) => state.config)
   const workSnapshot = useWorkModeStore((state) => state.snapshot)
   const setWorkModeConfig = useWorkModeStore((state) => state.setConfig)
@@ -70,6 +73,7 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   })
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('character')
   const savePulseTimerRef = useRef<number | null>(null)
+  const aiHealthDebounceTimerRef = useRef<number | null>(null)
   const mainScrollRef = useRef<HTMLDivElement | null>(null)
   const sectionRefs = useRef<Partial<Record<SettingsSectionId, HTMLElement | null>>>({})
   const previewSessionActiveRef = useRef(false)
@@ -190,42 +194,42 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   }> = [
     {
       id: 'character',
-      eyebrow: 'Character',
+      eyebrow: '角色',
       label: '角色',
       summary: `${selectedPetDisplayName} · ${selectedPetMeta?.archetype ?? '桌面陪伴'}`,
       status: capabilitySummary.length > 0 ? `${capabilitySummary.length} 项能力` : '基础陪伴',
     },
     {
       id: 'providers',
-      eyebrow: 'Providers',
+      eyebrow: '能力接入',
       label: '能力接入',
       summary: providerConnectionSummary,
       status: `${providerConnectedCount} / 3`,
     },
     {
       id: 'conversation',
-      eyebrow: 'Conversation',
+      eyebrow: '聊天',
       label: '聊天',
       summary: enabled ? aiStatusSummary : '当前保持安静陪伴，没有打开聊天链路。',
       status: enabled ? aiStatusLabel : '未启用',
     },
     {
       id: 'presence',
-      eyebrow: 'Presence',
+      eyebrow: '存在感',
       label: '存在感',
       summary: presenceSummary,
       status: quietCompanionMode ? '低打扰' : '标准陪伴',
     },
     {
       id: 'rhythm',
-      eyebrow: 'Rhythm',
+      eyebrow: '工作节奏',
       label: '工作节奏',
       summary: workModeSummary,
       status: workEnabled ? `${focusMinutes}/${shortBreakMinutes}` : '未启用',
     },
     {
       id: 'plugins',
-      eyebrow: 'Plugins',
+      eyebrow: '插件',
       label: '插件',
       summary: localPlugins.length > 0 ? `发现 ${localPlugins.length} 个插件` : '还没有发现本地插件',
       status: pluginIssueCount > 0 ? `${pluginIssueCount} 待处理` : `${validPluginCount} 可用`,
@@ -345,6 +349,9 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     return () => {
       if (savePulseTimerRef.current !== null) {
         window.clearTimeout(savePulseTimerRef.current)
+      }
+      if (aiHealthDebounceTimerRef.current !== null) {
+        window.clearTimeout(aiHealthDebounceTimerRef.current)
       }
     }
   }, [])
@@ -479,10 +486,21 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       }
     }
 
-    void checkHealth()
+    if (aiHealthDebounceTimerRef.current !== null) {
+      window.clearTimeout(aiHealthDebounceTimerRef.current)
+    }
+
+    aiHealthDebounceTimerRef.current = window.setTimeout(() => {
+      aiHealthDebounceTimerRef.current = null
+      void checkHealth()
+    }, enabled ? 380 : 120)
 
     return () => {
       cancelled = true
+      if (aiHealthDebounceTimerRef.current !== null) {
+        window.clearTimeout(aiHealthDebounceTimerRef.current)
+        aiHealthDebounceTimerRef.current = null
+      }
     }
   }, [apiKey, config, enabled, endpoint, model, selectedAiProviderId])
 
@@ -807,6 +825,13 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     marginBottom: '10px',
   }
 
+  const toggleCardButtonStyle: React.CSSProperties = {
+    ...switchCardStyle,
+    width: '100%',
+    textAlign: 'left',
+    cursor: 'pointer',
+  }
+
   const quickButtonStyle: React.CSSProperties = {
     padding: '10px 12px',
     borderRadius: '14px',
@@ -1094,6 +1119,58 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     boxShadow: 'inset 0 1px 2px rgba(255,255,255,0.42)',
   }
 
+  const switchThumbStyle = (checked: boolean): React.CSSProperties => ({
+    position: 'absolute',
+    top: '3px',
+    left: checked ? '21px' : '3px',
+    width: '20px',
+    height: '20px',
+    borderRadius: '999px',
+    background: '#ffffff',
+    boxShadow: checked
+      ? '0 6px 14px rgba(90, 132, 176, 0.18)'
+      : '0 4px 10px rgba(104, 132, 157, 0.16)',
+    transition: 'left 160ms ease',
+  })
+
+  const renderToggleCard = ({
+    checked,
+    onToggle,
+    title,
+    description,
+    accentBackground,
+    accentShadow,
+  }: {
+    checked: boolean
+    onToggle: () => void
+    title: string
+    description: string
+    accentBackground: string
+    accentShadow: string
+  }) => (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={checked}
+      style={toggleCardButtonStyle}
+    >
+      <div>
+        <div style={{ fontSize: '13px', fontWeight: 700, color: '#4f6880', marginBottom: '4px' }}>{title}</div>
+        <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(104, 132, 157, 0.74)' }}>{description}</div>
+      </div>
+      <span
+        aria-hidden="true"
+        style={{
+          ...switchControlStyle,
+          background: checked ? accentBackground : switchControlStyle.background,
+          boxShadow: checked ? accentShadow : switchControlStyle.boxShadow,
+        }}
+      >
+        <span style={switchThumbStyle(checked)} />
+      </span>
+    </button>
+  )
+
   const workSummaryStripStyle: React.CSSProperties = {
     display: 'grid',
     gridTemplateColumns: isCompactPanel ? '1fr' : 'minmax(0, 1.1fr) minmax(220px, 0.9fr)',
@@ -1260,19 +1337,19 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               <div style={heroSummaryGridStyle}>
                 <div style={summaryCardStyle}>
                   <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'rgba(103, 128, 151, 0.58)', marginBottom: '6px' }}>
-                    Presence
+                    存在感
                   </div>
                   <div style={{ fontSize: '13px', lineHeight: 1.65, color: '#526a81' }}>{presenceSummary}</div>
                 </div>
                 <div style={summaryCardStyle}>
                   <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'rgba(103, 128, 151, 0.58)', marginBottom: '6px' }}>
-                    Conversation
+                    聊天状态
                   </div>
                   <div style={{ fontSize: '13px', lineHeight: 1.65, color: '#526a81' }}>{aiStatusSummary}</div>
                 </div>
                 <div style={summaryCardStyle}>
                   <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'rgba(103, 128, 151, 0.58)', marginBottom: '6px' }}>
-                    Work Rhythm
+                    工作节奏
                   </div>
                   <div style={{ fontSize: '13px', lineHeight: 1.65, color: '#526a81' }}>{workModeSummary}</div>
                 </div>
@@ -1281,7 +1358,7 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             <div style={heroAsideStyle}>
               <div style={heroStatCardStyle}>
                 <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'rgba(103, 128, 151, 0.58)', marginBottom: '8px' }}>
-                  Character
+                  角色状态
                 </div>
                 <div style={{ fontSize: '20px', fontWeight: 700, color: '#4b657d', marginBottom: '6px' }}>{selectedPetMeta?.name ?? 'bb7'}</div>
                 <div style={{ fontSize: '12px', lineHeight: 1.65, color: 'rgba(92, 118, 143, 0.82)' }}>
@@ -1366,7 +1443,7 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           <div style={previewNoticeStyle}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'rgba(103, 128, 151, 0.58)', marginBottom: '5px' }}>
-                Live Preview
+                桌面联动
               </div>
               <div style={{ fontSize: '13px', fontWeight: 700, color: '#4f6880', marginBottom: '4px' }}>{previewModeLabel}</div>
               <div style={{ fontSize: '12px', lineHeight: 1.65, color: 'rgba(92, 118, 143, 0.84)' }}>{previewModeSummary}</div>
@@ -1387,13 +1464,13 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 true,
               )}
             >
-              {hasPendingChanges ? '草稿联动已开启' : '当前已正式应用'}
+              {hasPendingChanges ? '修改正在同步预览' : '当前就是正式状态'}
             </span>
           </div>
           <div style={sectionNavigatorStyle}>
             <div style={sectionAgendaStyle}>
               <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'rgba(103, 128, 151, 0.58)', marginBottom: '8px' }}>
-                Section Map
+                浏览分区
               </div>
               <div style={{ fontSize: '14px', fontWeight: 700, color: '#4f6880', marginBottom: '6px' }}>先确定这一轮要调哪一块</div>
               <div style={{ fontSize: '12px', lineHeight: 1.7, color: 'rgba(92, 118, 143, 0.82)', marginBottom: '12px' }}>
@@ -1471,7 +1548,7 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         <div style={panelBodyStyle} ref={mainScrollRef}>
           <div style={mainColumnStyle}>
           <section ref={bindSectionRef('character')} style={sectionCardStyle}>
-            <div style={sectionEyebrowStyle}>Companion</div>
+            <div style={sectionEyebrowStyle}>角色</div>
             <div style={sectionTitleWrapStyle}>
               <div style={sectionHeadingMainStyle}>
                 <span style={sectionIconBubbleStyle('rgba(142, 197, 236, 0.18)', '#5d84a6')}>◌</span>
@@ -1655,13 +1732,48 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 )
               })}
             </div>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '12px' }}>
+              <button
+                type="button"
+                onClick={() => setShowCustomPetLoader(true)}
+                style={{
+                  ...railActionPrimaryStyle,
+                  width: isTightPanel ? '100%' : 'auto',
+                  minWidth: isTightPanel ? '100%' : '176px',
+                  cursor: 'pointer',
+                }}
+              >
+                导入新角色
+              </button>
+              <button
+                type="button"
+                onClick={() => refreshCatalog()}
+                style={{
+                  ...railActionButtonStyle,
+                  width: isTightPanel ? '100%' : 'auto',
+                  minWidth: isTightPanel ? '100%' : '152px',
+                }}
+              >
+                刷新角色列表
+              </button>
+            </div>
+            <div
+              style={{
+                fontSize: '12px',
+                lineHeight: 1.65,
+                color: 'rgba(104, 132, 157, 0.78)',
+                marginBottom: '8px',
+              }}
+            >
+              想换成新的宠物包，或者导入旧版 sprite 资源时，可以直接从这里进入导入流程。导入完成后，新角色会自动出现在上面的列表里。
+            </div>
             <div style={{ fontSize: '12px', color: 'rgba(104, 132, 157, 0.72)', lineHeight: 1.6 }}>
               当前角色能力：{capabilitySummary.length > 0 ? capabilitySummary.join('、') : '基础陪伴'}
             </div>
           </section>
 
           <section ref={bindSectionRef('providers')} style={compactSectionCardStyle}>
-            <div style={sectionEyebrowStyle}>Providers</div>
+            <div style={sectionEyebrowStyle}>能力接入</div>
             <div style={sectionTitleWrapStyle}>
               <div style={sectionHeadingMainStyle}>
                 <span style={sectionIconBubbleStyle('rgba(157, 205, 235, 0.2)', '#5a7f9f')}>⌁</span>
@@ -1759,7 +1871,7 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           </section>
 
           <section ref={bindSectionRef('plugins')} style={compactSectionCardStyle}>
-            <div style={sectionEyebrowStyle}>Plugins</div>
+            <div style={sectionEyebrowStyle}>插件</div>
             <div style={sectionTitleWrapStyle}>
               <div style={sectionHeadingMainStyle}>
                 <span style={sectionIconBubbleStyle('rgba(244, 212, 182, 0.24)', '#9d7b5b')}>⋯</span>
@@ -1943,7 +2055,7 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
           <div style={segmentedGridStyle}>
             <section ref={bindSectionRef('conversation')} style={compactSectionCardStyle}>
-              <div style={sectionEyebrowStyle}>Conversation</div>
+            <div style={sectionEyebrowStyle}>聊天</div>
               <div style={sectionTitleWrapStyle}>
                 <div style={sectionHeadingMainStyle}>
                   <span style={sectionIconBubbleStyle('rgba(246, 195, 212, 0.22)', '#a9708b')}>✦</span>
@@ -1953,31 +2065,24 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               </div>
               <div style={sectionHintStyle}>让 bb7 接住聊天、文件投喂后的追问，以及更完整的上下文对话。</div>
 
-              <div style={switchCardStyle}>
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#4f6880', marginBottom: '4px' }}>启用 AI 对话</div>
-                  <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(104, 132, 157, 0.74)' }}>
-                    打开后，bb7 会从安静陪伴延伸到更完整的对话陪伴。
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={enabled}
-                  onChange={(event) => setEnabled(event.target.checked)}
-                  style={{
-                    ...switchControlStyle,
-                    background: enabled
-                      ? 'linear-gradient(135deg, rgba(125, 184, 232, 0.98), rgba(240, 183, 203, 0.96))'
-                      : switchControlStyle.background,
-                    boxShadow: enabled ? '0 8px 18px rgba(125, 184, 232, 0.18)' : switchControlStyle.boxShadow,
-                  }}
-                />
-              </div>
+              {renderToggleCard({
+                checked: enabled,
+                onToggle: () => setEnabled((value) => !value),
+                title: '启用 AI 对话',
+                description: '打开后，bb7 会从安静陪伴延伸到更完整的对话陪伴。',
+                accentBackground: 'linear-gradient(135deg, rgba(125, 184, 232, 0.98), rgba(240, 183, 203, 0.96))',
+                accentShadow: '0 8px 18px rgba(125, 184, 232, 0.18)',
+              })}
 
               <div style={fieldClusterStyle}>
-                <div style={labelStyle}>Endpoint</div>
-                <input style={inputStyle} value={endpoint} onChange={(event) => setEndpoint(event.target.value)} />
-                <div style={labelStyle}>API Key</div>
+                <div style={labelStyle}>接口地址</div>
+                <input
+                  style={inputStyle}
+                  value={endpoint}
+                  onChange={(event) => setEndpoint(event.target.value)}
+                  placeholder="例如 https://api.deepseek.com"
+                />
+                <div style={labelStyle}>密钥</div>
                 <input
                   style={inputStyle}
                   type="password"
@@ -1985,8 +2090,13 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                   onChange={(event) => setApiKey(event.target.value)}
                   placeholder="sk-..."
                 />
-                <div style={labelStyle}>Model</div>
-                <input style={inputStyle} value={model} onChange={(event) => setModel(event.target.value)} />
+                <div style={labelStyle}>模型名</div>
+                <input
+                  style={inputStyle}
+                  value={model}
+                  onChange={(event) => setModel(event.target.value)}
+                  placeholder="例如 deepseek-chat"
+                />
               </div>
               <div
                 style={{
@@ -2024,7 +2134,7 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             </section>
 
             <section ref={bindSectionRef('presence')} style={compactSectionCardStyle}>
-              <div style={sectionEyebrowStyle}>Presence</div>
+            <div style={sectionEyebrowStyle}>存在感</div>
               <div style={sectionTitleWrapStyle}>
                 <div style={sectionHeadingMainStyle}>
                   <span style={sectionIconBubbleStyle('rgba(203, 237, 222, 0.24)', '#648a78')}>◦</span>
@@ -2034,26 +2144,14 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               </div>
               <div style={sectionHintStyle}>控制 bb7 在桌面上的存在感，让它更贴着你当前的工作状态，而不是一直抢注意力。</div>
 
-              <div style={switchCardStyle}>
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#4f6880', marginBottom: '4px' }}>低打扰模式</div>
-                  <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(104, 132, 157, 0.74)' }}>
-                    会让 bb7 的动作更克制一点，待机更安静，也会减少突然打断你的频率。
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={quietCompanionMode}
-                  onChange={(event) => setQuietCompanionMode(event.target.checked)}
-                  style={{
-                    ...switchControlStyle,
-                    background: quietCompanionMode
-                      ? 'linear-gradient(135deg, rgba(133, 200, 171, 0.96), rgba(180, 220, 200, 0.92))'
-                      : switchControlStyle.background,
-                    boxShadow: quietCompanionMode ? '0 8px 18px rgba(133, 200, 171, 0.18)' : switchControlStyle.boxShadow,
-                  }}
-                />
-              </div>
+              {renderToggleCard({
+                checked: quietCompanionMode,
+                onToggle: () => setQuietCompanionMode((value) => !value),
+                title: '低打扰模式',
+                description: '会让 bb7 的动作更克制一点，待机更安静，也会减少突然打断你的频率。',
+                accentBackground: 'linear-gradient(135deg, rgba(133, 200, 171, 0.96), rgba(180, 220, 200, 0.92))',
+                accentShadow: '0 8px 18px rgba(133, 200, 171, 0.18)',
+              })}
 
               <div style={{ ...fieldClusterStyle, marginBottom: 0 }}>
                 <div style={{ fontSize: '12px', fontWeight: 700, color: '#4f6880' }}>当前氛围</div>
@@ -2077,7 +2175,7 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           </div>
 
           <section ref={bindSectionRef('rhythm')} style={compactSectionCardStyle}>
-            <div style={sectionEyebrowStyle}>Work Rhythm</div>
+            <div style={sectionEyebrowStyle}>工作节奏</div>
             <div style={sectionTitleWrapStyle}>
               <div style={sectionHeadingMainStyle}>
                 <span style={sectionIconBubbleStyle('rgba(185, 214, 247, 0.22)', '#5c7fa0')}>↺</span>
@@ -2105,26 +2203,14 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               </div>
             </div>
 
-            <div style={switchCardStyle}>
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: '#4f6880', marginBottom: '4px' }}>启用专注与休息节奏</div>
-                <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(104, 132, 157, 0.74)' }}>
-                  当前阶段：{renderPhaseLabel(workSnapshot.phase)}
-                </div>
-              </div>
-              <input
-                type="checkbox"
-                checked={workEnabled}
-                onChange={(event) => setWorkEnabled(event.target.checked)}
-                style={{
-                  ...switchControlStyle,
-                  background: workEnabled
-                    ? 'linear-gradient(135deg, rgba(125, 184, 232, 0.98), rgba(183, 214, 245, 0.96))'
-                    : switchControlStyle.background,
-                  boxShadow: workEnabled ? '0 8px 18px rgba(125, 184, 232, 0.18)' : switchControlStyle.boxShadow,
-                }}
-              />
-            </div>
+            {renderToggleCard({
+              checked: workEnabled,
+              onToggle: () => setWorkEnabled((value) => !value),
+              title: '启用专注与休息节奏',
+              description: `当前阶段：${renderPhaseLabel(workSnapshot.phase)}`,
+              accentBackground: 'linear-gradient(135deg, rgba(125, 184, 232, 0.98), rgba(183, 214, 245, 0.96))',
+              accentShadow: '0 8px 18px rgba(125, 184, 232, 0.18)',
+            })}
 
             <div style={compactGridStyle}>
               <div>
@@ -2183,47 +2269,23 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               onChange={(event) => setOverworkReminderMinutes(Number(event.target.value))}
             />
 
-            <div style={switchCardStyle}>
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: '#4f6880', marginBottom: '4px' }}>自动开始休息</div>
-                <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(104, 132, 157, 0.74)' }}>
-                  专注结束后，自动进入短休息或长休息。
-                </div>
-              </div>
-              <input
-                type="checkbox"
-                checked={autoStartBreaks}
-                onChange={(event) => setAutoStartBreaks(event.target.checked)}
-                style={{
-                  ...switchControlStyle,
-                  background: autoStartBreaks
-                    ? 'linear-gradient(135deg, rgba(125, 184, 232, 0.98), rgba(240, 183, 203, 0.9))'
-                    : switchControlStyle.background,
-                  boxShadow: autoStartBreaks ? '0 8px 18px rgba(125, 184, 232, 0.16)' : switchControlStyle.boxShadow,
-                }}
-              />
-            </div>
+            {renderToggleCard({
+              checked: autoStartBreaks,
+              onToggle: () => setAutoStartBreaks((value) => !value),
+              title: '自动开始休息',
+              description: '专注结束后，自动进入短休息或长休息。',
+              accentBackground: 'linear-gradient(135deg, rgba(125, 184, 232, 0.98), rgba(240, 183, 203, 0.9))',
+              accentShadow: '0 8px 18px rgba(125, 184, 232, 0.16)',
+            })}
 
-            <div style={switchCardStyle}>
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: '#4f6880', marginBottom: '4px' }}>自动开始下一轮专注</div>
-                <div style={{ fontSize: '11px', lineHeight: 1.5, color: 'rgba(104, 132, 157, 0.74)' }}>
-                  休息结束后，自动把节奏重新续上。
-                </div>
-              </div>
-              <input
-                type="checkbox"
-                checked={autoStartFocus}
-                onChange={(event) => setAutoStartFocus(event.target.checked)}
-                style={{
-                  ...switchControlStyle,
-                  background: autoStartFocus
-                    ? 'linear-gradient(135deg, rgba(125, 184, 232, 0.98), rgba(240, 183, 203, 0.9))'
-                    : switchControlStyle.background,
-                  boxShadow: autoStartFocus ? '0 8px 18px rgba(125, 184, 232, 0.16)' : switchControlStyle.boxShadow,
-                }}
-              />
-            </div>
+            {renderToggleCard({
+              checked: autoStartFocus,
+              onToggle: () => setAutoStartFocus((value) => !value),
+              title: '自动开始下一轮专注',
+              description: '休息结束后，自动把节奏重新续上。',
+              accentBackground: 'linear-gradient(135deg, rgba(125, 184, 232, 0.98), rgba(240, 183, 203, 0.9))',
+              accentShadow: '0 8px 18px rgba(125, 184, 232, 0.16)',
+            })}
 
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
               <button onClick={startFocus} style={quickButtonStyle}>
@@ -2288,14 +2350,14 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               <div style={railMetricGridStyle}>
                 <div style={railMetricCardStyle}>
                   <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'rgba(103, 128, 151, 0.58)', marginBottom: '6px' }}>
-                    Conversation
+                    聊天状态
                   </div>
                   <div style={{ fontSize: '14px', fontWeight: 700, color: '#4f6880', marginBottom: '4px' }}>{aiStatusLabel}</div>
                   <div style={{ fontSize: '12px', lineHeight: 1.6, color: 'rgba(92, 118, 143, 0.82)' }}>{aiStatusSummary}</div>
                 </div>
                 <div style={railMetricCardStyle}>
                   <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'rgba(103, 128, 151, 0.58)', marginBottom: '6px' }}>
-                    Rhythm
+                    节奏状态
                   </div>
                   <div style={{ fontSize: '14px', fontWeight: 700, color: '#4f6880', marginBottom: '4px' }}>
                     {workEnabled ? renderPhaseLabel(workSnapshot.phase) : '待命'}
@@ -2329,14 +2391,14 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     <div style={{ fontSize: '13px', fontWeight: 700, color: '#4f6880' }}>{previewModeLabel}</div>
                   </div>
                   <span style={pillStyle(hasPendingChanges, hasPendingChanges ? '#e7b36a' : '#8ec5ec', true)}>
-                    {hasPendingChanges ? '草稿联动' : '正式状态'}
+                    {hasPendingChanges ? '预览同步中' : '正式生效'}
                   </span>
                 </div>
               </div>
             </section>
 
             <section style={railCardStyle}>
-              <div style={railCaptionStyle}>Workspace</div>
+              <div style={railCaptionStyle}>运行环境</div>
               <h4 style={railTitleStyle}>接入与运行摘要</h4>
               <div style={railLineListStyle}>
                 <div style={railLineStyle}>
@@ -2374,7 +2436,7 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             </section>
 
             <section style={railCardStyle}>
-              <div style={railCaptionStyle}>Quick Actions</div>
+              <div style={railCaptionStyle}>快捷操作</div>
               <h4 style={railTitleStyle}>常用操作</h4>
               <div style={{ fontSize: '12px', lineHeight: 1.7, color: 'rgba(92, 118, 143, 0.82)', marginTop: '8px', marginBottom: '12px' }}>
                 不想翻完整页的时候，可以先从这里快速调整，确认桌面上的感觉对不对。

@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 
 const states = JSON.parse(readFileSync(resolve('pets/mochi/states.json'), 'utf8'))
 const animations = JSON.parse(readFileSync(resolve('pets/mochi/animations.json'), 'utf8'))
+const resolvePresentationSource = readFileSync(resolve('src/pets/loader/resolvePetPresentation.ts'), 'utf8')
 
 const listeningState = states?.states?.listening
 const watchingState = states?.states?.watching_video
@@ -44,6 +45,20 @@ if (JSON.stringify(listeningClip.frames) !== JSON.stringify(watchingClip.frames)
 if (listeningClip.loop !== true) {
   console.error('[deep-pet] listening_loop should remain looped')
   process.exit(1)
+}
+
+const sourceSnippets = [
+  "snapshot.scene.flags.includes('music_listening')",
+  'petPackage.states.states.listening',
+  "['idle', 'browsing', 'coding', 'watching_video', 'thinking'].includes(petStateKey)",
+  "return 'listening'",
+]
+
+for (const snippet of sourceSnippets) {
+  if (!resolvePresentationSource.includes(snippet)) {
+    console.error(`[deep-pet] listening presentation verification failed: missing snippet ${snippet}`)
+    process.exit(1)
+  }
 }
 
 console.log('[deep-pet] listening presentation assets verified')

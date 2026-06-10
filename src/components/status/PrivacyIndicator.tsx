@@ -56,10 +56,26 @@ const PrivacyIndicator: React.FC = () => {
 
   return (
     <div style={panelStyle}>
-      <div style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '0.24em', color: 'rgba(102,129,152,0.58)', marginBottom: '5px' }}>
+      <div
+        style={{
+          fontSize: '10px',
+          textTransform: 'uppercase',
+          letterSpacing: '0.24em',
+          color: 'rgba(102,129,152,0.58)',
+          marginBottom: '5px',
+        }}
+      >
         Companion Status
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '8px' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '10px',
+          marginBottom: '8px',
+        }}
+      >
         <div style={{ fontSize: '14px', fontWeight: 700, color: '#4d6881' }}>桌面状态提示</div>
         <div
           style={{
@@ -77,7 +93,9 @@ const PrivacyIndicator: React.FC = () => {
           {activeCount} 项活跃
         </div>
       </div>
-      <div style={{ fontSize: '12px', lineHeight: 1.65, color: 'rgba(87,111,133,0.84)', marginBottom: '10px' }}>{summary}</div>
+      <div style={{ fontSize: '12px', lineHeight: 1.65, color: 'rgba(87,111,133,0.84)', marginBottom: '10px' }}>
+        {summary}
+      </div>
       <div style={{ display: 'grid', gap: '8px' }}>
         {items.map((item) => (
           <div

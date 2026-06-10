@@ -16,10 +16,27 @@ import { ensureWorkModeStoreSubscription, useWorkModeStore } from './store/workM
 const App: React.FC = () => {
   const isChatOpen = usePetStore((state) => state.isChatOpen)
   const showCustomPetLoader = usePetStore((state) => state.showCustomPetLoader)
-  const toggleChat = usePetStore((state) => state.toggleChat)
   const setChatOpen = usePetStore((state) => state.setChatOpen)
   const setShowCustomPetLoader = usePetStore((state) => state.setShowCustomPetLoader)
   const [showSettings, setShowSettings] = useState(false)
+
+  const openChatView = () => {
+    setShowSettings(false)
+    setShowCustomPetLoader(false)
+    setChatOpen(true)
+  }
+
+  const openSettingsView = () => {
+    setChatOpen(false)
+    setShowCustomPetLoader(false)
+    setShowSettings(true)
+  }
+
+  const openImportView = () => {
+    setChatOpen(false)
+    setShowSettings(false)
+    setShowCustomPetLoader(true)
+  }
 
   const closeChat = () => {
     setChatOpen(false)
@@ -28,6 +45,9 @@ const App: React.FC = () => {
 
   const closeCustomPetLoader = () => {
     setShowCustomPetLoader(false)
+    if (!showSettings) {
+      window.electronAPI?.hideUIWindow?.()
+    }
   }
 
   const closeSettings = () => {
@@ -52,12 +72,15 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (window.electronAPI?.onShowSettings) {
-      window.electronAPI.onShowSettings(() => setShowSettings(true))
+      window.electronAPI.onShowSettings(() => openSettingsView())
     }
     if (window.electronAPI?.onShowChat) {
-      window.electronAPI.onShowChat(() => setChatOpen(true))
+      window.electronAPI.onShowChat(() => openChatView())
     }
-  }, [setChatOpen])
+    if (window.electronAPI?.onShowImport) {
+      window.electronAPI.onShowImport(() => openImportView())
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -66,7 +89,7 @@ const App: React.FC = () => {
       const flags = await window.electronAPI?.getRuntimeFlags?.()
       if (cancelled) return
       if (flags?.smokeTarget === 'feed' || flags?.scenario === 'stability-feed' || flags?.scenario === 'stability-chat') {
-        setChatOpen(true)
+        openChatView()
         return
       }
       if (
@@ -74,19 +97,18 @@ const App: React.FC = () => {
         flags?.smokeTarget === 'workmode' ||
         flags?.scenario === 'stability-settings'
       ) {
-        setShowSettings(true)
+        openSettingsView()
         return
       }
       if (flags?.smokeTarget === 'import' || flags?.scenario === 'stability-import') {
-        setShowSettings(true)
-        setShowCustomPetLoader(true)
+        openImportView()
       }
     })()
 
     return () => {
       cancelled = true
     }
-  }, [setChatOpen, setShowCustomPetLoader])
+  }, [])
 
   useEffect(() => {
     const id = setInterval(() => usePetStore.getState().tickStatus(), 10000)
@@ -95,11 +117,18 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (event.ctrlKey && event.shiftKey && event.key === 'C') toggleChat()
+      if (event.ctrlKey && event.shiftKey && event.key === 'C') {
+        if (isChatOpen && !showSettings && !showCustomPetLoader) {
+          closeChat()
+          return
+        }
+
+        openChatView()
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [toggleChat])
+  }, [isChatOpen, showCustomPetLoader, showSettings])
 
   useEffect(() => {
     const style = document.createElement('style')

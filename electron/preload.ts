@@ -20,11 +20,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleClickThrough: () => ipcRenderer.send('pet:toggle-clickthrough'),
   openChat: () => ipcRenderer.send('pet:open-chat'),
   openSettings: () => ipcRenderer.send('pet:open-settings'),
+  openImport: () => ipcRenderer.send('pet:open-import'),
   onShowSettings: (callback: () => void) => {
     ipcRenderer.on('ui:show-settings', () => callback())
   },
   onShowChat: (callback: () => void) => {
     ipcRenderer.on('ui:show-chat', () => callback())
+  },
+  onShowImport: (callback: () => void) => {
+    ipcRenderer.on('ui:show-import', () => callback())
   },
   getRuntimeFlags: (): Promise<{
     smokeTarget: string | null

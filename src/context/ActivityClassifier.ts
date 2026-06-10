@@ -53,6 +53,8 @@ const MEDIA_PROCESSES = [
 const DIRECT_MUSIC_PROCESSES = [
   'spotify', 'cloudmusic', 'neteasemusic', 'qqmusic', 'foobar2000',
   'musicbee', 'kugou', 'kwmusic', 'kuwo', 'tidal', 'deezer',
+  'applemusic', 'applemusicwin', 'applemusicpreview',
+  'zunemusic', 'groovemusic', 'mediaplayer', 'windowsmediaplayer',
 ]
 
 const VIDEO_TITLE_KEYWORDS = [
@@ -125,6 +127,7 @@ const BROWSER_MUSIC_SITES = [
   'music.youtube.com',
   'music.163.com',
   'y.qq.com',
+  'music.apple.com',
   'kugou',
   'kuwo',
   'apple music',
@@ -136,6 +139,7 @@ const COMPACT_MUSIC_KEYWORDS = [
   'youtubemusic',
   'musicyoutubecom',
   'applemusic',
+  'musicapplecom',
   'music163com',
   'neteasemusic',
   'cloudmusic',
@@ -147,6 +151,47 @@ const COMPACT_MUSIC_KEYWORDS = [
   'musicbee',
   'tidal',
   'deezer',
+]
+
+const COMPACT_MUSIC_SOURCE_KEYWORDS = [
+  ...COMPACT_MUSIC_KEYWORDS,
+  'spotifymusic',
+  'spotifyabspotifymusic',
+  'spotifyexe',
+  'applemusicwin',
+  'appleincapplemusicwin',
+  'applemusicpreview',
+  'applemusicexe',
+  'zunemusic',
+  'microsoftzunemusic',
+  'groovemusic',
+  'groovemusicexe',
+  'windowsmediaplayer',
+  'microsoftmediaplayer',
+  'mediaplayerexe',
+  'microsoftwindowsmediaplayer',
+  'neteasecloudmusic',
+]
+
+const BROWSER_MEDIA_SOURCE_KEYWORDS = [
+  'chrome',
+  'chromeexe',
+  'msedge',
+  'msedgeexe',
+  'edge',
+  'firefox',
+  'firefoxexe',
+  'opera',
+  'operaexe',
+  'brave',
+  'braveexe',
+  'chromium',
+  'chromiumexe',
+  'vivaldi',
+  'vivaldiexe',
+  'arc',
+  'arcexe',
+  'safari',
 ]
 
 const MUSIC_PLAYBACK_HINTS = [
@@ -240,21 +285,29 @@ function classifyByTitle(lowerTitle: string): ActivityType {
 export function looksLikeMusicPlayback(info: ActiveWindowInfo): boolean {
   const normalized = normalizeWindowInfo(info)
   const compactTitle = compactValue(normalized.lowerTitle)
+  const mediaSource = compactValue(info.mediaSource ?? '')
+  const mediaTitle = compactValue(info.mediaTitle ?? '')
+  const mediaTitleLower = (info.mediaTitle ?? '').trim().toLowerCase()
+  const mediaArtist = compactValue(info.mediaArtist ?? '')
+  const sourceLooksLikeMusic = containsAny(mediaSource, COMPACT_MUSIC_SOURCE_KEYWORDS)
+  const sourceLooksBrowserHosted = containsAny(mediaSource, BROWSER_MEDIA_SOURCE_KEYWORDS)
+  const titleLooksLikeMusic =
+    containsAny(normalized.lowerTitle, MUSIC_TITLE_KEYWORDS) ||
+    containsAny(compactTitle, COMPACT_MUSIC_KEYWORDS) ||
+    containsAny(mediaTitle, MUSIC_PLAYBACK_HINTS)
+  const titleLooksLikeVideo = containsAny(mediaTitleLower, VIDEO_TITLE_KEYWORDS)
+  const mediaTitleLooksTrack = mediaTitle.length > 0 && !titleLooksLikeVideo
 
   if (matchesProcess(normalized.process, DIRECT_MUSIC_PROCESSES)) {
     return true
   }
 
   if (info.mediaPlaying) {
-    const mediaSource = compactValue(info.mediaSource ?? '')
-    const mediaTitle = compactValue(info.mediaTitle ?? '')
-    const mediaArtist = compactValue(info.mediaArtist ?? '')
-
     if (
-      containsAny(mediaSource, COMPACT_MUSIC_KEYWORDS) ||
-      containsAny(mediaTitle, MUSIC_PLAYBACK_HINTS) ||
-      containsAny(mediaArtist, COMPACT_MUSIC_KEYWORDS) ||
-      mediaTitle.length > 0
+      sourceLooksLikeMusic ||
+      (mediaArtist.length > 0 && !titleLooksLikeVideo) ||
+      (!sourceLooksBrowserHosted && mediaTitleLooksTrack && sourceLooksLikeMusic) ||
+      (matchesProcess(normalized.process, MEDIA_PROCESSES) && titleLooksLikeMusic)
     ) {
       return true
     }
@@ -264,6 +317,7 @@ export function looksLikeMusicPlayback(info: ActiveWindowInfo): boolean {
     matchesProcess(normalized.process, MEDIA_PROCESSES) &&
     containsAny(normalized.lowerTitle, MUSIC_TITLE_KEYWORDS)
   ) ||
+    sourceLooksLikeMusic ||
     containsAny(normalized.lowerTitle, BROWSER_MUSIC_SITES) ||
     containsAny(normalized.lowerTitle, MUSIC_TITLE_KEYWORDS) ||
     containsAny(compactTitle, COMPACT_MUSIC_KEYWORDS)

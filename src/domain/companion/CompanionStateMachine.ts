@@ -56,10 +56,10 @@ const SOFT_AWAY_IDLE_MS = 90_000
 const DEEP_AWAY_IDLE_MS = 6 * 60_000
 const RETURN_FROM_AWAY_IDLE_MS = 20_000
 const RECENT_FILE_WINDOW_MS = 40 * 60_000
-const CONTEXT_REACTION_BASE_COOLDOWN_MS = 45_000
-const CONTEXT_REACTION_QUIET_COOLDOWN_MS = 120_000
-const MIN_ACTIVITY_HOLD_BEFORE_CONTEXT_SPEECH_MS = 35_000
-const MIN_SCENE_HOLD_BEFORE_CONTEXT_SPEECH_MS = 28_000
+const CONTEXT_REACTION_BASE_COOLDOWN_MS = 90_000
+const CONTEXT_REACTION_QUIET_COOLDOWN_MS = 180_000
+const MIN_ACTIVITY_HOLD_BEFORE_CONTEXT_SPEECH_MS = 55_000
+const MIN_SCENE_HOLD_BEFORE_CONTEXT_SPEECH_MS = 45_000
 const FOCUS_GUARDIAN_MIN_CONFIDENT_ACTIVITY_MS = 18_000
 const TAP_REACTION_COOLDOWN_MS = 2_800
 const MUSIC_REACTION_LINES = [
@@ -153,6 +153,7 @@ export class CompanionStateMachine {
 
   handleContext(info: ActiveWindowInfo, now = Date.now()): CompanionTransitionResult {
     const previousIdleMs = this.activeWindow?.idleMs ?? 0
+    const previousSnapshot = this.getSnapshot(now)
     this.activeWindow = info
     const classified = classifyActivity(info)
     const activity = mapActivityType(classified)
@@ -174,10 +175,16 @@ export class CompanionStateMachine {
     this.syncEnteredAt(prevActivity, prevEmotion, prevMode, now)
     this.syncReturnFromAwayFlag(wasAway, info.idleMs ?? 0, now)
 
+    const nextSnapshot = this.getSnapshot(now)
+    const hasMeaningfulContextShift =
+      activity !== prevActivity || buildContextReactionKey(nextSnapshot) !== buildContextReactionKey(previousSnapshot)
+
     let speech: SpeechIntent | undefined
     if (activity !== prevActivity || emotion !== prevEmotion || mode !== prevMode) {
       this.lastContextAt = now
-      speech = this.maybeCreateReaction(activity, emotion, mode, now)
+      if (hasMeaningfulContextShift) {
+        speech = this.maybeCreateReaction(activity, emotion, mode, nextSnapshot, now)
+      }
     }
 
     if (!speech && isPresentAgain) {
@@ -185,7 +192,7 @@ export class CompanionStateMachine {
     }
 
     return {
-      snapshot: this.getSnapshot(now),
+      snapshot: nextSnapshot,
       speech,
     }
   }
@@ -399,9 +406,10 @@ export class CompanionStateMachine {
     activity: CompanionActivity,
     emotion: CompanionEmotion,
     mode: InteractionMode,
+    currentSnapshot: CompanionSnapshot,
     now: number,
   ): SpeechIntent | undefined {
-    if (!this.shouldSpeakOnTransition(activity, emotion, mode, now)) {
+    if (!this.shouldSpeakOnTransition(activity, emotion, mode, currentSnapshot, now)) {
       return undefined
     }
 
@@ -433,13 +441,13 @@ export class CompanionStateMachine {
     activity: CompanionActivity,
     emotion: CompanionEmotion,
     mode: InteractionMode,
+    currentSnapshot: CompanionSnapshot,
     now: number,
   ): boolean {
     const activeTitle = this.activeWindow?.title?.trim() ?? ''
     const userIdleMs = this.activeWindow?.idleMs ?? 0
     const likelyNoisyContext = activeTitle.length > 0 && activeTitle.length < 4
     const lateNight = isLateNight(now)
-    const currentSnapshot = this.getSnapshot(now)
     const activityHeldForMs = Math.max(0, now - this.activityEnteredAt)
     const sceneHeldForMs = Math.max(0, now - this.modeEnteredAt)
     const sceneId = currentSnapshot.scene.id
@@ -464,7 +472,7 @@ export class CompanionStateMachine {
   private createReturnFromAwaySpeech(activity: CompanionActivity, now: number): SpeechIntent | undefined {
     const idleMs = this.activeWindow?.idleMs ?? 0
     if (idleMs > RETURN_FROM_AWAY_IDLE_MS) return undefined
-    if (now - this.lastReactionAt < 60_000) return undefined
+    if (now - this.lastReactionAt < 90_000) return undefined
 
     const name = this.resolveUserName()
     const recentFile = resolveRecentFileAnalysis(this.memory)
@@ -606,6 +614,10 @@ const REACTION_LIBRARY: ReactionLibrary = {
 
 function randomFrom(items: string[]): string {
   return items[Math.floor(Math.random() * items.length)]
+}
+
+function buildContextReactionKey(snapshot: CompanionSnapshot): string {
+  return `${snapshot.scene.id}|${snapshot.scene.flags.join(',')}`
 }
 
 function resolveRecentFileAnalysis(memory: CompanionMemorySnapshot | null): CompanionFileAnalysisMemory | null {

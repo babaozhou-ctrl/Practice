@@ -1,6 +1,6 @@
 import { app } from 'electron'
 import { mkdir, readdir, readFile, rm, writeFile } from 'fs/promises'
-import { join, normalize, resolve } from 'path'
+import { join, normalize, resolve, dirname } from 'path'
 import type { SpriteDefinition } from '../src/types/animation'
 import type {
   PetAnimationConfig,
@@ -12,8 +12,6 @@ import type {
   PetProductionProfile,
   PetStatesConfig,
 } from '../src/shared/types/petPackage'
-
-const IMPORTED_PETS_DIR = join(app.getPath('userData'), 'pets', 'imported')
 
 export interface ImportedPetAssetFile {
   relativePath: string
@@ -40,18 +38,19 @@ export interface SaveImportedPetPayload extends DiskImportedPetPackage {
 }
 
 export async function ensureImportedPetsDir() {
-  await mkdir(IMPORTED_PETS_DIR, { recursive: true })
+  await mkdir(getImportedPetsDir(), { recursive: true })
 }
 
 export async function listImportedPetPackages(): Promise<DiskImportedPetPackage[]> {
+  const importedPetsDir = getImportedPetsDir()
   await ensureImportedPetsDir()
-  const entries = await readdir(IMPORTED_PETS_DIR, { withFileTypes: true })
+  const entries = await readdir(importedPetsDir, { withFileTypes: true })
   const packages: DiskImportedPetPackage[] = []
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue
 
-    const petDir = join(IMPORTED_PETS_DIR, entry.name)
+    const petDir = join(importedPetsDir, entry.name)
     try {
       const manifestRaw = await readFile(join(petDir, 'manifest.json'), 'utf-8')
       const animationsRaw = await readFile(join(petDir, 'animations.json'), 'utf-8')
@@ -104,8 +103,9 @@ export async function listImportedPetPackages(): Promise<DiskImportedPetPackage[
 }
 
 export async function saveImportedPetPackage(pkg: SaveImportedPetPayload): Promise<DiskImportedPetPackage> {
+  const importedPetsDir = getImportedPetsDir()
   await ensureImportedPetsDir()
-  const petDir = join(IMPORTED_PETS_DIR, pkg.id)
+  const petDir = join(importedPetsDir, pkg.id)
   await rm(petDir, { recursive: true, force: true })
   await mkdir(petDir, { recursive: true })
 
@@ -135,7 +135,7 @@ export async function saveImportedPetPackage(pkg: SaveImportedPetPayload): Promi
   if (pkg.assetFiles?.length) {
     for (const assetFile of pkg.assetFiles) {
       const targetPath = resolveImportedAssetPath(petDir, assetFile.relativePath)
-      await mkdir(resolve(targetPath, '..'), { recursive: true })
+      await mkdir(dirname(targetPath), { recursive: true })
       await writeFile(targetPath, Buffer.from(assetFile.contentBase64, 'base64'))
     }
   }
@@ -157,7 +157,7 @@ export async function saveImportedPetPackage(pkg: SaveImportedPetPayload): Promi
 }
 
 export function resolveImportedPetAssetPath(petId: string, relativePath: string): string {
-  return resolveImportedAssetPath(join(IMPORTED_PETS_DIR, petId), relativePath)
+  return resolveImportedAssetPath(join(getImportedPetsDir(), petId), relativePath)
 }
 
 async function safeReadFile(path: string): Promise<string | null> {
@@ -184,4 +184,8 @@ function normalizeAssetRelativePath(relativePath: string): string {
     .split('/')
     .filter((segment) => segment.length > 0 && segment !== '.' && segment !== '..')
     .join('/')
+}
+
+function getImportedPetsDir(): string {
+  return join(app.getPath('userData'), 'pets', 'imported')
 }

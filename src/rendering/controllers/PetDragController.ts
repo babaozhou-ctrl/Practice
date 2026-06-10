@@ -4,6 +4,7 @@ export interface PetDragControllerOptions {
   onDragEnd: () => void
   onTap: () => void
   canStartInteraction?: (event: PointerEvent) => boolean
+  canTriggerTap?: (event: PointerEvent) => boolean
   isHoveringInteractiveTarget?: (event: PointerEvent) => boolean
 }
 
@@ -13,6 +14,7 @@ export class PetDragController {
   private readonly onDragEnd: () => void
   private readonly onTap: () => void
   private readonly canStartInteraction?: (event: PointerEvent) => boolean
+  private readonly canTriggerTap?: (event: PointerEvent) => boolean
   private readonly isHoveringInteractiveTarget?: (event: PointerEvent) => boolean
 
   private pointerId: number | null = null
@@ -28,6 +30,7 @@ export class PetDragController {
     this.onDragEnd = options.onDragEnd
     this.onTap = options.onTap
     this.canStartInteraction = options.canStartInteraction
+    this.canTriggerTap = options.canTriggerTap
     this.isHoveringInteractiveTarget = options.isHoveringInteractiveTarget
   }
 
@@ -98,7 +101,7 @@ export class PetDragController {
     if (this.dragging) {
       this.dragging = false
       this.onDragEnd()
-    } else {
+    } else if (!this.canTriggerTap || this.canTriggerTap(event)) {
       this.onTap()
     }
 

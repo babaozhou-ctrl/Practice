@@ -46,6 +46,9 @@ const SOURCE_COOLDOWN_MS: Record<SpeechSource, number> = {
 }
 
 const GLOBAL_GAP_MS = 3_800
+const LOW_DISTRACTION_GLOBAL_GAP_MS = 6_200
+const PROACTIVE_AFTER_ANY_SPEECH_GAP_MS = 90_000
+const LOW_DISTRACTION_PROACTIVE_AFTER_ANY_SPEECH_GAP_MS = 180_000
 const REPLACE_AFTER_MS = 650
 const DUPLICATE_WINDOW_MS = 90_000
 const MAX_RECENT_ITEMS = 10
@@ -84,7 +87,18 @@ export class CompanionSpeechPolicy {
       return null
     }
 
-    const globalGapMs = lowDistractionMode ? 2_600 : GLOBAL_GAP_MS
+    const proactiveAfterAnySpeechGapMs = lowDistractionMode
+      ? LOW_DISTRACTION_PROACTIVE_AFTER_ANY_SPEECH_GAP_MS
+      : PROACTIVE_AFTER_ANY_SPEECH_GAP_MS
+    if (
+      input.source === 'proactive' &&
+      this.lastShownAt &&
+      now - this.lastShownAt < proactiveAfterAnySpeechGapMs
+    ) {
+      return null
+    }
+
+    const globalGapMs = lowDistractionMode ? LOW_DISTRACTION_GLOBAL_GAP_MS : GLOBAL_GAP_MS
     if (!activeSpeech && this.lastShownAt && now - this.lastShownAt < globalGapMs && priority < SPEECH_PRIORITY.tap) {
       return null
     }

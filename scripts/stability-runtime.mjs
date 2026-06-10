@@ -14,6 +14,7 @@ const durationArg = process.argv.find((arg) => arg.startsWith('--duration-ms='))
 const skipBuild = process.argv.includes('--skip-build')
 const scenario = scenarioArg?.split('=')[1] ?? 'stability-chat'
 const durationMs = Number.parseInt(durationArg?.split('=')[1] ?? '15000', 10)
+const minimumObservedDurationMs = Math.max(2_500, Math.floor(durationMs * 0.7))
 
 if (!Number.isFinite(durationMs) || durationMs <= 0) {
   throw new Error('Expected a positive --duration-ms value.')
@@ -24,6 +25,21 @@ if (!skipBuild) {
 }
 
 const summary = await runRuntimeScenario(scenario, durationMs)
+if (summary.observedDurationMs < minimumObservedDurationMs) {
+  throw new Error(
+    `Stability runtime ended too early. observed=${summary.observedDurationMs}ms expected-at-least=${minimumObservedDurationMs}ms`,
+  )
+}
+if (summary.unexpectedAmbientExternalSpeechCount > 0) {
+  throw new Error(
+    `Stability runtime observed ${summary.unexpectedAmbientExternalSpeechCount} ambient external speech event(s) in quiet scenes.`,
+  )
+}
+if (summary.unexpectedProceduralRenderSourceCount > 0) {
+  throw new Error(
+    `Stability runtime observed ${summary.unexpectedProceduralRenderSourceCount} built-in procedural render fallback event(s).`,
+  )
+}
 printSummary(summary)
 
 async function runNodeScript(scriptPath, args, errorMessage) {
@@ -67,6 +83,8 @@ function createRunMonitor(scenarioName, autoExitMs) {
   let uncaughtErrors = 0
   let renderGoneEvents = 0
   let unresponsiveEvents = 0
+  const unexpectedAmbientExternalSpeechLines = []
+  const unexpectedProceduralRenderSourceLines = []
 
   return {
     observe(text, stream) {
@@ -113,6 +131,14 @@ function createRunMonitor(scenarioName, autoExitMs) {
           const eventName = eventMatch[1]
           eventCounts.set(eventName, (eventCounts.get(eventName) ?? 0) + 1)
         }
+
+        if (isUnexpectedAmbientExternalSpeechLine(line)) {
+          unexpectedAmbientExternalSpeechLines.push(line)
+        }
+
+        if (isUnexpectedProceduralRenderSourceLine(line)) {
+          unexpectedProceduralRenderSourceLines.push(line)
+        }
       }
     },
     getSummary() {
@@ -148,6 +174,8 @@ function createRunMonitor(scenarioName, autoExitMs) {
         uncaughtErrors,
         renderGoneEvents,
         unresponsiveEvents,
+        unexpectedAmbientExternalSpeechCount: unexpectedAmbientExternalSpeechLines.length,
+        unexpectedProceduralRenderSourceCount: unexpectedProceduralRenderSourceLines.length,
         eventCounts: eventCountsObject,
         speechShownPerMinute: perMinute('speech.shown'),
         proactivePromptPerMinute: perMinute('proactive.prompt'),
@@ -176,6 +204,8 @@ function printSummary(summary) {
   console.log(`uncaughtErrors=${summary.uncaughtErrors}`)
   console.log(`renderGoneEvents=${summary.renderGoneEvents}`)
   console.log(`unresponsiveEvents=${summary.unresponsiveEvents}`)
+  console.log(`unexpectedAmbientExternalSpeechCount=${summary.unexpectedAmbientExternalSpeechCount}`)
+  console.log(`unexpectedProceduralRenderSourceCount=${summary.unexpectedProceduralRenderSourceCount}`)
   console.log(`speechShownPerMinute=${formatMetric(summary.speechShownPerMinute)}`)
   console.log(`proactivePromptPerMinute=${formatMetric(summary.proactivePromptPerMinute)}`)
   console.log(`contextTransitionPerMinute=${formatMetric(summary.contextTransitionPerMinute)}`)
@@ -190,6 +220,23 @@ function formatMetric(value) {
 
 function formatIntegerMetric(value) {
   return typeof value === 'number' && Number.isFinite(value) ? String(Math.round(value)) : 'n/a'
+}
+
+function isUnexpectedAmbientExternalSpeechLine(line) {
+  return (
+    line.includes('[deep-pet] event name:speech.shown') &&
+    line.includes('"source":"external"') &&
+    line.includes('"externalTier":"ambient"') &&
+    (line.includes('"scene":"away"') || line.includes('"scene":"quiet_idle"'))
+  )
+}
+
+function isUnexpectedProceduralRenderSourceLine(line) {
+  return (
+    line.includes('[deep-pet] event name:runtime.texture-source') &&
+    line.includes('"petId":"mascot.bb7"') &&
+    line.includes('"source":"procedural"')
+  )
 }
 
 function runCommand(command, args, options) {
@@ -212,6 +259,8 @@ function runCommand(command, args, options) {
 
     let timedOut = false
     let timeout = null
+    let exitCode = null
+    let settled = false
 
     if (typeof timeoutMs === 'number') {
       timeout = setTimeout(() => {
@@ -229,28 +278,40 @@ function runCommand(command, args, options) {
     })
 
     child.on('exit', (code) => {
-      if (timeout) {
-        clearTimeout(timeout)
-      }
-
-      if (timedOut) {
-        rejectPromise(new Error(`${errorMessage} Timed out after ${timeoutMs}ms.`))
-        return
-      }
-
-      if (code === 0) {
-        resolvePromise()
-        return
-      }
-
-      rejectPromise(new Error(`${errorMessage} Exit code: ${code ?? 'unknown'}`))
+      exitCode = code
     })
 
     child.on('error', (error) => {
       if (timeout) {
         clearTimeout(timeout)
       }
+      settled = true
       rejectPromise(error)
+    })
+
+    child.on('close', (code) => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+
+      if (timeout) {
+        clearTimeout(timeout)
+      }
+
+      const resolvedCode = exitCode ?? code
+      if (timedOut) {
+        rejectPromise(new Error(`${errorMessage} Timed out after ${timeoutMs}ms.`))
+        return
+      }
+
+      if (resolvedCode === 0) {
+        resolvePromise()
+        return
+      }
+
+      rejectPromise(new Error(`${errorMessage} Exit code: ${resolvedCode ?? 'unknown'}`))
     })
   })
 }

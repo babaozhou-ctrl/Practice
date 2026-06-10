@@ -79,5 +79,5 @@
 
 ## 参考起点
 
-- `pets/template-luna/`
+- `pets/mochi/`
 - `docs/specs/pet-package-template.md`

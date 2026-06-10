@@ -42,6 +42,10 @@ const PET_WINDOW_WIDTH = 300
 const PET_WINDOW_HEIGHT = 420
 const PET_MENU_MIN_EXPANDED_WIDTH = 360
 const PET_MENU_MIN_EXPANDED_HEIGHT = 560
+const CHAT_UI_WIDTH = 340
+const CHAT_UI_HEIGHT = 460
+const SETTINGS_UI_WIDTH = 1120
+const SETTINGS_UI_HEIGHT = 860
 const IMPORTED_PET_PROTOCOL = 'deep-pet'
 const IS_DEV_RUNTIME = process.argv.includes('--dev') || Boolean(process.env.VITE_DEV_SERVER_URL)
 const SMOKE_TARGET = process.env.DEEP_PET_SMOKE ?? ''
@@ -73,6 +77,7 @@ let smokeImportReady = false
 let companionFeedHistory: CompanionFeedAnalysisPayload[] = []
 let smokeFinishing = false
 let petWindowMenuExpanded = false
+let runtimeShutdownRequested = false
 
 prepareRuntimePaths()
 configureAutomatedGpuRuntime()
@@ -97,22 +102,7 @@ function finishSmoke(code = 0) {
   }
 
   smokeFinishing = true
-
-  setTimeout(() => {
-    app.exit(code)
-  }, 2_000)
-
-  if (uiWindow && !uiWindow.isDestroyed()) {
-    uiWindow.close()
-  }
-
-  if (petWindow && !petWindow.isDestroyed()) {
-    petWindow.close()
-  }
-
-  setTimeout(() => {
-    app.quit()
-  }, 100)
+  requestRuntimeShutdown(code)
 }
 
 function markSmokeReady(kind: 'pet' | 'ui') {
@@ -238,6 +228,47 @@ function configureAutomatedGpuRuntime() {
   // shader/program cache, but cache flushes can add noisy warnings on exit.
   app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
   app.commandLine.appendSwitch('disable-gpu-program-cache')
+}
+
+function requestRuntimeShutdown(exitCode = 0) {
+  if (runtimeShutdownRequested) {
+    return
+  }
+
+  runtimeShutdownRequested = true
+
+  if (contextPollInterval) {
+    clearInterval(contextPollInterval)
+    contextPollInterval = null
+  }
+
+  if (automationMetricsInterval) {
+    clearInterval(automationMetricsInterval)
+    automationMetricsInterval = null
+  }
+
+  if (tray) {
+    tray.destroy()
+    tray = null
+  }
+
+  if (uiWindow && !uiWindow.isDestroyed()) {
+    uiWindow.close()
+  }
+
+  setTimeout(() => {
+    if (petWindow && !petWindow.isDestroyed()) {
+      petWindow.close()
+    }
+  }, 180)
+
+  setTimeout(() => {
+    app.quit()
+  }, 700)
+
+  setTimeout(() => {
+    app.exit(exitCode)
+  }, 3_000)
 }
 
 function parsePositiveInteger(value: string | undefined): number | null {
@@ -520,7 +551,9 @@ function createPetWindow() {
 
   petWindow.on('closed', () => {
     petWindow = null
-    app.quit()
+    if (!runtimeShutdownRequested) {
+      app.quit()
+    }
   })
 
   if (IS_DEV_RUNTIME) {
@@ -530,12 +563,15 @@ function createPetWindow() {
 
 function createUIWindow() {
   uiWindow = new BrowserWindow({
-    width: 340,
-    height: 460,
+    width: CHAT_UI_WIDTH,
+    height: CHAT_UI_HEIGHT,
     frame: true,
     transparent: false,
     show: false,
-    resizable: false,
+    focusable: true,
+    resizable: true,
+    minWidth: CHAT_UI_WIDTH,
+    minHeight: CHAT_UI_HEIGHT,
     icon: APP_ICON_PATH,
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
@@ -572,13 +608,40 @@ function createUIWindow() {
   })
 }
 
-function showUIWindowAndNotify(channel?: 'ui:show-settings' | 'ui:show-chat') {
+function resizeUIWindowForMode(mode: 'chat' | 'settings') {
+  if (!uiWindow || uiWindow.isDestroyed()) {
+    return
+  }
+
+  const display = screen.getDisplayMatching(uiWindow.getBounds())
+  const workArea = display.workArea
+  const targetWidth = mode === 'settings' ? SETTINGS_UI_WIDTH : CHAT_UI_WIDTH
+  const targetHeight = mode === 'settings' ? SETTINGS_UI_HEIGHT : CHAT_UI_HEIGHT
+  const width = Math.min(targetWidth, workArea.width)
+  const height = Math.min(targetHeight, workArea.height)
+  const x = workArea.x + Math.max(0, Math.floor((workArea.width - width) / 2))
+  const y = workArea.y + Math.max(0, Math.floor((workArea.height - height) / 2))
+
+  uiWindow.setResizable(mode === 'settings')
+  uiWindow.setMinimumSize(CHAT_UI_WIDTH, CHAT_UI_HEIGHT)
+  uiWindow.setBounds({ x, y, width, height }, false)
+  uiWindow.center()
+}
+
+function showUIWindowAndNotify(channel?: 'ui:show-settings' | 'ui:show-chat' | 'ui:show-import') {
   const notify = () => {
     if (!uiWindow || uiWindow.isDestroyed()) {
       return
     }
 
+    resizeUIWindowForMode(
+      channel === 'ui:show-settings' || channel === 'ui:show-import' ? 'settings' : 'chat',
+    )
+
+    uiWindow.setAlwaysOnTop(true, 'floating')
     uiWindow.show()
+    uiWindow.moveTop()
+    uiWindow.webContents.focus()
     uiWindow.focus()
 
     if (channel) {
@@ -642,17 +705,7 @@ function scheduleAutomatedRuntimeExit() {
   }
 
   setTimeout(() => {
-    if (uiWindow && !uiWindow.isDestroyed()) {
-      uiWindow.close()
-    }
-
-    if (petWindow && !petWindow.isDestroyed()) {
-      petWindow.close()
-    }
-
-    setTimeout(() => {
-      app.quit()
-    }, 100)
+    requestRuntimeShutdown(0)
   }, AUTO_EXIT_MS)
 }
 
@@ -697,7 +750,7 @@ function setPetWindowMenuExpanded(
       : expandedOrOptions
   const expanded = Boolean(options.expanded)
 
-  if (!petWindow || petWindow.isDestroyed() || petWindowMenuExpanded === expanded) {
+  if (!petWindow || petWindow.isDestroyed()) {
     return
   }
   const currentBounds = petWindow.getBounds()
@@ -715,6 +768,16 @@ function setPetWindowMenuExpanded(
     width: nextWidth,
     height: nextHeight,
   })
+
+  if (
+    petWindowMenuExpanded === expanded &&
+    currentBounds.x === nextBounds.x &&
+    currentBounds.y === nextBounds.y &&
+    currentBounds.width === nextBounds.width &&
+    currentBounds.height === nextBounds.height
+  ) {
+    return
+  }
 
   petWindow.setBounds(nextBounds, false)
   petWindowMenuExpanded = expanded
@@ -771,8 +834,13 @@ function setupIPC() {
     showUIWindowAndNotify('ui:show-chat')
   })
 
+  ipcMain.on('pet:open-import', () => {
+    showUIWindowAndNotify('ui:show-import')
+  })
+
   ipcMain.on('app:hide-ui', () => {
     if (uiWindow && !uiWindow.isDestroyed()) {
+      uiWindow.setAlwaysOnTop(false)
       uiWindow.hide()
     }
   })
@@ -878,6 +946,12 @@ function setupStableTray() {
         click: () => {
           isClickThrough = !isClickThrough
           syncClickThroughState()
+        },
+      },
+      {
+        label: '导入角色',
+        click: () => {
+          showUIWindowAndNotify('ui:show-import')
         },
       },
       { type: 'separator' },
@@ -1070,6 +1144,22 @@ app.on('window-all-closed', () => {
   if (contextPollInterval) clearInterval(contextPollInterval)
   if (automationMetricsInterval) clearInterval(automationMetricsInterval)
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', () => {
+  runtimeShutdownRequested = true
+  if (contextPollInterval) {
+    clearInterval(contextPollInterval)
+    contextPollInterval = null
+  }
+  if (automationMetricsInterval) {
+    clearInterval(automationMetricsInterval)
+    automationMetricsInterval = null
+  }
+  if (tray) {
+    tray.destroy()
+    tray = null
+  }
 })
 
 app.on('activate', () => {

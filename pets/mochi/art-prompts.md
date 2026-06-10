@@ -39,7 +39,7 @@ Constraints:
 - no floor shadow
 - no glow effects
 - no noisy accessories
-- no catgirl anatomy
+- no humanoid anatomy
 - no humanoid torso
 - no maid costume or anime fashion detailing
 - no tall bunny posture
