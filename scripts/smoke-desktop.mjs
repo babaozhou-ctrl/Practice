@@ -113,7 +113,7 @@ function findUnexpectedProceduralRenderSourceLine(text) {
     lines.find(
       (line) =>
         line.includes('[deep-pet] event name:runtime.texture-source') &&
-        line.includes('"petId":"mascot.bb7"') &&
+        (line.includes('"petId":"mascot.bb7"') || line.includes('"petId":"imported.bb7-smoke-import"')) &&
         line.includes('"source":"procedural"'),
     ) ?? null
   )

@@ -1512,7 +1512,7 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
               </div>
             </div>
             <div style={draftDigestStyle}>
-              <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'rgba(103, 128, 151, 0.58)' }}>Current Focus</div>
+              <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'rgba(103, 128, 151, 0.58)' }}>当前正在调整</div>
               <div style={{ fontSize: '14px', fontWeight: 700, color: '#4f6880' }}>
                 {settingsSections.find((section) => section.id === activeSection)?.label ?? '角色'}
               </div>
@@ -2307,7 +2307,7 @@ const AISettingsPanel: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
           <aside style={asideColumnStyle}>
             <section style={railCardStyle}>
-              <div style={railCaptionStyle}>Companion Snapshot</div>
+              <div style={railCaptionStyle}>陪伴快照</div>
               <h4 style={railTitleStyle}>当前陪伴状态</h4>
               <div style={{ fontSize: '12px', lineHeight: 1.7, color: 'rgba(92, 118, 143, 0.82)', marginTop: '8px' }}>
                 这里收的是 bb7 现在给人的整体感觉，方便你一边调整，一边确认它在桌面上的气质有没有跑偏。

@@ -16,6 +16,7 @@
     "verify:external-speech-comfort": "node scripts/verify-external-speech-comfort.mjs",
     "verify:builtin-render-source": "node scripts/verify-builtin-render-source.mjs",
     "verify:motion-comfort": "node scripts/verify-motion-comfort.mjs",
+    "verify:package-import-contract": "node scripts/verify-package-import-contract.mjs",
     "verify:ui-flow": "node scripts/verify-ui-flow-guards.mjs",
     "acceptance:desktop": "node scripts/run-desktop-acceptance.mjs --profile=acceptance",
     "soak:desktop": "node scripts/run-desktop-acceptance.mjs --profile=soak",

@@ -31,6 +31,13 @@ interface ImportedPetDiskPackage {
   productionProfile?: PetProductionProfile | null
 }
 
+interface SmokeImportSampleFile {
+  name: string
+  relativePath: string
+  contentBase64: string
+  mimeType: string
+}
+
 declare global {
   interface Window {
     BroadcastChannel?: typeof BroadcastChannel
@@ -126,6 +133,7 @@ declare global {
       }) => void) => void
       listImportedPets?: () => Promise<ImportedPetDiskPackage[]>
       saveImportedPet?: (record: unknown) => Promise<unknown>
+      getSmokeImportSample?: () => Promise<SmokeImportSampleFile[] | null>
       listLocalPlugins?: () => Promise<PluginDiscoveryRecord[]>
     }
   }

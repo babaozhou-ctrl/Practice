@@ -29,6 +29,7 @@ import { attachWorkModeToSnapshot } from './domain/companion/attachWorkModeToSna
 import { normalizeCompanionSnapshot } from './domain/companion/normalizeCompanionSnapshot'
 import type { CompanionSnapshot } from './domain/companion/types'
 import { readCompanionPreferencesState, subscribeCompanionPreferences } from './preferences/CompanionPreferencesStore'
+import { hydrateImportedPetsFromDisk } from './pets/ImportedPetRegistry'
 import { subscribeSelectedPet } from './pets/PetSelectionStore'
 import { loadPetPackageById } from './pets/registry/builtInPetRegistry'
 import { resolvePetPresentation } from './pets/loader/resolvePetPresentation'
@@ -1202,6 +1203,7 @@ async function bootstrap() {
   const isFeedSmoke = runtimeFlags.smokeTarget === 'feed'
   const isFeedStabilityScenario = runtimeFlags.scenario === 'stability-feed'
 
+  await hydrateImportedPetsFromDisk()
   let petPackage = resolveSelectedPetPackage()
   const speech = new SpeechBubbleController(speechEl, petPackage.productionProfile?.anchors.speechBubble)
   const speechPolicy = new CompanionSpeechPolicy()
@@ -1361,6 +1363,16 @@ async function bootstrap() {
     emitRuntimeTextureSourceMetric(petPackage, textureSet, 'replace')
     speech.setAnchor(petPackage.productionProfile?.anchors.speechBubble)
     refreshPresentation(companion.getSnapshot())
+  }
+
+  const resolveFreshSelectedPetPackage = async () => {
+    await hydrateImportedPetsFromDisk()
+    return resolveSelectedPetPackage()
+  }
+
+  const loadFreshPetPackageById = async (petId: string) => {
+    await hydrateImportedPetsFromDisk()
+    return loadPetPackageById(petId)
   }
 
   const playFeedConfirmMotion = () => {
@@ -1614,7 +1626,7 @@ async function bootstrap() {
     if (settingsPreviewState.active && settingsPreviewState.selectedPetId) {
       return
     }
-    await replaceRuntimePetPackage(resolveSelectedPetPackage())
+    await replaceRuntimePetPackage(await resolveFreshSelectedPetPackage())
   })
 
   const unsubscribeCompanionPreferences = subscribeCompanionPreferences((state) => {
@@ -1654,10 +1666,10 @@ async function bootstrap() {
 
     if (state.active && state.selectedPetId) {
       if (!previousPreviewState.active || previousPreviewState.selectedPetId !== state.selectedPetId) {
-        await replaceRuntimePetPackage(loadPetPackageById(state.selectedPetId))
+        await replaceRuntimePetPackage(await loadFreshPetPackageById(state.selectedPetId))
       }
     } else if (previousPreviewState.active && previousPreviewState.selectedPetId) {
-      await replaceRuntimePetPackage(resolveSelectedPetPackage())
+      await replaceRuntimePetPackage(await resolveFreshSelectedPetPackage())
     }
 
     applyRuntimeCompanionState(runtime, {

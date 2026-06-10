@@ -113,10 +113,10 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
       ? `想和 ${petName} 说点什么？`
       : `先把 ${petName} 的聊天接口接通，再继续说`
   const chatHelperText = !config.enabled
-    ? `${petName} 现在处在偏安静的陪伴模式。想聊天的话，先去设置里打开 AI 对话。`
+    ? `${petName} 现在处在偏安静的陪伴模式。想聊天的话，先去设置里打开对话能力。`
     : isConnected
       ? '按 `Enter` 发送，`Shift + Enter` 换行。'
-      : `${petName} 已经准备好陪你聊，但还需要先在设置里把 endpoint 和 API Key 接好。`
+      : `${petName} 已经准备好陪你聊，但还需要先在设置里把接口地址和密钥填好。`
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -742,7 +742,7 @@ const ChatPanel: React.FC<Props> = ({ onClose }) => {
         <div style={styles.dropOverlay}>
           <strong>把文件交给我</strong>
           <div style={styles.dropHint}>
-            支持 PDF、DOCX、TXT、Markdown 和常见代码文件。{petName}
+            支持 PDF、DOCX、TXT、Markdown 文档和常见代码文件。{petName}
             会先帮你顺一遍，再陪你继续往下看。
           </div>
         </div>

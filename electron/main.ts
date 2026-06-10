@@ -1,7 +1,7 @@
 import { app, BrowserWindow, desktopCapturer, ipcMain, Menu, Tray, nativeImage, protocol, screen } from 'electron'
 import { mkdirSync } from 'fs'
 import { readFile } from 'fs/promises'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import type { CompanionActionPayload } from '../src/ai/CompanionActionBridge'
 import type { CompanionFeedAnalysisPayload } from '../src/ai/CompanionFeedBridge'
 import type { CompanionUtterancePayload } from '../src/ai/CompanionUtteranceBridge'
@@ -66,6 +66,13 @@ const COMPANION_ACTION_RELAY_CHANNEL = 'bridge:companion-action'
 const COMPANION_UTTERANCE_RELAY_CHANNEL = 'bridge:companion-utterance'
 const MAX_COMPANION_FEED_HISTORY = 24
 const AUTOMATION_METRICS_EVENT_CHANNEL = 'metrics:event'
+
+interface SmokeImportSampleFile {
+  name: string
+  relativePath: string
+  contentBase64: string
+  mimeType: string
+}
 
 let smokePetReady = false
 let smokeUiReady = false
@@ -850,6 +857,7 @@ function setupIPC() {
   ipcMain.handle('documents:extract-text', async (_event, payload) => extractDocumentText(payload))
   ipcMain.handle('pets:list-imported', async () => listImportedPetPackages())
   ipcMain.handle('pets:save-imported', async (_event, record) => saveImportedPetPackage(record))
+  ipcMain.handle('pets:get-smoke-import-sample', async () => loadSmokeImportSampleFiles())
   ipcMain.handle('plugins:list-local', async () => listLocalPluginManifests())
   ipcMain.handle('plugins:run-file-analysis', async (_event, payload) => runPluginFileAnalysis(payload))
   ipcMain.handle('plugins:run-ai-summary', async (_event, payload) => runPluginAISummary(payload))
@@ -1174,4 +1182,66 @@ function getMimeType(relativePath: string): string {
   if (lower.endsWith('.svg')) return 'image/svg+xml'
   if (lower.endsWith('.json')) return 'application/json'
   return 'application/octet-stream'
+}
+
+async function loadSmokeImportSampleFiles(): Promise<SmokeImportSampleFile[] | null> {
+  if (!IS_SMOKE_RUNTIME || SMOKE_TARGET !== 'import') {
+    return null
+  }
+
+  const packageRoot = resolve(__dirname, '..', 'pets', 'mochi')
+  const publicRoot = resolve(__dirname, '..', 'public', 'pets', 'mochi')
+  const manifestPath = join(packageRoot, 'manifest.json')
+  const packageFiles = [
+    'animations.json',
+    'states.json',
+    'personality.json',
+    'companion-content.json',
+    'appearance.json',
+    'production.json',
+    'asset-status.json',
+  ]
+  const assetFiles = ['sprite-atlas.png', 'preview.png']
+
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf-8')) as {
+    id?: string
+    name?: string
+    [key: string]: unknown
+  }
+  const smokeManifest = {
+    ...manifest,
+    id: 'bb7-smoke-import',
+    name: 'bb7-smoke-import',
+  }
+
+  const result: SmokeImportSampleFile[] = [
+    {
+      name: 'manifest.json',
+      relativePath: 'manifest.json',
+      contentBase64: Buffer.from(JSON.stringify(smokeManifest, null, 2), 'utf8').toString('base64'),
+      mimeType: 'application/json',
+    },
+  ]
+
+  for (const relativePath of packageFiles) {
+    const raw = await readFile(join(packageRoot, relativePath))
+    result.push({
+      name: relativePath,
+      relativePath,
+      contentBase64: raw.toString('base64'),
+      mimeType: getMimeType(relativePath),
+    })
+  }
+
+  for (const relativePath of assetFiles) {
+    const raw = await readFile(join(publicRoot, relativePath))
+    result.push({
+      name: relativePath,
+      relativePath,
+      contentBase64: raw.toString('base64'),
+      mimeType: getMimeType(relativePath),
+    })
+  }
+
+  return result
 }

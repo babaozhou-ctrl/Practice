@@ -82,10 +82,10 @@ export async function buildImportedPetPayloadFromPackageFiles(
   )
 
   if (!animations) {
-    throw new Error('Pet package is missing animations.json.')
+    throw new Error('宠物包里缺少 animations.json，暂时还没法导入。')
   }
   if (!states) {
-    throw new Error('Pet package is missing states.json.')
+    throw new Error('宠物包里缺少 states.json，暂时还没法导入。')
   }
 
   const rawData: RawPetPackageData = {
@@ -136,7 +136,7 @@ async function collectAssetFiles(
   for (const relativePath of assetRelativePaths) {
     const file = findFileByRelativePath(files, relativePath)
     if (!file) {
-      throw new Error(`Pet package is missing asset file: ${relativePath}`)
+      throw new Error(`宠物包里缺少资源文件：${relativePath}`)
     }
 
     collected.push({
@@ -170,7 +170,7 @@ function findRequiredFile(files: BrowserImportFile[], relativePath: string): Bro
     ?? files.find((entry) => normalizeRelativePath(entry.relativePath).endsWith(`/${relativePath}`) || normalizeRelativePath(entry.relativePath) === relativePath)
 
   if (!file) {
-    throw new Error(`Missing required file: ${relativePath}`)
+    throw new Error(`缺少必需文件：${relativePath}`)
   }
 
   return file
@@ -198,12 +198,12 @@ function fileToBase64(file: File): Promise<string> {
     reader.onload = () => {
       const result = reader.result
       if (!(result instanceof ArrayBuffer)) {
-        reject(new Error(`Failed to read asset file: ${file.name}`))
+        reject(new Error(`读取资源文件失败：${file.name}`))
         return
       }
       resolve(arrayBufferToBase64(result))
     }
-    reader.onerror = () => reject(reader.error ?? new Error(`Failed to read asset file: ${file.name}`))
+    reader.onerror = () => reject(reader.error ?? new Error(`读取资源文件失败：${file.name}`))
     reader.readAsArrayBuffer(file)
   })
 }

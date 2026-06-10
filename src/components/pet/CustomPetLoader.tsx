@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { createMochiSprite } from '../../engine/PixelMochi'
 import { usePetStore } from '../../store/petStore'
 import {
   buildSpriteFromFrames,
@@ -20,6 +19,19 @@ interface Props {
 }
 
 type LoaderStatus = 'idle' | 'loading' | 'loaded' | 'error'
+
+interface SmokeImportSampleFile {
+  name: string
+  relativePath: string
+  contentBase64: string
+  mimeType: string
+}
+
+interface ImportFeedback {
+  title: string
+  body: string
+  tips: string[]
+}
 
 const CustomPetLoader: React.FC<Props> = ({ onClose }) => {
   const [dragOver, setDragOver] = useState(false)
@@ -112,13 +124,21 @@ const CustomPetLoader: React.FC<Props> = ({ onClose }) => {
       }
 
       setStatus('loading')
-      setMessage('正在模拟导入一只新的陪伴角色。')
+      setMessage('正在试着接入一份真实角色包。')
 
       try {
-        const payload = await buildImportedPetRecordFromSprite({
-          name: 'bb7-smoke-import',
-          spriteDefinition: createMochiSprite().definition,
-        })
+        const smokeFiles = await window.electronAPI?.getSmokeImportSample?.()
+        if (!smokeFiles || smokeFiles.length === 0) {
+          throw new Error('这次没有拿到 smoke 用的角色包样本。')
+        }
+
+        const payload = await buildImportedPetPayloadFromPackageFiles(
+          smokeFiles.map((entry: SmokeImportSampleFile) => ({
+            name: entry.name,
+            relativePath: entry.relativePath,
+            file: fileFromBase64(entry),
+          })),
+        )
 
         await persistImportedPetRecord(payload)
         refreshCatalog()
@@ -150,6 +170,7 @@ const CustomPetLoader: React.FC<Props> = ({ onClose }) => {
 
   const statusTone =
     status === 'loaded' ? '#8fc5ab' : status === 'error' ? '#e7a0a0' : status === 'loading' ? '#8ec5ec' : '#efb36a'
+  const feedback = resolveImportFeedback(status, message)
 
   const overlayStyle: React.CSSProperties = {
     position: 'fixed',
@@ -291,20 +312,62 @@ const CustomPetLoader: React.FC<Props> = ({ onClose }) => {
             )}
 
             {status === 'loading' && (
-              <div style={{ fontSize: '13px', lineHeight: 1.75, color: '#56728b' }}>
-                {message || '正在把新伙伴接进来...'}
+              <div>
+                <div style={{ fontSize: '15px', fontWeight: 700, color: '#4f6880', marginBottom: '8px' }}>
+                  {feedback.title}
+                </div>
+                <div style={{ fontSize: '13px', lineHeight: 1.75, color: '#56728b' }}>
+                  {feedback.body}
+                </div>
+                {feedback.tips.length > 0 && (
+                  <div style={{ marginTop: '10px', display: 'grid', gap: '6px' }}>
+                    {feedback.tips.slice(0, 2).map((tip) => (
+                      <div key={tip} style={{ fontSize: '11px', lineHeight: 1.65, color: 'rgba(98, 126, 151, 0.78)' }}>
+                        {tip}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
             {status === 'loaded' && (
-              <div style={{ fontSize: '13px', lineHeight: 1.75, color: '#5e8571' }}>
-                {message}
+              <div>
+                <div style={{ fontSize: '15px', fontWeight: 700, color: '#4f7b62', marginBottom: '8px' }}>
+                  {feedback.title}
+                </div>
+                <div style={{ fontSize: '13px', lineHeight: 1.75, color: '#5e8571' }}>
+                  {feedback.body}
+                </div>
+                {feedback.tips.length > 0 && (
+                  <div style={{ marginTop: '10px', display: 'grid', gap: '6px' }}>
+                    {feedback.tips.slice(0, 2).map((tip) => (
+                      <div key={tip} style={{ fontSize: '11px', lineHeight: 1.65, color: 'rgba(76, 122, 93, 0.82)' }}>
+                        {tip}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
             {status === 'error' && (
-              <div style={{ fontSize: '13px', lineHeight: 1.75, color: '#a26f6f' }}>
-                {message}
+              <div>
+                <div style={{ fontSize: '15px', fontWeight: 700, color: '#9b6666', marginBottom: '8px' }}>
+                  {feedback.title}
+                </div>
+                <div style={{ fontSize: '13px', lineHeight: 1.75, color: '#a26f6f', whiteSpace: 'pre-wrap' }}>
+                  {feedback.body}
+                </div>
+                {feedback.tips.length > 0 && (
+                  <div style={{ marginTop: '10px', display: 'grid', gap: '6px' }}>
+                    {feedback.tips.map((tip) => (
+                      <div key={tip} style={{ fontSize: '11px', lineHeight: 1.65, color: 'rgba(145, 97, 97, 0.84)' }}>
+                        {tip}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -336,7 +399,7 @@ const CustomPetLoader: React.FC<Props> = ({ onClose }) => {
         >
           <div style={{ fontSize: '11px', color: 'rgba(103,128,151,0.66)', marginBottom: '6px' }}>导入说明</div>
           <div style={{ fontSize: '12px', lineHeight: 1.7, color: 'rgba(92,118,143,0.82)' }}>
-            完整宠物包会更完整地保留角色自己的表现方式。旧版导入也能使用，只是会先以一套稳定默认配置开始陪伴。
+            完整宠物包会更完整地保留角色自己的表现方式。要是这次没接稳，我也会尽量把缺了什么、下一步该补什么直接告诉你。
           </div>
         </div>
 
@@ -362,7 +425,7 @@ async function buildImportPayload(
   const manifestFile = files.find((file) => file.name.toLowerCase() === 'manifest.json')
 
   if (manifestFile) {
-    setMessage('正在整理完整宠物包...')
+    setMessage('我先把角色包里的动作、设定和资源顺一遍。')
     return buildImportedPetPayloadFromPackageFiles(
       files.map((file) => ({
         name: file.name,
@@ -379,7 +442,7 @@ async function buildImportPayload(
     throw new Error('需要提供完整角色包文件，或者至少一份旧版配置文件和对应贴图。')
   }
 
-  setMessage('正在整理旧版角色资源...')
+  setMessage('我先把旧版配置和贴图整理成现在能接住的样子。')
   const config: PetAssetConfig = parsePetConfig(await jsonFile.text())
   const frames = await loadSpriteSheet(pngFile, config)
   const sprite = buildSpriteFromFrames(frames, config)
@@ -395,6 +458,107 @@ function inferRelativePath(file: File): string {
     ? file.webkitRelativePath
     : file.name
   return candidate.replace(/\\/g, '/')
+}
+
+function fileFromBase64(entry: {
+  name: string
+  contentBase64: string
+  mimeType?: string
+}): File {
+  const binary = atob(entry.contentBase64)
+  const bytes = new Uint8Array(binary.length)
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index)
+  }
+
+  return new File([bytes], entry.name, {
+    type: entry.mimeType || 'application/octet-stream',
+  })
+}
+
+function resolveImportFeedback(status: LoaderStatus, message: string): ImportFeedback {
+  if (status === 'loading') {
+    return {
+      title: '正在接住这个角色',
+      body: message || '我在整理它的动作、设定和资源，稍等我一下。',
+      tips: ['完整宠物包会保留更多角色感。', '如果缺少关键文件，我会直接告诉你该补哪一项。'],
+    }
+  }
+
+  if (status === 'loaded') {
+    return {
+      title: '已经接进来了',
+      body: message || '新的陪伴角色已经准备好了。',
+      tips: ['它现在会成为桌面上的当前角色。', '如果你还想换别的角色，可以直接重新导入。'],
+    }
+  }
+
+  if (status === 'error') {
+    const validationLines = extractValidationLines(message)
+    const validationSummary =
+      validationLines.length > 0
+        ? `这次没接稳，主要是这几项还不完整：\n${validationLines.map((line) => `- ${line}`).join('\n')}`
+        : message || '这次导入没有成功。'
+
+    const tips = buildImportErrorTips(message, validationLines)
+    return {
+      title: '这次还没接稳',
+      body: validationSummary,
+      tips,
+    }
+  }
+
+  return {
+    title: '把角色包交给我',
+    body: '你可以直接把完整宠物目录拖进来，或者手动选择文件和文件夹。',
+    tips: ['完整宠物包通常会包含 manifest、动作配置、人格配置和贴图资源。'],
+  }
+}
+
+function extractValidationLines(message: string): string[] {
+  if (!message.includes('宠物包校验未通过')) {
+    return []
+  }
+
+  return message
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('- '))
+    .map((line) => line.slice(2).trim())
+}
+
+function buildImportErrorTips(message: string, validationLines: string[]): string[] {
+  const tips: string[] = []
+
+  if (validationLines.length > 0) {
+    tips.push('优先检查 manifest.json 里写到的文件名，确认这些文件和角色包一起放进来了。')
+  }
+
+  if (message.includes('缺少必需文件：manifest.json')) {
+    tips.push('完整宠物包必须带上 manifest.json，我才知道这只角色的资源该怎么对应起来。')
+  }
+
+  if (message.includes('缺少资源文件') || message.includes('atlas 资源') || message.includes('previewImage')) {
+    tips.push('如果你导入的是 atlas 版本，请把 sprite-atlas.png 和预览图一起带上。')
+  }
+
+  if (message.includes('不是合法的 JSON')) {
+    tips.push('先检查 JSON 里的逗号、引号和括号，再重新导入一次会更稳。')
+  }
+
+  if (message.includes('需要提供完整角色包文件')) {
+    tips.push('最省事的方式，是把同一个角色目录整体拖进来，而不是只拖其中一两个文件。')
+  }
+
+  if (message.includes('renderer=procedural-sprite')) {
+    tips.push('如果这是程序化角色包，请确认 sprite-definition.json 也在里面。')
+  }
+
+  if (tips.length === 0) {
+    tips.push('你可以先试试把同一个角色目录整体拖进来，我会更容易把资源一一对应好。')
+  }
+
+  return Array.from(new Set(tips))
 }
 
 const primaryButtonStyle: React.CSSProperties = {
